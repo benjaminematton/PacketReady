@@ -21,6 +21,10 @@ public static class DomainJson
 {
     public static readonly JsonSerializerOptions Options = new()
     {
+        // CamelCase on the wire matches the ASP.NET Core default and the fixture
+        // JSON files. Reads and writes use the same options, so round-tripping
+        // through JSONB stays consistent.
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         Converters = { new JsonStringEnumConverter() },
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Skip,
     };

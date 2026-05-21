@@ -1,0 +1,37 @@
+{
+  "label": "Dr. Marcus Yellow",
+  "expectedScore": 62,
+  "expectedTier": "Yellow",
+  "notes": "License expired AND in wrong state -> 1 Critical + 1 Major; DEA expires in 15 days -> 1 Minor. 100 - 25 - 10 - 3 = 62.",
+  "profile": {
+    "fullName": "Dr. Marcus Yellow",
+    "dateOfBirth": "1972-09-04",
+    "npi": "2345678901",
+    "credentialingState": "NY",
+    "license": {
+      "number": "MD-CA-45211",
+      "state": "CA",
+      "issueDate": "{today-5y}",
+      "expiryDate": "{today-30d}",
+      "status": "Active"
+    },
+    "dea": {
+      "number": "BM4567890",
+      "expiryDate": "{today+15d}",
+      "status": "Active",
+      "schedules": ["II", "III", "IV", "V"]
+    },
+    "boardCert": {
+      "board": "ABEM",
+      "specialty": "Emergency Medicine",
+      "issueDate": "{today-3y}",
+      "expiryDate": "{today+6y}",
+      "status": "Active"
+    },
+    "sanctions": {
+      "oigClean": true,
+      "samClean": true,
+      "checkedAt": "{now-14d}"
+    }
+  }
+}

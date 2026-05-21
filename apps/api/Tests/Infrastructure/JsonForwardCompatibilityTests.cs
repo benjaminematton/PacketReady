@@ -23,17 +23,17 @@ public class JsonForwardCompatibilityTests
         // Phase 3 might add (e.g. LastExtractedAt, ProfileSchemaVersion, ExtractionRuns).
         var futureShapeJson = """
         {
-            "FullName": "Dr. Future Person",
-            "DateOfBirth": "1980-05-15",
-            "Npi": "1234567890",
-            "CredentialingState": "CA",
-            "License": null,
-            "Dea": null,
-            "BoardCert": null,
-            "Sanctions": null,
-            "LastExtractedAt": "2027-01-15T10:30:00Z",
-            "ProfileSchemaVersion": 3,
-            "ExtractionRuns": [{"Id": "abc", "Source": "manual"}]
+            "fullName": "Dr. Future Person",
+            "dateOfBirth": "1980-05-15",
+            "npi": "1234567890",
+            "credentialingState": "CA",
+            "license": null,
+            "dea": null,
+            "boardCert": null,
+            "sanctions": null,
+            "lastExtractedAt": "2027-01-15T10:30:00Z",
+            "profileSchemaVersion": 3,
+            "extractionRuns": [{"id": "abc", "source": "manual"}]
         }
         """;
 
@@ -61,15 +61,15 @@ public class JsonForwardCompatibilityTests
         // EF setter path bypasses DomainJson.Options.
         var futureShapeJson = """
         {
-            "FullName": "Dr. Future Person",
-            "DateOfBirth": "1980-05-15",
-            "Npi": "1234567890",
-            "CredentialingState": "CA",
-            "License": null,
-            "Dea": null,
-            "BoardCert": null,
-            "Sanctions": null,
-            "UnmappedField": "tolerated"
+            "fullName": "Dr. Future Person",
+            "dateOfBirth": "1980-05-15",
+            "npi": "1234567890",
+            "credentialingState": "CA",
+            "license": null,
+            "dea": null,
+            "boardCert": null,
+            "sanctions": null,
+            "unmappedField": "tolerated"
         }
         """;
 

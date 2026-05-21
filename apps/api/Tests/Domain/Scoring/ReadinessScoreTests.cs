@@ -111,8 +111,8 @@ public class ReadinessScoreTests
 
         var rs = ReadinessScore.Create(ProviderId, 50, issues, Now);
 
-        Assert.Contains("\"Severity\":\"Critical\"", rs.IssuesJson);
-        Assert.DoesNotContain("\"Severity\":3", rs.IssuesJson);
+        Assert.Contains("\"severity\":\"Critical\"", rs.IssuesJson);
+        Assert.DoesNotContain("\"severity\":3", rs.IssuesJson);
     }
 
     [Fact]

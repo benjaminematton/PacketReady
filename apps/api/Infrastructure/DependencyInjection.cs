@@ -12,13 +12,18 @@ using PacketReady.Infrastructure.Persistence;
 namespace PacketReady.Infrastructure;
 
 /// <summary>
-/// Single entry point for Infrastructure DI wiring. Program.cs calls
-/// <see cref="AddInfrastructure"/> with the bound config; this file decides what's
-/// registered. Keeps Program.cs from accumulating provider-specific concerns.
+/// Infrastructure DI wiring, split so non-API binaries (e.g. <c>tools/Seed</c>) can
+/// take the DB + audit slice without dragging in the Anthropic SDK and a required
+/// API key. <see cref="AddPersistence"/> is the shared minimum; <see cref="AddInfrastructure"/>
+/// adds the LLM client and prompt loader the API itself needs.
 /// </summary>
 public static class DependencyInjection
 {
-    public static IServiceCollection AddInfrastructure(
+    /// <summary>
+    /// DB context, scoped abstractions, and the audit writer. Safe to call from any
+    /// binary that talks to the database; doesn't require <c>ANTHROPIC_API_KEY</c>.
+    /// </summary>
+    public static IServiceCollection AddPersistence(
         this IServiceCollection services,
         IConfiguration config)
     {
@@ -38,6 +43,19 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<PacketReadyDbContext>());
 
         services.AddScoped<IAuditWriter, AuditWriter>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Full Infrastructure surface: persistence plus the Anthropic client and prompt
+    /// loader the API host requires. Throws if <c>ANTHROPIC_API_KEY</c> is missing.
+    /// </summary>
+    public static IServiceCollection AddInfrastructure(
+        this IServiceCollection services,
+        IConfiguration config)
+    {
+        services.AddPersistence(config);
         services.AddSingleton<IPromptLoader, PromptLoader>();
 
         var apiKey = config["ANTHROPIC_API_KEY"]

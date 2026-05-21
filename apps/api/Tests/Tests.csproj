@@ -24,6 +24,10 @@
     <ProjectReference Include="..\Domain\Domain.csproj" />
     <ProjectReference Include="..\Application\Application.csproj" />
     <ProjectReference Include="..\Infrastructure\Infrastructure.csproj" />
+    <!-- Seed project provides FixtureModel + DatePlaceholderResolver, which the
+         fixture-arithmetic theory reuses so the eval rubric stays guarded in CI
+         without spinning up a DB. -->
+    <ProjectReference Include="..\..\..\tools\Seed\Seed.csproj" />
   </ItemGroup>
 
 </Project>

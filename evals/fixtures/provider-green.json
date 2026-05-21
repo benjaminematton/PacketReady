@@ -1,0 +1,36 @@
+{
+  "label": "Dr. Iris Green",
+  "expectedScore": 100,
+  "expectedTier": "Green",
+  "profile": {
+    "fullName": "Dr. Iris Green",
+    "dateOfBirth": "1985-03-12",
+    "npi": "1234567890",
+    "credentialingState": "NY",
+    "license": {
+      "number": "MD-NY-99001",
+      "state": "NY",
+      "issueDate": "{today-3y}",
+      "expiryDate": "{today+2y}",
+      "status": "Active"
+    },
+    "dea": {
+      "number": "BG9876543",
+      "expiryDate": "{today+1y}",
+      "status": "Active",
+      "schedules": ["II", "III", "IV", "V"]
+    },
+    "boardCert": {
+      "board": "ABIM",
+      "specialty": "Internal Medicine",
+      "issueDate": "{today-2y}",
+      "expiryDate": "{today+8y}",
+      "status": "Active"
+    },
+    "sanctions": {
+      "oigClean": true,
+      "samClean": true,
+      "checkedAt": "{now-7d}"
+    }
+  }
+}

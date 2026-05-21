@@ -1,0 +1,37 @@
+{
+  "label": "Dr. Cassandra Red",
+  "expectedScore": 34,
+  "expectedTier": "Red",
+  "notes": "License expired (Critical) AND state mismatch (Major) — one validator emits both. DEA expired (Critical). BoardCert valid. Sanctions clean but stale (OIG Minor + SAM Minor). 100 - 25 - 10 - 25 - 3 - 3 = 34.",
+  "profile": {
+    "fullName": "Dr. Cassandra Red",
+    "dateOfBirth": "1968-12-22",
+    "npi": "3456789012",
+    "credentialingState": "NY",
+    "license": {
+      "number": "MD-CA-12345",
+      "state": "CA",
+      "issueDate": "{today-10y}",
+      "expiryDate": "{today-60d}",
+      "status": "Active"
+    },
+    "dea": {
+      "number": "BR1122334",
+      "expiryDate": "{today-45d}",
+      "status": "Active",
+      "schedules": ["II", "III", "IV", "V"]
+    },
+    "boardCert": {
+      "board": "ABFM",
+      "specialty": "Family Medicine",
+      "issueDate": "{today-9y}",
+      "expiryDate": "{today+4y}",
+      "status": "Active"
+    },
+    "sanctions": {
+      "oigClean": true,
+      "samClean": true,
+      "checkedAt": "{now-120d}"
+    }
+  }
+}
