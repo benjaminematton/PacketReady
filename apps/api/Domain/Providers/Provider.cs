@@ -67,7 +67,5 @@ public class Provider
     /// rehydrates the entity (the <see cref="ProfileJson"/> setter clears it).
     /// </summary>
     public ProviderProfile GetProfile() =>
-        _profileCache ??= JsonSerializer.Deserialize<ProviderProfile>(_profileJson, DomainJson.Options)
-        ?? throw new InvalidOperationException(
-            $"Provider {Id} has invalid profile JSON; cannot deserialize.");
+        _profileCache ??= ProviderProfile.FromJson(_profileJson, Id);
 }

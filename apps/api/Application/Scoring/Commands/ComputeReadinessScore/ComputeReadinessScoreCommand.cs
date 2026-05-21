@@ -23,7 +23,25 @@ public sealed record ReadinessScoreDto(
     int MajorCount,
     int MinorCount,
     IReadOnlyList<Issue> Issues,
-    DateTimeOffset ComputedAt);
+    DateTimeOffset ComputedAt)
+{
+    /// <summary>
+    /// Projects a persisted <see cref="ReadinessScore"/> to wire shape, deserializing
+    /// <c>IssuesJson</c> once. Single source of truth for read handlers and the
+    /// score-compute command.
+    /// </summary>
+    public static ReadinessScoreDto From(ReadinessScore score) =>
+        new(
+            Id: score.Id,
+            ProviderId: score.ProviderId,
+            Score: score.Score,
+            Tier: score.Tier,
+            CriticalCount: score.CriticalCount,
+            MajorCount: score.MajorCount,
+            MinorCount: score.MinorCount,
+            Issues: score.GetIssues(),
+            ComputedAt: score.ComputedAt);
+}
 
 /// <summary>
 /// Thrown when <see cref="ComputeReadinessScoreCommand.ProviderId"/> does not match

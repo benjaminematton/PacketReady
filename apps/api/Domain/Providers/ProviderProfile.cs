@@ -79,6 +79,18 @@ public sealed record ProviderProfile
     }
 
     /// <summary>
+    /// Deserialize a profile from its JSONB persistence shape. Centralizes the
+    /// throw-on-invalid contract shared by <see cref="Provider.GetProfile"/> and
+    /// projection-based readers (list/detail queries) that can't go through the
+    /// tracked entity. Validation is intentionally NOT re-run — see the class
+    /// doc-comment for why.
+    /// </summary>
+    public static ProviderProfile FromJson(string json, Guid providerIdForError) =>
+        System.Text.Json.JsonSerializer.Deserialize<ProviderProfile>(json, DomainJson.Options)
+        ?? throw new InvalidOperationException(
+            $"Provider {providerIdForError} has invalid profile JSON; cannot deserialize.");
+
+    /// <summary>
     /// Only public construction path. Validates the resulting profile against
     /// <paramref name="nowUtc"/> before returning; throws <see cref="ArgumentException"/>
     /// on the first shape violation.

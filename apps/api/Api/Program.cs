@@ -25,6 +25,19 @@ builder.Services.ConfigureHttpJsonOptions(opts =>
     opts.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
 });
 
+// CORS — dashboard runs on http://localhost:3001 in dev. Locked to one origin so a
+// rogue local site can't hit the API. P5 will need a second origin for the intake
+// portal; revisit then. Production deploys override via DASHBOARD_ORIGIN.
+//
+// Trim a trailing slash: browsers send the Origin header without one, so
+// "http://foo/" in config silently fails every preflight match.
+var dashboardOrigin = (builder.Configuration["DASHBOARD_ORIGIN"] ?? "http://localhost:3001")
+    .TrimEnd('/');
+builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
+    .WithOrigins(dashboardOrigin)
+    .AllowAnyHeader()
+    .AllowAnyMethod()));
+
 // OTel is always on. The exporter is optional — without LANGFUSE_OTEL_ENDPOINT we
 // still register the ActivitySource so activity?.TraceId is populated and the response
 // payload's trace id is meaningful in dev. The in-process tracer is effectively free.
@@ -61,7 +74,11 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 
+// CORS before endpoint mapping — ASP.NET Core's middleware order is real.
+app.UseCors();
+
 app.MapPingEndpoint();
+app.MapProviderEndpoints();
 app.MapScoreEndpoints();
 app.Run();
 

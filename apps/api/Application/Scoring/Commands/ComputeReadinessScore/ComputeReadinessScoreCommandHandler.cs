@@ -86,15 +86,6 @@ public sealed class ComputeReadinessScoreCommandHandler
             provider.Id, score, readiness.Tier,
             readiness.CriticalCount, readiness.MajorCount, readiness.MinorCount);
 
-        return new ReadinessScoreDto(
-            Id: readiness.Id,
-            ProviderId: provider.Id,
-            Score: score,
-            Tier: readiness.Tier,
-            CriticalCount: readiness.CriticalCount,
-            MajorCount: readiness.MajorCount,
-            MinorCount: readiness.MinorCount,
-            Issues: issues,
-            ComputedAt: now);
+        return ReadinessScoreDto.From(readiness);
     }
 }
