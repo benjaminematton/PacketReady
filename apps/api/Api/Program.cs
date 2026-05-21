@@ -1,0 +1,68 @@
+using System.Text.Json.Serialization;
+using MediatR;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+using PacketReady.Api.Endpoints;
+using PacketReady.Application;
+using PacketReady.Application.Ping;
+using PacketReady.Application.Prompts;
+using PacketReady.Infrastructure;
+using PacketReady.Infrastructure.Telemetry;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddOpenApi();
+builder.Services.AddApplication();
+builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddMediatR(cfg =>
+    cfg.RegisterServicesFromAssembly(typeof(PingCommand).Assembly));
+builder.Services.AddHostedService<PromptResourceValidator>();
+
+// Serialize enums as strings (e.g. Tier.A, not 0). The default integer encoding
+// is mystery-meat to any non-.NET consumer; this also keeps OpenAPI specs honest.
+builder.Services.ConfigureHttpJsonOptions(opts =>
+{
+    opts.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+});
+
+// OTel is always on. The exporter is optional — without LANGFUSE_OTEL_ENDPOINT we
+// still register the ActivitySource so activity?.TraceId is populated and the response
+// payload's trace id is meaningful in dev. The in-process tracer is effectively free.
+var otlpEndpoint = builder.Configuration["LANGFUSE_OTEL_ENDPOINT"];
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(r => r.AddService(serviceName: "packetready-api"))
+    .WithTracing(t =>
+    {
+        t.AddSource(LangfuseTelemetry.ActivitySourceName)
+         .AddAspNetCoreInstrumentation()
+         .AddHttpClientInstrumentation();
+
+        if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+        {
+            t.AddOtlpExporter(o =>
+            {
+                o.Endpoint = new Uri(otlpEndpoint);
+                o.Protocol = OpenTelemetry.Exporter.OtlpExportProtocol.HttpProtobuf;
+
+                var publicKey = builder.Configuration["LANGFUSE_PUBLIC_KEY"];
+                var secretKey = builder.Configuration["LANGFUSE_SECRET_KEY"];
+                if (!string.IsNullOrWhiteSpace(publicKey) && !string.IsNullOrWhiteSpace(secretKey))
+                {
+                    var basic = Convert.ToBase64String(
+                        System.Text.Encoding.UTF8.GetBytes($"{publicKey}:{secretKey}"));
+                    o.Headers = $"Authorization=Basic {basic}";
+                }
+            });
+        }
+    });
+
+var app = builder.Build();
+
+if (app.Environment.IsDevelopment())
+    app.MapOpenApi();
+
+app.MapPingEndpoint();
+app.MapScoreEndpoints();
+app.Run();
+
+public partial class Program;

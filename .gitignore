@@ -1,0 +1,28 @@
+# Build output
+bin/
+obj/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+
+# Environment
+.env
+.env.local
+
+# Logs / runtime
+*.log
+*.pid
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+TestResults/
+coverage/
+
+# Docker volumes (in case anyone bind-mounts)
+.data/

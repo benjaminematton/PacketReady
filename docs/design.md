@@ -1,0 +1,707 @@
+# PacketReady — Design Doc
+
+> Pre-CAQH provider intake agent that ends in a cross-document packet readiness score.
+
+| | |
+|---|---|
+| **Status** | Draft v1 — for review |
+| **Author** | Ben Matton |
+| **Audience** | Atano (Jake + eng) |
+| **Date** | May 2026 |
+| **Related** | [Atano homepage](https://getatano.com/), Anthropic *Building Effective Agents* (Dec 2024) |
+
+---
+
+## 1. TL;DR
+
+PacketReady is a vertical product slice that picks up a newly-hired provider, walks them through an adaptive email-based intake, and produces a 0–100 packet readiness score with cited remediation steps before anything is submitted to a payer. The intake half exists to feed the score half realistic, noisy provider data — not clean test fixtures.
+
+Atano's homepage promises "approved the first time, every time" but the marketed feature list contains no pre-submission validation layer. PacketReady is the missing piece between *we collected the documents* and *we know this packet won't get denied*. The intake agent is the realistic data source; the readiness score is the product.
+
+The build ports the architecture pattern I designed for VaBene's inquiry and onboarding agents (multi-tool agent loop, per-turn state persistence, outbox-pattern outbound, two-phase commit on terminal actions, Langfuse-style audit trail) into the credentialing domain. Every piece of agent behavior is logged, cited, and reviewable.
+
+---
+
+## 2. Background
+
+### 2.1 The gap
+
+Atano markets five primitives: document intelligence, primary source verification, payer auto-fill, real-time reporting, and smart follow-ups. None of them is *cross-document validation against payer-readiness criteria*. The closest is the bottom-line promise — "ensure providers get approved the first time, every time" — but a homepage promise without a feature behind it is the seam I'm targeting.
+
+Reviewing competitors:
+
+- **Verifiable** ships CredAgent which begins at "Getting CAQH data" — the workflow before CAQH exists is not their problem.
+- **Assured** markets "Pre-Submission Error Detection vs. Blind Submission" but ties it to CAQH+NPPES auto-fill, not cross-document reasoning.
+- **Medallion** assumes enterprise customers with existing provider-data infrastructure.
+
+Atano's ICP — small practices and RCMs — frequently onboards providers who aren't in CAQH yet, don't have a CAQH-linked Salesforce instance, and don't have an existing provider-data warehouse. The intake-to-readiness path I'm building is shaped for that ICP specifically.
+
+### 2.2 Why this combination
+
+The intake agent alone recomposes things Atano already markets (extraction, follow-ups, dashboard view of status). The readiness score alone reduces to a schema check on a clean dict. Together they're one coherent product slice: intake produces the realistic noisy data that the readiness score has to reason over, and the readiness score gives intake a destination that isn't "fields collected."
+
+The readiness score is also where the LLM does work a regex chain can't. Identity mismatches across documents, address variants, ambiguous date formats on scanned PDFs, taxonomy-to-specialty mapping, payer-specific requirement gaps — these need cross-document reasoning, not field-level validation.
+
+### 2.3 The denial economics
+
+A first-time denial restarts a 90–120 day enrollment cycle and costs a small practice an estimated $6–8K per provider per month in lost billing. The Packet Readiness Score is the feature that prevents the loss before submission, which is the part of Atano's pitch the rest of their feature surface hasn't built.
+
+---
+
+## 3. Goals
+
+1. **Adaptive intake works without CAQH.** Provider receives a single magic link, completes the intake in 1–3 turns over email, never sees a 47-field form.
+2. **Consolidated follow-ups, not template reminders.** When information is missing, the agent batches all gaps into one targeted email rather than firing a generic reminder for each missing field.
+3. **A 0–100 readiness score with three severity tiers** (Critical / Major / Minor), each issue carrying a cited remediation step pointing to the source document and the specific text that triggered it.
+4. **Cross-document reasoning surfaces real conflicts.** Name mismatches, date conflicts, taxonomy-specialty mismatches, expired credentials, missing payer-specific docs — caught at the score layer, not at submission.
+5. **Every agent decision is auditable.** A reviewer can click any issue and see the LLM prompt, tool call, source document page, and primary-source citation that produced it.
+6. **An eval harness backs the accuracy claim.** 50 synthetic packets with golden labels; per-field extraction accuracy reported in the README; regression suite runnable on prompt or model changes.
+
+### 3.1 Measurable targets
+
+| Metric | Target |
+|---|---|
+| Extraction field accuracy (clean PDFs) | ≥ 95% |
+| Extraction field accuracy (scanned PDFs) | ≥ 85% |
+| Score correlation with human-labeled readiness (Spearman) | ≥ 0.80 on the eval set |
+| Cross-document conflict recall | ≥ 90% on synthetic conflicts |
+| End-to-end intake turn latency (p50) | < 30s after document upload |
+| End-to-end intake turn latency (p95) | < 90s |
+| Cost per provider intake (model spend) | < $0.50 |
+
+---
+
+## 4. Non-goals
+
+- **Real CAQH ProView API integration.** It's paid and org-only. I'll model the CAQH-fallback path and write a mock client; the demo will not pull live data.
+- **Real primary-source verification calls.** NPPES, NPDB, OIG, SAM, state medical boards each need separate integrations. I'll mock the verification layer and document the contract; live PSV is out of scope.
+- **Auto-filling payer portals.** Atano already markets this. Reproducing it doesn't differentiate.
+- **A production-grade authn/authz model.** Magic-link auth is sufficient for the demo. SSO, RBAC, multi-tenant isolation: out.
+- **HIPAA-compliant deployment.** Synthetic data only. Real PHI handling is a separate uplift.
+- **Continuous monitoring.** A scheduled re-verification loop is a clean follow-on but not part of this slice.
+- **A polished UI.** The dashboard view exists to make the score legible. Visual polish is not the artifact.
+
+---
+
+## 5. System overview
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                       PacketReady System                       │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  ┌──────────┐    ┌────────────┐    ┌────────────────────────┐  │
+│  │  Admin   │───▶│  Provider  │───▶│  Provider (next turn)  │  │
+│  │ (kicks   │    │  (magic    │    │  (responds to followup)│  │
+│  │  off)    │    │  link)     │    │                        │  │
+│  └──────────┘    └─────┬──────┘    └────────────┬───────────┘  │
+│                        │                        │              │
+│                        ▼                        ▼              │
+│                  ┌──────────────────────────────────┐          │
+│                  │      Intake State Machine        │          │
+│                  │  (orchestrator, per-turn agent)  │          │
+│                  └──┬─────────┬─────────┬───────────┘          │
+│                     │         │         │                      │
+│           ┌─────────▼──┐  ┌───▼──────┐ ┌▼────────────┐         │
+│           │ Extraction │  │ Outbound │ │  Audit Log  │         │
+│           │   Layer    │  │ Outbox   │ │  (Langfuse  │         │
+│           │ (per-doc)  │  │ (1 msg)  │ │  + JSONL)   │         │
+│           └─────────┬──┘  └──────────┘ └─────────────┘         │
+│                     │                                          │
+│                     ▼                                          │
+│           ┌─────────────────────┐                              │
+│           │  Document Store     │                              │
+│           │  (append-only,      │                              │
+│           │  versioned, JSONB)  │                              │
+│           └─────────┬───────────┘                              │
+│                     │                                          │
+│                     ▼                                          │
+│           ┌─────────────────────────────────────────────────┐  │
+│           │              Validator Suite                    │  │
+│           │  identity · license · DEA · malpractice ·       │  │
+│           │  NPI/taxonomy · payer-specific · sanctions      │  │
+│           └─────────────────────────┬───────────────────────┘  │
+│                                     │                          │
+│                                     ▼                          │
+│                       ┌─────────────────────────┐              │
+│                       │  Score Synthesis        │              │
+│                       │  0–100 + Critical/      │              │
+│                       │  Major/Minor + cites    │              │
+│                       └─────────────┬───────────┘              │
+│                                     │                          │
+│                                     ▼                          │
+│                       ┌─────────────────────────┐              │
+│                       │   Dashboard view        │              │
+│                       │   (drill-in per issue)  │              │
+│                       └─────────────────────────┘              │
+└────────────────────────────────────────────────────────────────┘
+```
+
+The system breaks into seven subsystems. I'm explicitly modeling this after Anthropic's *Building Effective Agents* framework: the intake half is an **orchestrator–workers** workflow (intake state machine routes per-turn work to extraction workers), and the readiness half is an **evaluator–optimizer** workflow (specialized validators feed a synthesis step). Neither half is a fully autonomous agent loop — every state transition is governed by deterministic code, and the LLM is the augmented step inside each transition.
+
+This is a deliberate design choice. Fully autonomous agents are appropriate when the task is open-ended. Credentialing intake has a known target shape (a complete provider profile against a known requirement set), so a workflow with embedded LLM calls is the right pattern and the more debuggable one. Cite: Anthropic's guidance is to start with the simplest pattern that works and only add autonomy when the task can't be enumerated.
+
+---
+
+## 6. Provider lifecycle
+
+The happy-path flow, end-to-end:
+
+```
+T+0      Admin enters new hire (name, email, role, specialty)
+         → System creates Provider record (status: intake.pending)
+         → Generates magic link, drops job in outbound outbox
+
+T+5min   Outbox worker sends intake email to provider
+         → Email contains link + brief explainer + list of docs to have ready
+
+T+1day   Provider clicks link
+         → Lands on minimal upload page (no 47-field form)
+         → Uploads documents they have on hand
+         → Answers a short adaptive form (3–6 questions tailored
+           to what's missing after extraction)
+         → Submits
+
+T+1day   Intake agent turn-1 fires:
+           1. Classify each uploaded doc (Haiku)
+           2. Extract fields from each (Sonnet, structured output)
+           3. Update Provider profile (versioned write)
+           4. Run preliminary validators on what we have
+           5. Compute gap list: what's still missing or conflicting
+           6. Decide: terminal (run readiness) or continue (one consolidated followup)
+           → Persists turn artifact, queues outbound message
+
+T+1day   If continue: provider receives ONE followup email
+         listing all gaps in priority order with examples of
+         what's needed. Magic link is re-usable.
+
+T+2day   Provider responds (uploads more / answers more)
+         → Intake agent turn-2 fires, same loop
+
+T+2day   When agent decides "we have enough to score":
+           1. Mark profile complete, kick to readiness pipeline
+           2. Run all validators in parallel
+           3. Synthesize score (0–100, Critical/Major/Minor breakdown)
+           4. Generate cited remediation for every non-passing issue
+           5. Notify admin: "Provider X ready for review, score 87/100"
+
+T+2day   Admin opens dashboard, sees the score, drills into
+         each issue, clicks through to source document and
+         primary-source citation.
+```
+
+The agent has a per-provider budget cap that bounds total turns. If the budget exhausts before the agent decides we have enough to score, the system escalates to a human (admin gets a "this provider needs hands-on review" notification with the partial state attached).
+
+---
+
+## 7. Detailed design
+
+### 7.1 Document store
+
+Append-only, versioned, JSONB-backed. Mirrors the Persistence subsystem I designed for VaBene.
+
+```sql
+CREATE TABLE documents (
+  id              UUID PRIMARY KEY,
+  provider_id     UUID NOT NULL REFERENCES providers(id),
+  doc_type        TEXT,            -- inferred: license | dea | malpractice | board_cert | cv | other
+  doc_type_conf   FLOAT,           -- classifier confidence (Haiku output)
+  storage_uri     TEXT NOT NULL,   -- S3-like blob ref
+  original_name   TEXT,
+  mime_type       TEXT,
+  page_count      INT,
+  uploaded_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  uploaded_by     TEXT             -- 'provider' | 'admin'
+);
+
+CREATE TABLE document_extractions (
+  id              UUID PRIMARY KEY,
+  document_id     UUID NOT NULL REFERENCES documents(id),
+  extraction_id   INT NOT NULL,    -- monotonic per document_id
+  schema_version  TEXT NOT NULL,   -- e.g. 'license.v2'
+  fields          JSONB NOT NULL,  -- the extracted field map
+  field_locations JSONB NOT NULL,  -- { field_name: { page: int, bbox: [...] } } for citation
+  model           TEXT NOT NULL,   -- claude-sonnet-4-6
+  prompt_hash     TEXT NOT NULL,   -- hash of prompt template + version
+  extracted_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (document_id, extraction_id)
+);
+```
+
+**Why append-only:** every extraction is preserved. When a prompt change improves accuracy, I can re-extract and compare against the previous extraction without losing history. When a customer asks "why did the score change," the audit trail traces back to the specific extraction the score was computed against.
+
+**Why `field_locations`:** every cited issue in the final score must link to a specific page and bbox in the source document. Without storing locations at extraction time, citations would require re-running extraction at score time. Cheap to store, expensive to recompute.
+
+### 7.2 Extraction layer
+
+One extractor per document type. Each extractor is a structured-output Claude Sonnet call with a JSON schema. Document classification (which extractor to invoke) is a Claude Haiku call.
+
+**Why Haiku for classification:** the task is a single short LLM call returning a label. Sonnet is overkill. Haiku at ~6x lower cost and ~2x lower latency is the right pick. This is the same split I'm using in VaBene's inquiry agent (Haiku for inquiry classification, Sonnet for the agent loop).
+
+**Why Sonnet for extraction:** field extraction from credentialing PDFs has long tails — multi-line addresses, ambiguous date formats, faxed documents with OCR artifacts, board cert numbers that look like license numbers. Sonnet's reasoning matters on the edge cases. Haiku struggles with the harder documents in early testing.
+
+Extractors return:
+
+```typescript
+type LicenseExtraction = {
+  full_name: { value: string; page: number; bbox: [x,y,w,h] };
+  license_number: { value: string; page: number; bbox: [...] };
+  license_state: { value: string; page: number; bbox: [...] };
+  issue_date: { value: string; page: number; bbox: [...] };  // ISO 8601
+  expiry_date: { value: string; page: number; bbox: [...] };
+  status: { value: 'active' | 'suspended' | 'expired' | 'unknown'; page: number; bbox: [...] };
+  // ...
+  _confidence: Record<string, number>;  // per-field self-reported confidence
+};
+```
+
+Per-field self-reported confidence is used by the validator suite to weight cross-document checks. Low-confidence extractions get flagged as Minor issues even when they "look" valid — confidence ≥ 0.85 to count as a passing input to a Critical-eligible validator.
+
+### 7.3 Intake state machine
+
+The state machine is a five-state FSM owning the per-provider lifecycle. Transitions are deterministic; the LLM lives inside the `agent_turn` action, not in the transition logic.
+
+```
+states: pending → awaiting_provider → agent_processing → awaiting_provider → ... → complete
+                                                                                 → escalated
+```
+
+```typescript
+type ProviderState =
+  | { kind: 'pending'; created_at: Date }
+  | { kind: 'awaiting_provider'; magic_link_id: string; reminder_sent_count: 0 | 1 | 2 }
+  | { kind: 'agent_processing'; turn_id: string; started_at: Date }
+  | { kind: 'complete'; readiness_score_id: string; completed_at: Date }
+  | { kind: 'escalated'; reason: string; partial_profile: ProviderProfile };
+```
+
+Each `agent_turn` is a single agent loop invocation with a strict budget:
+
+| Budget | Per turn |
+|---|---|
+| Steps | 15 |
+| Tokens | 80,000 |
+| Wall clock | 90s |
+
+These mirror the budgets I'm using on VaBene. They're chosen so a runaway loop costs less than $0.20 worst case. Exceeding any of them aborts the turn, preserves partial state, and transitions to `escalated`. The admin gets a notification with the partial trace attached.
+
+**Why a state machine and not a free-running agent loop:** the credentialing intake task has a known target shape (a complete profile against a known requirement set), so the orchestration is deterministic and the LLM lives inside the orchestration. Per Anthropic's framework, this is the orchestrator–workers workflow pattern, not an autonomous agent. The benefits I care about: every state transition is debuggable, mid-turn failures don't lose state, and the agent can't decide to "do something else" mid-intake.
+
+### 7.4 Agent runtime — tools
+
+The intake agent has five tools. Tool surface kept deliberately small because every extra tool increases miss-selection rate (this is the *Building Effective Agents* "tool inventory" principle — minimum set needed for the top tasks):
+
+```typescript
+// Read a document and its current extraction
+read_document(document_id: string): {
+  doc_type: string;
+  extracted_fields: object;
+  field_locations: object;
+};
+
+// Extract fields from a document against a schema
+extract_fields(document_id: string, schema: 'license' | 'dea' | 'malpractice' | 'board_cert' | 'cv'): Extraction;
+
+// Look up a provider in primary sources (mocked in demo)
+lookup_primary_source(source: 'nppes' | 'oig' | 'sam' | 'state_board', identifiers: object): LookupResult;
+
+// Compose the next outbound message based on current gaps
+compose_followup(provider_id: string, gaps: Gap[]): { subject: string; body: string };
+
+// TERMINAL: profile is complete enough to score
+compute_readiness(provider_id: string): { score: number; issues: Issue[]; computed_at: Date };
+```
+
+**Terminal action pattern:** `compute_readiness` is a terminal marker. When the agent invokes it, the state machine transitions out of `agent_processing` and into the readiness pipeline. This mirrors VaBene's `compose_response` terminal pattern — a single tool call ends the agent loop and hands control back to the orchestrator. This avoids the "agent keeps looping when it should have stopped" failure mode.
+
+**Why no `send_email` tool:** the agent composes messages but never sends. Sending is the outbox subsystem's job. Same separation I use in VaBene's onboarding agent — the LLM proposes outbound content; deterministic code commits and sends. This prevents the agent from accidentally double-sending and makes the dispatch layer independently testable.
+
+### 7.5 Outbound messaging — outbox pattern
+
+All outbound provider messages go through an outbox table. The intake agent writes a message proposal; a background worker reads, deduplicates against recent sends, and dispatches.
+
+```sql
+CREATE TABLE outbound_messages (
+  id           UUID PRIMARY KEY,
+  provider_id  UUID NOT NULL REFERENCES providers(id),
+  turn_id      UUID NOT NULL,
+  kind         TEXT NOT NULL,  -- 'intake_invitation' | 'followup' | 'completion_notice'
+  subject      TEXT NOT NULL,
+  body         TEXT NOT NULL,
+  status       TEXT NOT NULL,  -- 'queued' | 'held' | 'sent' | 'cancelled'
+  held_until   TIMESTAMPTZ,    -- 10-minute hold-at-send TTL
+  composed_at  TIMESTAMPTZ NOT NULL,
+  sent_at      TIMESTAMPTZ
+);
+```
+
+**Why a hold-at-send TTL:** a 10-minute hold lets an admin yank a misfired message before it goes out. This is straight from VaBene's Approval and Send subsystem. For credentialing it matters more, not less — provider trust is fragile and a confused followup costs intake completion rates.
+
+**Why consolidated follow-ups (not template reminders):** the agent batches all current gaps into one targeted email. "We're missing your DEA expiry date, the second page of your malpractice face sheet, and confirmation of your specialty board cert" instead of three separate template reminders fired by a cron. This is genuinely better UX than Atano's current "Smart Follow-ups" feature, which from the homepage description appears to be schedule-based reminders. One email, all gaps, one click to resume.
+
+### 7.6 Validator suite
+
+Validators run in parallel after the agent declares the profile complete. Each validator is a focused module — some pure code, some LLM-augmented — that owns one validation dimension. Inspired by Anthropic's evaluator–optimizer pattern.
+
+**Validators in the v1 build:**
+
+| Validator | What it checks | Implementation |
+|---|---|---|
+| `identity_coherence` | Name, DOB, NPI, address agree across all documents | LLM-augmented (Sonnet, structured) — needs cross-doc reasoning |
+| `license_status` | License is active, not expired, state matches credentialing state | Pure code on extracted fields |
+| `dea_status` | DEA registration active, not expired, schedules cover prescribing needs | Pure code |
+| `malpractice_currency` | Policy in force, coverage limits meet payer minimums, expiry > 30 days out | Pure code + payer requirement table |
+| `npi_taxonomy_match` | NPI taxonomy code matches stated specialty | LLM-augmented (taxonomy lookup is fuzzy) |
+| `board_certification` | Board cert active for stated specialty, not expired | Pure code |
+| `sanctions_check` | OIG/SAM lookup result is clean | Pure code on lookup result |
+| `payer_specific` | Per-payer required documents present (e.g. CV gap explanations, work history coverage) | Pure code, configurable per payer |
+
+Each validator returns:
+
+```typescript
+type ValidatorResult = {
+  validator: string;
+  status: 'pass' | 'minor' | 'major' | 'critical';
+  message: string;
+  citations: Citation[];  // [{ document_id, page, bbox, extracted_value }]
+  remediation: string;
+};
+```
+
+**Why split pure-code from LLM-augmented:** field-level checks (expiry > today, status === 'active') are deterministic and shouldn't burn LLM budget. Cross-document reasoning (does "Jonathan Smith" on the license match "John Smith Jr." on the malpractice cert with the same DOB?) needs reasoning. Splitting the validator surface keeps cost down and makes the LLM-required portions debuggable in isolation.
+
+**Why parallel:** validators don't depend on each other's output. A single fan-out runs all of them in ~1–2 seconds with cached extractions.
+
+### 7.7 Score synthesis
+
+The synthesis step takes the validator results and produces:
+
+```typescript
+type ReadinessScore = {
+  score: 0..100;
+  tier: 'green' | 'yellow' | 'red';  // ≥85 / 60–84 / <60
+  breakdown: {
+    critical_count: number;
+    major_count: number;
+    minor_count: number;
+  };
+  issues: Issue[];  // sorted by severity, then by validator confidence
+  computed_at: Date;
+  inputs: { extraction_ids: string[]; validator_versions: object };
+};
+```
+
+**Why 0–100 and not a letter grade:** numeric scoring lets admins sort and filter ("show me all providers under 80"). A letter grade collapses the same information into less actionable detail. The tradeoff is that the specific 0–100 number has to mean something defensible — see the scoring rubric below.
+
+**Scoring rubric:**
+
+```
+Start at 100.
+For each Critical issue:  -25
+For each Major issue:     -10
+For each Minor issue:     -3
+Floor at 0.
+```
+
+This is intentionally simple. A weighted sum is easier to defend than a learned score in an interview setting and easier to debug when an admin asks "why is this provider at 73?"
+
+**Why this rubric:** the absolute number matters less than the categorical tier and the ordering. A weighted sum produces a stable ordering, a defensible explanation per provider, and lets the demo show "73 = one Critical (NPI taxonomy mismatch) + one Minor (low-confidence DOB extraction)."
+
+### 7.8 Audit log
+
+Every agent decision, tool call, validator result, and score computation is logged to two destinations:
+
+- **Langfuse** for traces (per-turn spans, model calls, tool calls, latencies, costs).
+- **JSONL audit log** per provider, for the citation drill-in UX.
+
+```typescript
+type AuditEvent = {
+  id: string;
+  provider_id: string;
+  turn_id?: string;
+  ts: Date;
+  kind: 'classify' | 'extract' | 'tool_call' | 'validator_run' | 'score_synthesis' | 'outbound_compose';
+  payload: object;
+  citations?: Citation[];
+};
+```
+
+The dashboard's "drill into this issue" UX is backed by JSONL. Every Critical/Major issue has a clickable card that opens a side panel showing: the validator that fired, the extracted value that triggered it, the source document with the cited page rendered and the bbox highlighted, and the primary-source link if the issue involved an external lookup.
+
+This is the cited-audit-log pattern Verifiable markets for CredAgent. Atano's homepage does not promise this. Building it is a strong differentiator and is also genuinely the right way to build credentialing software — the alternative is asking customers to trust a black box, which is the failure mode that produced the 2026 NCQA audit problems.
+
+---
+
+## 8. Model and prompt strategy
+
+| Layer | Model | Why |
+|---|---|---|
+| Document classification | Claude Haiku 4.5 | Cheap, fast, single-label task |
+| Field extraction | Claude Sonnet 4.6 | Long-tail edge cases need reasoning |
+| Identity coherence | Claude Sonnet 4.6 | Cross-document fuzzy matching |
+| NPI/taxonomy match | Claude Sonnet 4.6 | Fuzzy specialty mapping |
+| Outbound message composition | Claude Sonnet 4.6 | Tone matters; consolidation matters |
+| Other validators | None (pure code) | Deterministic |
+
+**Prompt versioning:** every prompt is a versioned file (`prompts/license_extraction/v3.md`). Extraction records carry the prompt hash. Eval results are tagged with the prompt version. This is non-negotiable for a system whose outputs feed a downstream score — you cannot debug score drift without prompt version history.
+
+**Structured outputs:** all LLM calls in production paths use structured output (JSON schema constraint). No free-form parsing.
+
+---
+
+## 9. Eval plan
+
+The accuracy claims need backing or they're vibes. The eval harness is a first-class part of the build, not a follow-on.
+
+### 9.1 Synthetic dataset
+
+50 synthetic provider packets, each containing 3–6 documents. Generated by:
+
+1. Sampling realistic provider profiles (specialty, state, license issuance year, etc.) from public NPPES distributions.
+2. Programmatically generating PDFs for each document type with realistic layouts, then introducing controlled noise:
+   - 15 packets: clean PDFs, no conflicts (sanity)
+   - 15 packets: clean PDFs, with planted cross-document conflicts (name variants, DOB mismatches, expiry conflicts)
+   - 15 packets: scanned-style PDFs (rasterized + slight rotation/skew) with no conflicts
+   - 5 packets: scanned + conflicts (the hard tail)
+
+Every field in every document has a golden label. Every planted conflict has a golden expected-Critical entry.
+
+### 9.2 Metrics
+
+```
+per-field extraction:
+  - exact-match accuracy
+  - field-level precision and recall
+  - per-document-type breakdown
+
+cross-document conflict detection:
+  - conflict recall (we caught the planted issue)
+  - conflict precision (we didn't fabricate a conflict on clean packets)
+
+score correlation:
+  - Spearman correlation between PacketReady score and a human-rated readiness label
+  - per-tier (green/yellow/red) confusion matrix vs. human tier assignment
+```
+
+### 9.3 Regression suite
+
+The eval set runs end-to-end on every prompt change, model change, or validator change. Numbers are checked into the repo under `evals/results/`. If accuracy drops more than 2 percentage points on any per-field metric, the change does not ship.
+
+### 9.4 What the README shows
+
+The README publishes per-field accuracy numbers, the score correlation, and the conflict-detection precision/recall. This is the marketing copy Atano doesn't currently have on their own site — and it's the answer to "how do you know it works."
+
+---
+
+## 10. Alternatives considered
+
+### 10.1 Build the readiness score alone, mock the input
+
+I considered skipping the intake half and just building the score against fixed structured inputs. **Rejected** because the score's hardest claim — cross-document reasoning over noisy real extractions — gets undercut when the input is a clean dict. A reviewer would correctly ask "but does this work on actual extracted data?" and the demo would have no answer.
+
+### 10.2 Build the intake agent alone, no scoring
+
+This was my original pick. **Rejected after pressure-testing** because Atano markets every primitive an intake agent composes (extraction, follow-ups, dashboard). The marginal value over Atano's current product is small, and "I built a less-featured version of Verifiable" is the worst-case interpretation. The intake-without-score build optimizes for the wrong signal.
+
+### 10.3 Build a fully autonomous agent loop, no state machine
+
+I considered letting the agent dynamically decide its own flow per provider. **Rejected** because credentialing intake has a known target shape and well-understood failure modes. Anthropic's guidance is to start with the simplest pattern that works — workflows beat agents when the task is enumerable, and intake-to-score is enumerable.
+
+### 10.4 Real CAQH ProView integration via mock
+
+I considered building a fake CAQH ProView API as a separate service to demo the CAQH fallback path. **Rejected** because the engineering cost is high (mocking the schema correctly) and the demo signal is low (it's just an API call). Instead, the design documents the contract — `lookup_primary_source('caqh', { npi })` returns a typed `CaqhProfile | NotFound` — and the demo uses the email-first path.
+
+### 10.5 Browser-driven payer portal auto-fill
+
+I considered an end-of-flow "submit to payer" demo where the score, if green, auto-fills a payer portal via Playwright. **Rejected** because Atano markets this and competing on it doesn't differentiate. The flow ends at "packet is ready to submit," which is the part of the pitch their current product surface doesn't deliver.
+
+---
+
+## 11. Risks
+
+1. **Extraction accuracy on scanned documents.** Sonnet's vision is strong but not perfect on faxed, slightly rotated PDFs. Mitigation: the eval set includes scanned variants explicitly, and the validator suite weights low-confidence extractions down rather than treating them as ground truth. Critical issues require ≥ 0.85 confidence on their inputs.
+
+2. **Hallucinated conflicts.** The identity coherence validator could fabricate a conflict (LLM "sees" a name mismatch that isn't there). Mitigation: every claimed conflict carries a citation; the eval set's clean-packet portion measures false-positive rate explicitly.
+
+3. **Validator coverage gaps.** Payer-specific requirements vary; I'm implementing a configurable subset, not full coverage. Mitigation: the `payer_specific` validator is data-driven (a YAML requirement file per payer) so adding a payer is config, not code.
+
+4. **The 0–100 score as a UX decision.** Some reviewers may prefer a checklist. Mitigation: the score is paired with the tier and the issue list, so the consumer can use whichever framing they want. The number is sortable; the issue list is actionable.
+
+---
+
+## 12. Open questions
+
+1. How do you (Atano) currently handle providers that aren't in CAQH? Is the email-first intake a path you've thought about, or is the implicit assumption that customers have CAQH-ready providers?
+2. Is your "Smart Follow-ups" feature template-based reminders or agent-composed? The consolidated-followup pattern is a real refinement if it's the former.
+3. What does your audit trail look like today? Is decision provenance per-issue something your customers ask for, or is the current dashboard sufficient?
+4. Per-payer requirement configuration — do you maintain this internally, or do customers configure it? Affects whether the YAML-per-payer pattern is the right shape.
+5. NCQA audit-package export — is this on your roadmap? The audit log subsystem here is designed to support it as a follow-on.
+
+---
+
+## 13. Demo script (5 minutes)
+
+1. **Open on the score, not the intake (30s).** Dashboard shows a provider list with scores. Click into "Dr. Lee — 73/100, yellow." The issue panel shows: 1 Critical (NPI taxonomy mismatch — taxonomy 207Q00000X listed but board cert is in Cardiology), 1 Major (malpractice expiry in 18 days), 2 Minor.
+
+2. **Drill into the Critical (60s).** Click the NPI mismatch issue. Side panel opens: shows the extracted taxonomy from the CAQH-shaped profile, shows the board cert PDF with the cardiology certification highlighted, shows the NPPES lookup result. The cross-document mismatch is the headline.
+
+3. **Show the audit trail (45s).** Click "Why did we flag this?" Audit log opens: classifier call (Haiku, $0.0003), extraction call (Sonnet, $0.02), `identity_coherence` validator invocation, score synthesis. Every step has a timestamp, model, prompt version, and a clickable link to the source extraction.
+
+4. **Rewind to intake (90s).** Show the admin "add provider" flow. New provider gets magic link. Open the provider's email (mocked inbox). Provider uploads 4 documents and answers 3 questions. Click submit. Watch the intake state machine in Langfuse: classify → extract × 4 → validators preliminary → gap analysis → compose followup. Provider gets a single consolidated followup email asking for the 2 missing items.
+
+5. **Round trip (60s).** Provider responds, second turn fires, agent decides the profile is complete, terminal `compute_readiness` invocation. Score appears in the admin dashboard. End on the same screen we opened on, but now with the trail of how we got there visible.
+
+The demo opens and closes on the score because that's the differentiated product. The intake is the evidence the system works on realistic input.
+
+---
+
+## Appendix A — Comparison to competitors
+
+| Capability | Verifiable | Assured | Medallion | Atano (marketed) | PacketReady |
+|---|---|---|---|---|---|
+| Email-first pre-CAQH intake | partial | — | — | — | ✓ |
+| Document extraction | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Cross-document validation | partial | ✓ | partial | — | ✓ (core) |
+| 0–100 readiness score before submission | — | partial | — | — | ✓ (core) |
+| Cited audit log per decision | ✓ (CredAgent) | partial | — | — | ✓ |
+| Continuous monitoring | ✓ | partial | ✓ | — | (follow-on) |
+| Payer portal auto-fill | partial | ✓ | partial | ✓ | (out of scope) |
+| Published accuracy numbers | — | — | — | — | ✓ |
+
+The defensible positioning is the column intersection: pre-CAQH intake + cross-document readiness score + cited audit trail + published accuracy. No single competitor ships all four. Atano ships none of the four today.
+
+---
+
+## Appendix B — File layout
+
+```
+packetready/
+├── README.md
+├── docs/
+│   ├── design.md              # this doc
+│   ├── eval-results.md        # published accuracy numbers
+│   └── demo-script.md
+├── apps/
+│   ├── api/                   # .NET, CQRS via MediatR (VaBene stack reuse)
+│   ├── dashboard/             # Next.js 15, React 19, TS
+│   └── intake-portal/         # Next.js 15, the magic-link upload page
+├── packages/
+│   ├── extractors/            # one module per doc type
+│   ├── validators/            # one module per validator
+│   ├── agent-runtime/         # state machine, tools, budget cap enforcement
+│   ├── score/                 # synthesis logic
+│   └── audit/                 # Langfuse + JSONL logging
+├── prompts/
+│   ├── license_extraction/
+│   │   ├── v1.md
+│   │   ├── v2.md
+│   │   └── v3.md              # current
+│   ├── identity_coherence/
+│   └── ...
+├── evals/
+│   ├── dataset/               # 50 synthetic packets + golden labels
+│   ├── runners/               # eval execution
+│   └── results/               # checked-in result history
+└── infra/
+    ├── docker-compose.yml     # local dev
+    └── neon/                  # Postgres schema, migrations
+```
+
+Stack choice (Next.js 15 / React 19 / TS for frontend, .NET 10 + MediatR + Postgres for backend, Hangfire-style background jobs, Langfuse) mirrors my VaBene stack. The reasoning is not "this is the right stack for credentialing software" — it's "this is the stack I can ship fastest with depth I can defend in an interview." A real Atano hire would adopt whatever they're already on.
+
+---
+
+## Appendix C — Reuse from VaBene
+
+The "ports the architecture I designed for VaBene" claim in §1 grounds out in specific files and patterns. This appendix maps each PacketReady subsystem to the VaBene source it adapts, so reviewers can trace the provenance without taking the claim on faith.
+
+Rough split: ~60% of the agent skeleton (runtime loop, audit, FSM, tool framework, prompt loader) ports with renames; ~40% is new construction (per-doc extractors, validator suite, score synthesis, document store with bboxes, eval harness).
+
+### C.1 Persistence (§7.1 — document store)
+
+| PacketReady | VaBene source | Notes |
+|---|---|---|
+| `documents` + `document_extractions` (append-only, JSONB) | `Domain/Entities/Agent/InquiryLog.cs`, `OnboardingSession.cs`, `OnboardingExtractionState.cs` | Lift the append-only JSONB + enum-ordinal-versioning pattern. InquiryLog uses a DB-enforced `BEFORE UPDATE` trigger for immutability — same approach for `document_extractions`. |
+| Extraction-ID monotonic per document | `OnboardingExtractionState` schema-version handling | Reuse the "ordinals are append-only" rule for `schema_version`. |
+| Cited reference into source PDF (`field_locations`) | *new* | No analog in VaBene; this is credentialing-specific. |
+
+### C.2 Extraction layer (§7.2 — Haiku classify, Sonnet extract)
+
+| PacketReady | VaBene source | Notes |
+|---|---|---|
+| Document classifier (Haiku, single label, confidence threshold) | `Application/Agent/Classification/InquiryClassifier.cs` | Same shape: single Haiku call, confidence < 0.7 forces ambiguity flag, no tool use. Swap inquiry intents for doc types. |
+| Field-extraction tool (Sonnet, structured output, per-phase window) | `Application/Agent/Onboarding/Tools/ExtractFieldTool.cs` | Closest cousin to `extract_fields`. Reuse the current-phase + forward-window pattern and pending-fields buffering. |
+| Structured-output JSON schema | `Application/Agent/Runtime/AgentResponseSchema.cs` | Per-turn JSON-Schema generation with sentinel enums for optional fields. |
+
+### C.3 Intake state machine (§7.3)
+
+| PacketReady | VaBene source | Notes |
+|---|---|---|
+| FSM (`pending → awaiting_provider → agent_processing → complete/escalated`) | `Domain/Entities/Agent/OnboardingSession.cs` + `OnboardingExtractionState.cs` | 12-phase FSM with enum-ordinal append-only versioning. Swap phases for credentialing intake. |
+| Per-turn Hangfire job (load FOR UPDATE → validate → run agent → append response) | `Application/Agent/Onboarding/Jobs/OnboardingTurnJob.cs` | Lift wholesale. This is exactly the "intake agent turn-N fires" flow in §6. |
+| Phase-advancement rules (required vs optional fields per phase) | `Application/Agent/Onboarding/OnboardingPhaseFieldMap.cs` | Conversational order decoupled from enum order — useful pattern for credentialing where doc-arrival order ≠ validation order. |
+
+### C.4 Agent runtime & tools (§7.4)
+
+| PacketReady | VaBene source | Notes |
+|---|---|---|
+| Multi-tool loop with three budget caps (15 steps / 80k tokens / 90s) | `Application/Agent/Runtime/InquiryAgent.cs` + `IInquiryAgent.cs` | Budgets in §7.3 are lifted verbatim from VaBene's `AgentBudget` record. |
+| Per-turn mutable state (token accounting, cache-hit tracking) | `Application/Agent/Runtime/AgentLoopState.cs` | Reuse for token-cost accounting against the < $0.50/intake target. |
+| Tool interface (Name, Description, JsonSchema, Boundaries, ValidateAsync, InvokeAsync) | `Application/Agent/Tools/IAgentTool.cs` | Reuse interface verbatim for the five PacketReady tools. |
+| Permission-scoped tool dispatch | `Application/Agent/Tools/ToolPermissionInvoker.cs` + `ToolBoundary.cs` | Useful for "this tool can only read documents owned by this provider" — same MismatchKind taxonomy. |
+| **Terminal action pattern** (`compute_readiness` ends the loop) | `Application/Agent/Onboarding/Tools/CompleteOnboardingTool.cs` | Exact pattern: terminal tool with pre-flight gates, commits to AwaitingReview, ends the loop. Renames `CompleteOnboarding` → `ComputeReadiness`. |
+
+### C.5 Outbound / outbox (§7.5)
+
+| PacketReady | VaBene source | Notes |
+|---|---|---|
+| Hold-at-send TTL (10-minute admin-yank window) | `docs/agent/subsystem-5-approval-and-send.md` (11-step atomic transaction) | Pattern is the same — "agent composes, deterministic code dispatches." VaBene's hold is 48h for capacity reasons; PacketReady's 10m is for admin review only, but the lifecycle FSM (Queued → Held → Sent / Cancelled) is identical. |
+| Hold-lifecycle entity (Active → terminal) | `Domain/Entities/Agent/InquiryHold.cs` | Adapt FSM states; reuse `TerminalAt` timestamp pattern for audit. |
+| Two-layer idempotency (TOCTOU check + UNIQUE DB constraint) | `Application/Agent/Commands/CreateInquiryHold/CreateInquiryHoldCommandHandler.cs` | Carries over directly — protects against double-send on retry. |
+| Consolidated follow-up composition (one message, all gaps) | *new* | No direct VaBene analog; `compose_followup` is a new tool that aggregates the gap list before composition. |
+
+### C.6 Validators & score (§7.6–§7.7)
+
+Mostly new construction. The pieces that do reuse:
+
+| PacketReady | VaBene source | Notes |
+|---|---|---|
+| Cross-document LLM validator (Sonnet, structured output) | `AgentResponseSchema.cs` + Sonnet-tool dispatch in `InquiryAgent.cs` | Same JSON-schema-constrained Sonnet call shape, just with a different prompt and output schema. |
+| Parallel fan-out across validators | *new* | Validators are independent — straightforward `Task.WhenAll`. No VaBene analog needed. |
+| Score-synthesis weighted sum | *new* | The rubric in §7.7 is intentionally simple; no reuse. |
+
+### C.7 Audit log (§7.8)
+
+| PacketReady | VaBene source | Notes |
+|---|---|---|
+| Append-only event rows with JSONB payload, CorrelationId | `Domain/Entities/Agent/InquiryLog.cs` | Lift schema directly. EventType is a string (not an enum) for forward compatibility — keep that. |
+| Dual-write API (atomic-with-transaction + independent-scope) | `Application/Agent/Runtime/IInquiryLogWriter.cs` | Reuse `AppendInTransactionAsync` for atomicity with the unit-of-work; `AppendAsync` for fire-and-forget telemetry. |
+| Langfuse tag taxonomy (session.id, observation.input/output, outcome scores) | `Application/Agent/Telemetry/LangfuseTelemetry.cs` | Lift constants verbatim, rebrand `inquiry.id` → `provider.id` and `turn.id` stays. |
+| Per-issue drill-in audit (citation back to extraction + tool call) | *new* | The JSONL-per-provider citation log is credentialing-specific; the underlying `AuditEvent` shape mirrors `InquiryLog`. |
+
+### C.8 Prompt strategy (§8)
+
+| PacketReady | VaBene source | Notes |
+|---|---|---|
+| Versioned prompt files loaded as embedded resources | `Application/Agent/Prompts/PromptLoader.cs` + `IPromptLoader.cs` | Reuse the embedded `.md` resource pattern, `{{var}}` substitution, ConcurrentDictionary cache. |
+| Prompt resource validation at startup | `Application/Agent/Prompts/PromptResourceValidator.cs` | Reuse to catch missing/renamed prompt files at boot, not at first request. |
+| **Gap: `prompt_hash` on extraction records** | *new* | VaBene relies on git for prompt versioning and does not persist a prompt hash. PacketReady's `document_extractions.prompt_hash` is non-negotiable for score-drift debugging (§7.1) — emit SHA256 at load time and write to the extraction row + audit event. |
+
+### C.9 Docs to read before starting
+
+| Doc | Maps to |
+|---|---|
+| `docs/agent/subsystem-1-persistence.md` | §7.1 (document store) |
+| `docs/agent/subsystem-2-inbound-pipeline.md` | §7.2 (classifier + extraction routing) |
+| `docs/agent/subsystem-3-agent-runtime.md` | §7.3–§7.4 (state machine + agent loop) |
+| `docs/agent/subsystem-5-approval-and-send.md` | §7.5 (outbox + hold-at-send) |
+| `docs/agent/subsystem-8-onboarding-agent.md` | End-to-end analog — closest VaBene module to PacketReady intake |
+
+### C.10 What does *not* port
+
+These VaBene subsystems are domain-specific to event planning and have no PacketReady analog — listed here to head off the "why not lift this too" question:
+
+- **Pricing (subsystem-4)** — `ComputeQuoteTool`, pricing adapters, line items, fees, deposits. Event/venue-scoped.
+- **Voice profile (subsystem-7)** — `MerchantVoiceProfile` capture and voice-tone matching. Tone matching for provider follow-ups is a smaller problem than merchant voice cloning; can be a system prompt, not a subsystem.
+- **Venue blackout calendar, availability windows** — Event scheduling, not relevant.
+- **InquiryQuote, BookedEntry capacity validators** — Booking-domain primitives.

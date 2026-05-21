@@ -1,0 +1,65 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: packetready-postgres
+    environment:
+      POSTGRES_USER: packetready
+      POSTGRES_PASSWORD: packetready
+      POSTGRES_DB: packetready
+    ports:
+      # Host 5433 → container 5432 to avoid colliding with a local Postgres on 5432.
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U packetready"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  langfuse-db:
+    image: postgres:16
+    container_name: packetready-langfuse-db
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: langfuse
+      POSTGRES_DB: langfuse
+    volumes:
+      - langfuse_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  langfuse:
+    image: langfuse/langfuse:2
+    container_name: packetready-langfuse
+    depends_on:
+      langfuse-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://langfuse:langfuse@langfuse-db:5432/langfuse
+      NEXTAUTH_SECRET: dev-only-not-secret-change-me
+      NEXTAUTH_URL: http://localhost:3000
+      SALT: dev-only-not-secret-change-me
+      TELEMETRY_ENABLED: "false"
+
+      # Bootstrap a user + project + API keys on first boot so the API can be
+      # configured deterministically without manual UI clicks. Values are
+      # dev-only — never reuse outside this docker-compose.
+      LANGFUSE_INIT_ORG_ID: org-packetready-dev
+      LANGFUSE_INIT_ORG_NAME: PacketReady (dev)
+      LANGFUSE_INIT_PROJECT_ID: proj-packetready-dev
+      LANGFUSE_INIT_PROJECT_NAME: PacketReady
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk-lf-packetready-dev-00000000-0000-0000-0000-000000000001
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: sk-lf-packetready-dev-00000000-0000-0000-0000-000000000002
+      LANGFUSE_INIT_USER_EMAIL: dev@packetready.local
+      LANGFUSE_INIT_USER_NAME: PacketReady Dev
+      LANGFUSE_INIT_USER_PASSWORD: packetready-dev-only
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata:
+  langfuse_pgdata:
