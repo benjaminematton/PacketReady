@@ -9,6 +9,7 @@
 | **Audience** | Atano (Jake + eng) |
 | **Date** | May 2026 |
 | **Related** | [Atano homepage](https://getatano.com/), Anthropic *Building Effective Agents* (Dec 2024) |
+| **Style** | [style.md](./style.md) — voice, spine, callout vocabulary |
 
 ---
 

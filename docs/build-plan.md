@@ -8,6 +8,7 @@
 | **Started** | 2026-05-21 |
 | **Last updated** | 2026-05-21 |
 | **Companion doc** | [design.md](./design.md) |
+| **Style** | [style.md](./style.md) — voice, spine, callout vocabulary |
 
 ---
 

@@ -8,6 +8,7 @@
 | **Goal** | Prove the score logic + dashboard before any extractor exists. |
 | **Status** | Not started |
 | **Depends on** | [Phase 0](./phase-0-walking-skeleton.md) — closed 2026-05-21 |
+| **Style** | [../style.md](../style.md) — voice, spine, callout vocabulary |
 
 ---
 
