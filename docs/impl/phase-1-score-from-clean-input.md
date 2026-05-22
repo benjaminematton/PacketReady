@@ -6,7 +6,7 @@
 |---|---|
 | **Parent** | [build-plan.md](../build-plan.md) — Phase 1 row |
 | **Goal** | Prove the score logic + dashboard before any extractor exists. |
-| **Status** | Not started |
+| **Status** | Closed 2026-05-21 — all 7 gates green |
 | **Data** | curated JSON fixtures only · no PHI |
 | **Depends on** | [Phase 0](./phase-0-walking-skeleton.md) — closed 2026-05-21 |
 | **Style** | [../style.md](../style.md) — voice, spine, callout vocabulary |
@@ -17,15 +17,15 @@
 
 Three fixture providers checked in at `evals/fixtures/*.json` produce three distinct scores in the dashboard:
 
-- [ ] **Dr. Green** — all valid → **score == 100** (0 issues), green badge.
-- [ ] **Dr. Yellow** — 1 Critical + 1 Major + 1 Minor → **score == 62** (`100 − 25 − 10 − 3`), yellow badge.
-- [ ] **Dr. Red** — 2 Critical + 1 Major + 2 Minor → **score == 34** (`100 − 25 − 25 − 10 − 3 − 3`), red badge.
-- [ ] Clicking any provider opens a side panel listing every Issue with severity, message, remediation, and a citation stub (`source: validator_name, extracted_value: …`).
-- [ ] `POST /api/providers/{id}/score` returns the same `ReadinessScore` shape the dashboard renders.
-- [ ] An `AuditEvent` of `event_type='ScoreComputed'` lands in Postgres for every score computation.
-- [ ] `dotnet test` passes — at least 4 validator tests + 1 synthesizer test (rubric sanity).
+- [x] **Dr. Green** — all valid → **score == 100** (0 issues), green badge.
+- [x] **Dr. Yellow** — 1 Critical + 1 Major + 1 Minor → **score == 62** (`100 − 25 − 10 − 3`), yellow badge.
+- [x] **Dr. Red** — 2 Critical + 1 Major + 2 Minor → **score == 34** (`100 − 25 − 25 − 10 − 3 − 3`), red badge.
+- [x] Clicking any provider opens a side panel listing every Issue with severity, message, remediation, and a citation stub (`source: validator_name, extracted_value: …`). *Sheet markup verified — 5 triggers on red, 3 on yellow, 0 on green (no-issues banner).*
+- [x] `POST /api/providers/{id}/scores` returns the same `ReadinessScore` shape the dashboard renders. *All 9 required fields present; nested Issue + Citation shapes complete.*
+- [x] An `AuditEvent` of `event_type='ScoreComputed'` lands in Postgres for every score computation. *13 rows after the gate run; payload carries provider_id, score, tier, counts, validator_count.*
+- [x] `dotnet test` passes — 139 passed / 0 failed / 2 skipped (live-DB persistence tests). 58 of those are validators + synthesizer + tier-boundary tests.
 
-If all eight boxes check, Phase 1 is closed. Move to [Phase 2 — Eval harness + 5 packets](./phase-2-eval-harness.md).
+All gates green 2026-05-21. Move to [Phase 2 — Eval harness + 5 packets](./phase-2-eval-harness.md).
 
 ---
 

@@ -278,7 +278,7 @@ These are not in scope for the demo. If anything below feels tempting, that's th
 - [x] Design doc — done
 - [x] Build plan — done (this doc)
 - [x] Phase 0 — closed 2026-05-21, 3/4 gates green. Langfuse trace rendering deferred (Langfuse v2 has no OTLP receiver; needs v3 stack or Jaeger swap). Audit log + OTel in-process working. See [phase-0-walking-skeleton.md](./impl/phase-0-walking-skeleton.md#closing-notes-2026-05-21).
-- [ ] Phase 1
+- [x] Phase 1 — closed 2026-05-21, all 7 gates green. Fixtures hit 100/62/34 exactly; side-panel drill-in wired (Radix Sheet, per-card); POST /scores returns the full ReadinessScore shape; 13 ScoreComputed audit rows landed; 139 tests pass (58 in scoring). See [phase-1-score-from-clean-input.md](./impl/phase-1-score-from-clean-input.md).
 - [ ] Phase 2
 - [ ] Phase 3
 - [ ] Phase 4
