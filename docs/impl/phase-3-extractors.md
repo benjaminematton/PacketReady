@@ -421,17 +421,17 @@ Validators stay pure-code (no DB queries, no `IAppDbContext` injection) so they 
 
 `AggregationIssue` flows into `ScoreSynthesizer`'s existing Issue list. The synthesizer is unchanged — it carries `Citation` through unmodified. The dashboard reads `Issue.Citation.DocumentId` to load the PDF and `{ Page, Bbox }` to anchor the highlight.
 
-**Wire shape, score endpoint:**
+### Endpoint shape
 
 ```
 POST /api/providers/{id}/scores
-{ "providerId": "..." }   ← shrinks. No ProviderProfile in the body.
+(no body)
 
 200 OK
-{ ReadinessScore }        ← unchanged shape; Issues include aggregator + validator outputs.
+{ ReadinessScore }   ← unchanged shape; Issues now carry populated Citations on validator outputs.
 ```
 
-Old callers passing a body still work for one PR — the body is parsed, ignored, and a warning logged. The fixture seed CLI moves to the new shape in the same PR that lands the aggregator. Lifecycle: warning for 1 PR, then 400 BadRequest, then the parameter is removed. Three PRs total.
+Single-PR cutover. The only caller is the dashboard + the fixture seed CLI; both move in the same PR. No compat layer, no warning-then-400 dance — solo project, three callers including the curl examples.
 
 ---
 
@@ -481,7 +481,7 @@ Order matters: 2 depends on 1; 4 depends on 3; 6 depends on 4+5; 7 depends on 6;
 
 - **Vision-cost overrun.** Sonnet vision is the most expensive call in the system. If the bench in §"Cost / token budget" diverges from real Langfuse numbers, mitigation is prompt-cache breakpoints + tighter system prompts. Model swap is not on the table — Haiku-for-extraction was evaluated and lost in early bench.
 - **Bbox accuracy on scanned docs.** Sonnet self-reports bboxes. On the rasterized packet (005) those coordinates may drift; the page-only fallback exists for exactly this. Detection logic: PDF has no text layer = scanned; if uncertain, default to page-only and surface a Minor "low-fidelity citation" Issue.
-- **Idempotency cache poisoning by silent prompt edit.** Editing `v1.md` after extractions exist invalidates the hash semantics — old rows claim a prompt hash that no longer matches any prompt on disk. Mitigation: `PromptResourceValidator` (P0) gets a check that every embedded `Extraction/Prompts/**/v*.md` resource has an unchanged hash since the most recent extraction referencing it. Adds 200ms to startup; cheap insurance.
+- **Idempotency cache poisoning by silent prompt edit.** Editing `v1.md` after extractions exist invalidates the hash semantics — old rows claim a prompt hash that no longer matches any prompt on disk. Mitigation: `PromptResourceValidator` (P0) gets a check that every embedded `Extraction/Prompts/**/v*.md` resource has an unchanged hash since the most recent extraction referencing it. Adds 200ms to startup; cheap insurance. **Side effect to accept:** once an extraction has run against `LicenseExtractionPrompt.v1.md`, that file is effectively frozen — even a 1-character typo fix requires promoting to `v2.md`. That's the correct trade-off (audit integrity > edit convenience), but it'll surface as friction the first time I want to fix a typo without re-extracting everything.
 - **Aggregator policy lock-in.** The chosen policy (license precedence on `fullName`, Minor on Levenshtein ≥ 3) is plausible but unbenchmarked. P4 validators will likely surface Critical name conflicts the aggregator under-counted as Minor. That's intended — the aggregator is the floor, validators raise the ceiling.
 - **P2 packet accuracy leaking into outreach.** The first non-zero numbers on the 5-packet set will be tempting to quote. Don't. Per phase-2.md, the 50-packet P4 set is the README's claim. The P2 numbers are a regression signal, full stop.
 - **Migration-folder drift.** Per project_migration_folder_consolidation, the repo has two migration folders historically. Pass `--output-dir Infrastructure/Persistence/Migrations` explicitly when running `dotnet ef migrations add`. Audit `ModelSnapshot.cs` is in the same folder.
@@ -499,6 +499,8 @@ Order matters: 2 depends on 1; 4 depends on 3; 6 depends on 4+5; 7 depends on 6;
 - **Re-extraction backfill.** Bumping `v1.md` → `v2.md` creates a new schema_version; the old `v1` rows stay. Some endpoint or job to re-extract every document at the new prompt is genuinely useful — also genuinely P4.
 - **Dashboard upload UI.** The upload endpoint exists; calling it lives in P5 when the intake portal arrives. P3's demo path is `curl -F file=… /api/providers/{id}/documents` from a terminal.
 - **Confidence-threshold gates.** Per design.md §7.2, "confidence ≥ 0.85 to count as a passing input to a Critical-eligible validator" is a P4 concern (the validators don't exist yet to gate). P3 captures confidence and stores it; no consumer reads it.
+- **Multi-state licensing.** Single-state provider assumption: each `(provider, doc_type)` has one canonical extraction. A provider with NY + CA licenses produces two `documents` rows of type `License`; the aggregator picks the latest by `extracted_at` and ignores the rest, no flagging. Multi-state credentialing is a real workflow but its surface (which state for which payer, primary vs reciprocity) only matters when intake supports it. P5 problem.
+- **Content-hash cache on `/api/extract`.** A SHA-256 of the uploaded PDF bytes as a cache key would deduplicate eval re-runs that hit the same packet twice. P3 accepts the re-bill (~$0.45/run, runs a couple times per day at most). If usage grows or someone wires `/api/extract` into a UI flow, revisit.
 
 ---
 
