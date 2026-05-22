@@ -27,7 +27,11 @@ public static class ExtractEndpoint
     // we expect single-doc requests; 32 MB leaves headroom without inviting
     // accidental DOS via 1 GB payloads. Revisit if the intake portal starts
     // bundling multi-doc requests.
-    private const long MaxUploadBytes = 32L * 1024 * 1024;
+    //
+    // Internal so Program.cs can also lift Kestrel's server-wide
+    // MaxRequestBodySize to the same value — without that, Kestrel's ~28.6 MB
+    // default rejects the connection before the endpoint attribute applies.
+    internal const long MaxUploadBytes = 32L * 1024 * 1024;
 
     private static readonly string[] AllowedDocTypes =
     {

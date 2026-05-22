@@ -11,6 +11,11 @@ using PacketReady.Infrastructure.Telemetry;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Kestrel's default MaxRequestBodySize (~28.6 MB) is lower than the per-endpoint
+// RequestSizeLimit on /api/extract, so without this the endpoint attribute is
+// silently truncated. Raise the server-wide ceiling to match the endpoint cap.
+builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = ExtractEndpoint.MaxUploadBytes);
+
 builder.Services.AddOpenApi();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
