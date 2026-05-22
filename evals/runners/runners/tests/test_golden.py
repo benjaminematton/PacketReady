@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from runners.golden import GoldenSchemaError, load_and_validate, validate
 
 
-def _minimal() -> dict:
+def _minimal() -> dict[str, Any]:
     return {
         "packetId": "p1",
         "documents": [

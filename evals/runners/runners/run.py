@@ -24,14 +24,16 @@ import argparse
 import json
 import sys
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
+import httpx
 from packetready_eval.schema import PER_FIELD_KEYS
 
 from . import DEFAULT_BASE_URL
 from .compare import FieldResult, compare_doc
-from .extractor_client import ExtractorClient
+from .extractor_client import ExtractorClient, ExtractorContractError
 from .golden import load_and_validate
 from .metrics import Rollups, rollup
 
@@ -39,6 +41,23 @@ REGRESSION_THRESHOLD_PP = 2.0
 # Per-field rates are stored as round(x, 4); deltas land on a 0.0001 grid.
 # Snap drop_pp to the same grid so 2.0000000000000018 != "> 2.0" any more.
 _DROP_PP_DECIMALS = 4
+# Both sides of the gate are also re-snapped to this resolution before the
+# subtract, so an externally-written results file with floats at full 64-bit
+# precision compares apples-to-apples with our own `_ratio` output.
+_RATIO_DECIMALS = 4
+
+
+def _normalize_ratio(value: float | None) -> float | None:
+    """Snap an incoming per-field rate to the same grid `_ratio` emits.
+
+    The gate is defined against the 4-decimal grid that `metrics._ratio`
+    produces. A baseline or current payload written by another tool may
+    carry full-precision floats; without normalization, those values can
+    drift across the 2 pp boundary on otherwise-identical inputs.
+    """
+    if value is None:
+        return None
+    return round(float(value), _RATIO_DECIMALS)
 
 
 def _evaluate_packet(
@@ -77,11 +96,11 @@ def _results_payload(
     rollups: Rollups,
     per_packet_results: dict[str, list[FieldResult]],
     stub: bool,
-) -> dict:
+) -> dict[str, Any]:
     return {
         "datasetDir": str(dataset_dir),
         "baseUrl": base_url,
-        "ranAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "ranAt": datetime.now(UTC).isoformat(timespec="seconds"),
         # `stub: true` marks "no real extractor numbers here." Set only when
         # --stub is passed explicitly. We intentionally do NOT infer it from
         # all-zero rollups: once P3 ships, a broken extractor that scores 0%
@@ -102,7 +121,7 @@ def _results_payload(
     }
 
 
-def check_against_baseline(current: dict, baseline_path: Path) -> int:
+def check_against_baseline(current: dict[str, Any], baseline_path: Path) -> int:
     """Return 0 (pass) or 1 (fail).
 
     Skip the numeric comparison when either side is `stub: true`; in that
@@ -133,8 +152,8 @@ def check_against_baseline(current: dict, baseline_path: Path) -> int:
 
     failed: list[str] = []
     for key in PER_FIELD_KEYS:
-        b = baseline_pf.get(key)
-        c = current_pf.get(key)
+        b = _normalize_ratio(baseline_pf.get(key))
+        c = _normalize_ratio(current_pf.get(key))
         if b is None or c is None:
             # An unobserved field after P3 is its own signal — treat as a miss
             # against any non-None baseline value, ignore otherwise.
@@ -161,12 +180,22 @@ def run(
     base_url: str,
     results_path: Path,
     force_stub: bool = False,
-) -> tuple[Rollups, dict]:
+) -> tuple[Rollups, dict[str, Any]]:
     """Execute the eval pass. Returns (rollups, payload); writes the full
     per-field detail to `results_path`."""
+    packet_dirs = _packet_dirs(dataset_dir)
+    if not packet_dirs:
+        # An empty dataset usually means a wrong `dataset_dir` argument. Silent
+        # "0 packets" runs produce all-None rollups that still pass the schema
+        # gate, hiding the real problem. Fail loud instead.
+        raise FileNotFoundError(
+            f"no packet directories with golden.json under {dataset_dir} "
+            f"(checked that {dataset_dir} exists and contains subdirectories)"
+        )
+
     per_packet_results: dict[str, list[FieldResult]] = {}
     with ExtractorClient(base_url=base_url) as client:
-        for packet_dir in _packet_dirs(dataset_dir):
+        for packet_dir in packet_dirs:
             packet_id, results = _evaluate_packet(packet_dir, client)
             per_packet_results[packet_id] = results
 
@@ -243,12 +272,30 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    rollups, payload = run(
-        args.dataset_dir,
-        base_url=args.base_url,
-        results_path=args.results,
-        force_stub=args.stub,
-    )
+    try:
+        rollups, payload = run(
+            args.dataset_dir,
+            base_url=args.base_url,
+            results_path=args.results,
+            force_stub=args.stub,
+        )
+    except httpx.RequestError as exc:
+        # Transport-layer faults — connect refused, DNS failure, read timeout.
+        # Distinct from HTTP-status faults (which are server-reported and
+        # bubble as HTTPStatusError); we want a one-line operator-facing
+        # message here, not a 30-line traceback ending in "ConnectError".
+        print(f"[run] FAIL — cannot reach extractor at {args.base_url}: {exc}", file=sys.stderr)
+        return 1
+    except httpx.HTTPStatusError as exc:
+        print(f"[run] FAIL — extractor returned {exc.response.status_code} for {exc.request.url}", file=sys.stderr)
+        return 1
+    except ExtractorContractError as exc:
+        print(f"[run] FAIL — extractor contract violation: {exc}", file=sys.stderr)
+        return 1
+    except FileNotFoundError as exc:
+        print(f"[run] FAIL — {exc}", file=sys.stderr)
+        return 1
+
     print(_format_summary(rollups))
     print(f"wrote results to {args.results}  (stub={payload['stub']})")
 

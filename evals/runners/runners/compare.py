@@ -18,8 +18,9 @@ The `present` flag disambiguates so debugging traces don't conflate the
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any
 
 
 @dataclass(frozen=True)

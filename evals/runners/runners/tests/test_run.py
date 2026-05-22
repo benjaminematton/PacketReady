@@ -14,19 +14,21 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
+import pytest
 from packetready_eval.schema import PER_FIELD_KEYS
 
-from runners.run import check_against_baseline
+from runners.run import check_against_baseline, run
 
 
-def _payload(per_field: dict[str, float | None], *, stub: bool = False) -> dict:
-    full = {k: None for k in PER_FIELD_KEYS}
+def _payload(per_field: dict[str, float | None], *, stub: bool = False) -> dict[str, Any]:
+    full: dict[str, float | None] = {k: None for k in PER_FIELD_KEYS}
     full.update(per_field)
     return {"stub": stub, "rollups": {"perField": full}}
 
 
-def _write(path: Path, payload: dict) -> Path:
+def _write(path: Path, payload: dict[str, Any]) -> Path:
     path.write_text(json.dumps(payload), encoding="utf-8")
     return path
 
@@ -69,3 +71,28 @@ def test_baseline_observed_current_missing_is_fail(tmp_path: Path) -> None:
     baseline = _write(tmp_path / "b.json", _payload({"license.state": 1.00}))
     current = _payload({})  # license.state -> None
     assert check_against_baseline(current, baseline) == 1
+
+
+def test_unnormalized_floats_compare_apples_to_apples(tmp_path: Path) -> None:
+    """Values from an externally-written payload at full 64-bit precision
+    must be snapped to the same 4-decimal grid `_ratio` produces, so the
+    2 pp boundary stays deterministic across writers."""
+    # 1.0 - 0.97999999999998 * 100 -> 2.000000000002 pp before normalization;
+    # after _normalize_ratio rounds both sides to 4dp, the delta is 2.0 pp PASS.
+    baseline = _write(tmp_path / "b.json", _payload({"license.state": 1.0}))
+    current = _payload({"license.state": 0.97999999999998})
+    assert check_against_baseline(current, baseline) == 0
+
+
+def test_empty_dataset_dir_fails_loud(tmp_path: Path) -> None:
+    """Wrong --dataset_dir is the most common runner misuse; a silent
+    zero-packet run would pass the schema gate and mislead. Fail instead."""
+    empty_dir = tmp_path / "no-packets"
+    empty_dir.mkdir()
+    with pytest.raises(FileNotFoundError):
+        run(
+            empty_dir,
+            base_url="http://unused",
+            results_path=tmp_path / "results.json",
+            force_stub=True,
+        )

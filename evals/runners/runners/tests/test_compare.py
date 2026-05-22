@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from runners.compare import compare_doc
+from collections.abc import Iterable
+
+from runners.compare import FieldResult, compare_doc
 
 
-def _by_field(results):
+def _by_field(results: Iterable[FieldResult]) -> dict[str, FieldResult]:
     return {r.field: r for r in results}
 
 

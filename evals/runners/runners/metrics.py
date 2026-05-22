@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Iterable
 
 from packetready_eval.schema import DOC_TYPES, PER_FIELD_KEYS
 
