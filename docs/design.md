@@ -160,6 +160,8 @@ T+5min   Outbox worker sends intake email to provider
 T+1day   Provider clicks link
          → Lands on minimal upload page (no 47-field form)
          → Uploads documents they have on hand
+         → Sees extracted-field cards with source citations,
+           confirms or edits each value before commit (§7.9)
          → Answers a short adaptive form (3–6 questions tailored
            to what's missing after extraction)
          → Submits
@@ -221,11 +223,14 @@ CREATE TABLE document_extractions (
   document_id     UUID NOT NULL REFERENCES documents(id),
   extraction_id   INT NOT NULL,    -- monotonic per document_id
   schema_version  TEXT NOT NULL,   -- e.g. 'license.v2'
-  fields          JSONB NOT NULL,  -- the extracted field map
+  fields          JSONB NOT NULL,  -- the field map for this row (raw on initial extraction, corrected on subsequent edit rows)
   field_locations JSONB NOT NULL,  -- { field_name: { page: int, bbox: [...] } } for citation
-  model           TEXT NOT NULL,   -- claude-sonnet-4-6
-  prompt_hash     TEXT NOT NULL,   -- hash of prompt template + version
+  source          TEXT NOT NULL,   -- 'llm' | 'provider_edit' | 'admin_edit'  (§7.9)
+  edited_by       UUID,            -- user id when source != 'llm'           (§7.9)
+  model           TEXT,            -- claude-sonnet-4-6 (null when source != 'llm')
+  prompt_hash     TEXT,            -- hash of prompt template + version (null when source != 'llm')
   extracted_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  confirmed_at    TIMESTAMPTZ,     -- null until provider/admin confirms (§7.9); validators read the latest confirmed row
   UNIQUE (document_id, extraction_id)
 );
 ```
@@ -432,6 +437,57 @@ The dashboard's "drill into this issue" UX is backed by JSONL. Every Critical/Ma
 
 This is the cited-audit-log pattern Verifiable markets for CredAgent. Atano's homepage does not promise this. Building it is a strong differentiator and is also genuinely the right way to build credentialing software — the alternative is asking customers to trust a black box, which is the failure mode that produced the 2026 NCQA audit problems.
 
+### 7.9 Error correction and state recovery
+
+Extraction is the place a credentialing system is most likely to be wrong, and "the agent silently committed a bad value" is the failure mode that destroys provider trust. The intake flow has four layers of correction, ordered from cheapest to most invasive.
+
+**1. Confirmation-before-commit (per extraction).** When an extractor returns, it writes a `document_extractions` row with `source='llm'` and `confirmed_at=null`. The provider sees a card listing each extracted field with the source page rendered and the bbox highlighted. Clicking "looks right" stamps `confirmed_at` on that row. Editing any field appends a new row (`source='provider_edit'`, monotonically next `extraction_id`, `confirmed_at` set, `model`/`prompt_hash` null) — the LLM's original output is preserved as the prior row. Validators only consume the latest row per `document_id` where `confirmed_at IS NOT NULL`.
+
+**Why on-card and not after-the-fact:** the audit log (§7.8) is sufficient to prove what we did, but doesn't catch errors before they propagate. Confirmation-before-commit catches the long-tail extraction errors (faxed dates, ambiguous middle initials, OCR-mangled license numbers) at the cheapest possible point — before the score has been computed against them and before a downstream payer call has been made.
+
+**2. Field-level edit with cascading validator re-run.** After commit, any field is editable from the dashboard — provider on their own packet, admin on any packet. An edit appends a new `document_extractions` row (monotonic `extraction_id + 1`, `source='provider_edit'` or `'admin_edit'`, `edited_by` recorded) and triggers a targeted validator re-run: only validators whose input set intersects the edited field re-execute; everything else stays cached. The dependency map (validator → fields it reads) is declared in code and is the source of truth.
+
+**Why partial re-run:** validators are independent (§7.6), so cascading is correct and ~10x cheaper than re-fanning all eight. A name edit on a license doc shouldn't force a malpractice-currency check.
+
+**3. Per-turn checkpoint (the substrate).** This layer is already provided by §7.1 + §7.3; this section just names the contract. Every `agent_turn` writes atomically across `document_extractions`, `outbound_messages`, and the audit log, keyed by `turn_id`. The turn artifact is the rewind unit. Any later turn is reachable from any prior turn's snapshot.
+
+**4. Document-level time-travel (full back-out).** When the provider says "wrong document, scrap that one," the system:
+
+1. Marks the offending `documents` row as superseded (append-only — nothing is deleted).
+2. Rewinds the FSM to the turn artifact immediately before the bad upload.
+3. Replays forward. Steps that don't depend on the superseded document reuse cached outputs; steps that do are re-executed with the corrected inputs.
+4. Re-synthesizes the readiness score against the new state; the old score is preserved with an `invalidated_at` marker.
+
+Scope: the provider can rewind their own packet through the confirmation card and the dashboard. Admin holds the time-travel power for already-submitted packets, since a rewind re-issues notifications and a misfired rewind is destructive in the same way a misfired email is.
+
+**Compliance.** NCQA's 2026 credentialing standard requires the credentialing file maintain an audit trail of changes — actor, prior value, new value, timestamp, reason. This design satisfies that requirement by construction: every confirmation, edit, and rewind appends to the audit log (§7.8) with full correlation. Score rows are preserved with `invalidated_at` rather than overwritten. The system can produce the change history of any field on demand.
+
+**Replay safety for side-effecting tools.** The runtime re-runs validators and extraction on rewind by design — those are deterministic given the same inputs. `lookup_primary_source` (§7.4) is not deterministic in the right way: NPPES is free, but a live CAQH or state-board call costs money per query and is logged on the payer side. Re-executing one on replay is wrong even if the LLM regenerates an identical request, because the duplicate call shows up in the payer's audit trail. The policy:
+
+- Every `lookup_primary_source` invocation writes a `primary_source_results` row keyed by `(source, identifiers_hash)`.
+- On replay, the runtime checks the cache against the rewound state's identifiers. Cache hit → reuse the stored result. Cache miss (because the corrected extraction actually changed an NPI) → explicitly re-execute on a new branch and log the divergence.
+- The runtime never silently re-executes a side-effecting tool after rewind.
+
+```sql
+CREATE TABLE primary_source_results (
+  id                UUID PRIMARY KEY,
+  source            TEXT NOT NULL,        -- 'nppes' | 'oig' | 'sam' | 'state_board' | 'caqh'
+  identifiers       JSONB NOT NULL,       -- the canonicalized input identifiers (npi, license #, state, etc.)
+  identifiers_hash  TEXT NOT NULL,        -- SHA256 of the canonicalized identifiers; cache key
+  result            JSONB NOT NULL,       -- the lookup response payload
+  status            TEXT NOT NULL,        -- 'ok' | 'not_found' | 'error'
+  turn_id           UUID,                 -- the turn that triggered the first call
+  requested_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (source, identifiers_hash)
+);
+```
+
+The UNIQUE constraint is the cache. `identifiers_hash` is computed by canonicalizing the input JSON (sorted keys, normalized casing, trimmed whitespace) before hashing — otherwise the LLM regenerating the request with reordered keys would defeat the cache.
+
+This is a known failure mode in checkpoint-restore systems for LLM agents: replayed tool calls are not guaranteed to be byte-identical because the model re-synthesizes the request, so any tool that costs money or hits external state needs the cache-or-fork policy, not blind replay.
+
+**Reuse and new construction.** Layer 3 is existing infrastructure (Appendix C.1, C.3). Layers 1, 2, 4 and the replay-safety policy are new construction. The building blocks (immutable extractions, turn-keyed audit events, deterministic validators) are existing pieces composed differently.
+
 ---
 
 ## 8. Model and prompt strategy
@@ -549,7 +605,7 @@ I considered an end-of-flow "submit to payer" demo where the score, if green, au
 
 3. **Show the audit trail (45s).** Click "Why did we flag this?" Audit log opens: classifier call (Haiku, $0.0003), extraction call (Sonnet, $0.02), `identity_coherence` validator invocation, score synthesis. Every step has a timestamp, model, prompt version, and a clickable link to the source extraction.
 
-4. **Rewind to intake (90s).** Show the admin "add provider" flow. New provider gets magic link. Open the provider's email (mocked inbox). Provider uploads 4 documents and answers 3 questions. Click submit. Watch the intake state machine in Langfuse: classify → extract × 4 → validators preliminary → gap analysis → compose followup. Provider gets a single consolidated followup email asking for the 2 missing items.
+4. **Rewind to intake (90s).** Show the admin "add provider" flow. New provider gets magic link. Open the provider's email (mocked inbox). Provider uploads 4 documents. Agent extracts in real time; provider sees field-level cards with source citations and corrects one mis-extracted expiry date — single-field edit, the dependent validator re-runs in isolation, the rest stays cached (§7.9). Answers 3 adaptive questions. Click submit. Watch the intake state machine in Langfuse: classify → extract × 4 → validators preliminary → gap analysis → compose followup. Provider gets a single consolidated followup email asking for the 2 missing items.
 
 5. **Round trip (60s).** Provider responds, second turn fires, agent decides the profile is complete, terminal `compute_readiness` invocation. Score appears in the admin dashboard. End on the same screen we opened on, but now with the trail of how we got there visible.
 

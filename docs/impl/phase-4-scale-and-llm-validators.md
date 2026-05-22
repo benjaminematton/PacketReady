@@ -15,13 +15,13 @@
 
 ## Definition of done
 
-- [ ] `evals/dataset/` holds **50 packets** in 4 buckets: 15 clean+valid · 15 clean+conflicts · 15 scanned+clean · 5 scanned+conflicts. Generated programmatically from NPPES distributions with a locked random seed; regen is byte-stable across machines pinned to the same Python deps.
+- [ ] `evals/dataset/` holds **50 packets** in 4 buckets: 15 clean+valid · 15 clean+conflicts · 15 scanned+clean · 5 scanned+conflicts. Generated programmatically from NPPES distributions with a locked random seed; **deterministic field values; PDF bytes may vary across ReportLab versions and platform JPEG encoders**.
 - [ ] **Per-field confidence** lands on every extraction row (added in P3 if not already; P4 step 0 if not). Float in `[0, 1]`. Surfaced through to the score path.
-- [ ] **Two new LLM-augmented validators wired:** `identity_coherence` (Sonnet structured output across all extractions for one provider) and `npi_taxonomy_match` (Sonnet + NUCC taxonomy snapshot). Both registered in `AddApplication()` and exercised by `ComputeReadinessScoreCommand`.
-- [ ] **Two new pure-code validators wired:** `malpractice_currency` (in-force + coverage ≥ payer minimum + ≥ 30-day window) and `payer_specific` (YAML-driven; two sample payers committed).
-- [ ] **Conflict precision + recall** reported per `plantedConflict` kind. Definition: a planted conflict is "caught" iff at least one Issue's `Validator` matches the expected validator for that kind AND the Issue's citations name at least one of the planted `sources`. Precision = caught-and-planted / all-flagged-conflicts; recall = caught-and-planted / total-planted.
-- [ ] **Spearman score correlation ≥ 0.65** against 20 hand-labeled tiers (target ≥ 0.80 per [design.md §3.1](../design.md), realistic floor at n=20 is 0.65). Labels live at `evals/labels/human_tiers.json`, written **before** running the eval so the labeler isn't anchored on system output.
-- [ ] **Confidence-threshold gate** active: a Critical Issue whose citations include any field with confidence < 0.85 is downgraded to Minor with a `lowConfidenceInput` marker. Documented in [design.md §11.1](../design.md).
+- [ ] **Two new LLM-augmented validators wired:** `identity_coherence` (Sonnet structured output across all extractions for one provider; covers `fullName`/`dateOfBirth`/`npi`/`address` cross-doc agreement) and `npi_taxonomy_match` (CSV-deterministic lookup of taxonomy code → canonical specialty, then a thin Sonnet "does stated specialty match canonical?" call). Both registered in `AddApplication()` and exercised by `ComputeReadinessScoreCommand`.
+- [ ] **Three new payer-aware validators wired:** `malpractice_currency` (status + coverage ≥ payer minimum + ≥ 30-day window; owns the full malpractice surface — no other malpractice validator exists), `required_documents` (per-payer required-doc-type presence), and `BoardCertificationValidator` extended to consume payer config for the accepted-boards list. Two sample payers committed.
+- [ ] **Conflict precision + recall** reported per `plantedConflict` kind. Definition: a planted conflict is "caught" iff **all three** of: (1) at least one Issue's `Validator` matches the expected validator for that kind, (2) the Issue's citations name at least one of the planted `sources`, and (3) the Issue's `Field` (on LLM-emitted Issues) matches the planted conflict's target field. Precision = caught-and-planted / all-flagged-conflicts; recall = caught-and-planted / total-planted.
+- [ ] **Tier agreement on 20 hand-labeled packets** — headline metric is **weighted Cohen's κ (quadratic weights) ≥ 0.50** (substantial-agreement floor per Landis-Koch) with the **3×3 confusion matrix** and **raw agreement rate** reported alongside. Spearman is *not* the headline (3-tier categorical labels make it unstable at n=20); kept as a footnote for design-doc continuity. Labels live at `evals/labels/human_tiers.json`, written **before** the eval runs so the labeler isn't anchored on system output (enforced by an mtime check).
+- [ ] **Confidence-threshold gate** active: a Critical Issue whose citations include any field with confidence < 0.85 is downgraded to Minor and carries a structural `isLowConfidenceInput: true` flag on the Issue itself (not a message suffix). Documented in [design.md §11.1](../design.md).
 - [ ] **`evals/results/baseline.json`** committed with `stub: false` and real numbers. P3 already flipped `stub`; this is the first set the regression gate guards in earnest.
 - [ ] **README.md** ships with the accuracy table, conflict precision/recall, Spearman correlation, the [design.md Appendix A](../design.md) competitor comparison row, and one paragraph naming the labeler-bias caveat in plain language.
 - [ ] `dotnet test` and the Python runner both pass. Two new validator test files added (one per LLM validator + one per pure-code) with at least one happy-path and one false-positive guard each.
@@ -49,12 +49,14 @@ No new C# validator-framework code — `IValidator` from P1 is the shape for bot
 | Decision | Choice | Why locked here |
 |---|---|---|
 | LLM validator output schema | Sonnet structured output (JSON schema), same response pattern as extractors | Reuses the P3 structured-output machinery; no new prompt-eval glue. |
-| Conflict kinds in P4 | `name_variant`, `expiry_mismatch`, `taxonomy_specialty_mismatch` (3 total) | Covers both LLM validators + reuses P2's planters. Avoids the "add five conflict types and tune them all at once" failure mode. |
-| Hand-label process | Tiers (Red/Yellow/Green) only, not numeric scores | Numeric labels invite spurious precision at n=20. Categorical labels are what humans actually agree on. |
-| Hand-labeler | Solo (Ben) for P4; flagged caveat in README | A second labeler is ideal; deferring to "find a second" would block the phase indefinitely. The label-noise caveat is the honest answer. |
+| **Conflict kinds in P4** | `name_variant`, `taxonomy_specialty_mismatch` (2 total) | Each kind has a validator that catches it. `expiry_mismatch` from P2 is dropped — no LLM validator in P4 looks across docs for date disagreements (`IdentityCoherenceValidator.Field` is identity-only). Reintroduce with an `ExpiryConsistencyValidator` in a Phase 4.5 follow-on. |
+| **Score-vs-tier agreement metric** | Weighted Cohen's κ (quadratic weights) + 3×3 confusion matrix + raw agreement. Spearman demoted to footnote. | 3-tier categorical labels + n=20 makes Spearman ρ heavy-tied and uninterpretable. Quadratic-weighted κ is the standard ordinal-categorical-agreement metric; the confusion matrix is what a reader actually wants to see. |
+| **Hand-label process** | Tiers (Red/Yellow/Green) only. Solo labeler (Ben). | Numeric labels invite spurious precision at n=20. Solo because waiting for a second labeler blocks the phase. **The bias is structural**, not just acknowledged: same person who designed the cross-document reasoning rules is rating readiness. The README caveat names this in plain language — the agreement number measures self-consistency more than ground truth. A real second labeler is a post-launch ask, not a P4 gate. |
+| **PayerId sourcing** | Column on `Provider`, defaults to `payer-a-national-hmo` at creation. Seed CLI varies per fixture (roughly half each payer). Admin-level payer selection at intake lands in P5. | Avoids dragging a portal-context concept into the extraction layer. Two payers in the seed exercises both YAML branches without P5 work. |
 | Per-field confidence column | New column on `document_extractions` (`confidences` JSONB, keyed by field name) | Keeps the row shape stable; doesn't require a sibling table. P3 may have already added this — confirm in step 0. |
 | Per-payer YAML location | `apps/api/Infrastructure/Payers/payers/*.yaml`, loaded at startup | One restart picks up changes. P5+ may need hot-reload; defer. |
 | Confidence threshold | 0.85 for Critical-eligible inputs | Inherited from [design.md §11.1](../design.md); revisit only with data showing it's wrong. |
+| **`isLowConfidenceInput` shape** | Structural `bool` field on `Issue` (and mirrored on `Citation.lowConfidence`). Not a `Message` suffix. | Suffixes double-append on re-eval, fight i18n, break downstream parsing. A structured flag is dashboard- and test-readable without string-sniffing. |
 
 ---
 
@@ -68,8 +70,9 @@ PacketReady/
 │       │   ├── Scoring/Validators/
 │       │   │   ├── IdentityCoherenceValidator.cs        NEW (LLM)
 │       │   │   ├── NpiTaxonomyMatchValidator.cs         NEW (LLM)
-│       │   │   ├── MalpracticeCurrencyValidator.cs      NEW (pure)
-│       │   │   └── PayerSpecificValidator.cs            NEW (pure, YAML-driven)
+│       │   │   ├── MalpracticeCurrencyValidator.cs      NEW (pure; owns the full malpractice surface)
+│       │   │   ├── RequiredDocumentsValidator.cs        NEW (pure, YAML-driven; per-payer required-doc presence only)
+│       │   │   └── BoardCertificationValidator.cs       EXTEND (existing P1; consume payer config for accepted-boards)
 │       │   ├── Prompts/
 │       │   │   ├── IdentityCoherencePrompt.md           NEW
 │       │   │   └── NpiTaxonomyMatchPrompt.md            NEW
@@ -90,7 +93,7 @@ PacketReady/
     │   └── packet-006 … packet-055                       NEW — programmatic
     ├── generators/packetready_eval/
     │   ├── nppes_sampling.py                             NEW
-    │   ├── conflict_planters.py                          NEW — taxonomy_specialty_mismatch joins name_variant + expiry_mismatch
+    │   ├── conflict_planters.py                          NEW — two planters: name_variant, taxonomy_specialty_mismatch
     │   └── packets.py                                    EXPANDS — sample, plant, render 50
     ├── runners/
     │   ├── conflict_metrics.py                           NEW — recall/precision per kind
@@ -138,16 +141,17 @@ Each conflict kind is a function that mutates a `PacketSpec` in-place to introdu
 
 ```python
 def plant_name_variant(spec: PacketSpec, rng: Random) -> None:
-    """license: 'Jane Calloway'; malpractice: 'Jane C. Calloway-Smith'."""
-
-def plant_expiry_mismatch(spec: PacketSpec, rng: Random) -> None:
-    """license.pdf expiry vs malpractice.pdf Licensee-footer expiry."""
+    """license: 'Jane Calloway'; malpractice: 'Jane C. Calloway-Smith'.
+    Target field: fullName. Expected validator: identity_coherence."""
 
 def plant_taxonomy_specialty_mismatch(spec: PacketSpec, rng: Random) -> None:
-    """NPI taxonomy code on license = Cardiology; board cert specialty = Family Medicine."""
+    """NPI taxonomy code on license = Cardiology; board cert specialty = Family Medicine.
+    Target field: specialty. Expected validator: npi_taxonomy_match."""
 ```
 
-Each planter also writes the `plantedConflicts` entry — the runner reads this to score recall.
+Each planter also writes the `plantedConflicts` entry — including `kind`, `field` (the target field on the Issue side), `sources`, and `expectedSeverity`. The runner reads `field` to enforce the third predicate in the recall definition.
+
+(`plant_expiry_mismatch` is intentionally absent. See "Conflict kinds in P4" decision + the OOS entry for `ExpiryConsistencyValidator`. Reintroduce in Phase 4.5 alongside the validator that catches it.)
 
 ### `evals/generators/packetready_eval/packets.py` (expanded)
 
@@ -226,16 +230,36 @@ The system prompt instructs Sonnet to **only** flag a disagreement when at least
 
 ### `apps/api/Application/Scoring/Validators/NpiTaxonomyMatchValidator.cs`
 
-Same shape as `IdentityCoherenceValidator`. Loads NUCC taxonomy at startup; passes the candidate taxonomy code + the stated specialty to Sonnet; structured output says either `match: true` or returns a Major Issue with the closest valid specialty for that code.
+Two-step, not one-LLM-call:
+
+1. **Deterministic CSV lookup.** Load the NUCC snapshot at startup into a `Dictionary<string, string>` (taxonomy code → canonical specialty). The lookup itself is `O(1)`, no LLM needed.
+2. **Thin LLM compare.** Send only `{ canonicalSpecialty, statedSpecialty }` (≈50 input tokens) to Sonnet and ask "does the stated specialty semantically match the canonical one?" Structured output: `{ matches: bool, suggestedFix: string | null }`. Synonyms like "OB/GYN" vs "Obstetrics and Gynecology" or "Cardiology" vs "Cardiovascular Disease" are why this needs an LLM and not Levenshtein — but we don't need the LLM to *know* taxonomy, only to judge synonymy.
+
+Sending the full 900-row NUCC table to Sonnet on every call would burn ~30k input tokens per validator run for no benefit. Don't.
 
 ### `apps/api/Application/Scoring/Validators/MalpracticeCurrencyValidator.cs`
 
-Pure code. Three checks per malpractice extraction:
-- Status == `Active` (Critical if not).
-- Coverage limits ≥ the payer's required minimum (Major if below, **per credentialing target's payer**; needs payer context plumbed from `ProviderProfile.payerId`).
-- Expiry ≥ today + 30 days (Minor inside the window, Critical past expiry — already covered by an existing `MalpracticeExpiryValidator`? Confirm during execution; merge or leave separate).
+Pure code. **Owns the full malpractice surface** — Phase 1 mentioned `malpractice_currency` in [design.md §7.6](../design.md) but didn't ship it, and Phase 3 didn't add it. No existing malpractice validator to merge with.
 
-If `ProviderProfile.PayerId` doesn't exist yet, P4 adds it (one new field on the profile; P3-emitted profile gains it from the upload context).
+Three checks per malpractice extraction:
+- Status == `Active` (Critical if not).
+- Coverage limits ≥ the payer's required minimum (Major if below). Payer comes from `Provider.PayerId` (see "PayerId sourcing" decision above; defaults to `payer-a` if missing).
+- Expiry: Critical if past today; Minor if within 30 days; pass otherwise.
+
+### `apps/api/Application/Scoring/Validators/RequiredDocumentsValidator.cs`
+
+Pure code. Single responsibility: does the provider have one of every doc type the payer requires? Reads `requiredDocuments: [...]` from the payer's YAML, walks the provider's extraction rows, emits one Critical per missing doc type. That's it.
+
+The earlier draft's `PayerSpecificValidator` was a junk drawer — required docs + accepted boards + windows all in one place. Split per concept: required-docs is its own thing; accepted-boards extends the existing `BoardCertificationValidator`; license/dea renewal windows stay in their respective validators with payer-override hooks.
+
+### `apps/api/Application/Scoring/Validators/BoardCertificationValidator.cs` (existing, extended)
+
+Phase 1 shipped this with presence/status/expiry checks. P4 extends it to consume optional payer config:
+
+- If `payer.boardCertRequired == false`, "no board cert on file" downgrades from Critical to Pass (don't emit an Issue at all).
+- If `payer.acceptedBoards` is non-empty and the extracted board isn't in the list, emit Major "Board {X} not on the accepted list for {payer}; payer accepts {list}".
+
+Other behavior unchanged. The change is **additive** behind a "payer config present?" check; passing no payer config keeps current behavior. Phase 1 tests stay green.
 
 ### `apps/api/Infrastructure/Payers/PayerRequirementLoader.cs`
 
@@ -274,9 +298,10 @@ public static class ConfidenceGuard
     /// <summary>
     /// Downgrades any Critical Issue whose citations reference a field with
     /// confidence &lt; <see cref="CriticalEligibleThreshold"/> to Minor.
-    /// Annotates the downgraded Issue with a marker so the dashboard can
-    /// surface "we caught this but the input was unreliable" without
-    /// hiding the finding entirely.
+    /// The returned Issue carries a structural <c>IsLowConfidenceInput</c>
+    /// flag (and a mirrored <c>Citation.LowConfidence</c>) so the dashboard
+    /// can surface "we caught this but the input was unreliable" without
+    /// string-sniffing the message.
     /// </summary>
     public static IReadOnlyList<Issue> Apply(
         IReadOnlyList<Issue> issues,
@@ -287,42 +312,84 @@ public static class ConfidenceGuard
 }
 ```
 
-Called from `ComputeReadinessScoreCommandHandler` between collection and sort. The marker is a string suffix on `Issue.Message` — `(low-confidence input)` — and a flag on `Citation.lowConfidence: bool` so the dashboard can render it.
+Called from `ComputeReadinessScoreCommandHandler` between collection and sort. **Structural marker, not text:** add `bool IsLowConfidenceInput { get; init; }` to the `Issue` record (defaults to `false`) and `bool LowConfidence { get; init; }` to the `Citation` record. The dashboard's IssueCard checks the flag and renders an inline "low-confidence input" pill in the severity row; the side-panel says "downgraded from Critical due to low-confidence input on `<field>`". Re-running the guard on an already-guarded set is idempotent: the flag is already `true`, the severity stays Minor.
+
+`Issue` and `Citation` ship as P1 domain records — adding fields is a wire-shape change. STJ + the camelCase policy serialize them as `isLowConfidenceInput` and `lowConfidence` automatically. Existing P1/P2/P3 callers default the field to `false` and stay unchanged.
 
 ### `evals/runners/conflict_metrics.py`
 
 ```python
 @dataclass
 class ConflictCount:
-    kind: str               # "name_variant" | "expiry_mismatch" | "taxonomy_specialty_mismatch"
+    kind: str               # "name_variant" | "taxonomy_specialty_mismatch"
     planted: int            # how many of this kind in the dataset
     caught: int             # planted AND matched by an Issue from the expected validator
     fabricated: int         # validator flagged a conflict on a clean packet (no planted entry)
 
+EXPECTED_VALIDATOR = {
+    "name_variant":                "identity_coherence",
+    "taxonomy_specialty_mismatch": "npi_taxonomy_match",
+}
+
 def measure(packet_results: list[PacketResult]) -> dict[str, ConflictCount]:
     """
-    A planted conflict is 'caught' iff:
-      1. At least one Issue's `validator` equals the expected validator for `kind`
-         (identity_coherence for name_variant/expiry_mismatch on a per-field axis,
-          npi_taxonomy_match for taxonomy_specialty_mismatch).
-      2. The Issue's citations include at least one of the planted `sources`.
+    A planted conflict is 'caught' iff ALL THREE:
+      1. At least one Issue's `validator` equals EXPECTED_VALIDATOR[kind].
+      2. The Issue's citations name at least one of the planted `sources`.
+      3. The Issue's `field` equals the planted conflict's target field
+         (identity_coherence emits a `field` discriminator; name_variant
+         expects `fullName`, taxonomy_specialty_mismatch expects `specialty`).
+    The third predicate prevents a "right validator, wrong finding" from
+    counting as a catch — e.g. identity_coherence noticing a DOB drift on
+    the (license, malpractice) pair when we planted a name_variant.
+
     Fabrications are counted on packets with `plantedConflicts == []`.
     """
 ```
 
-Per-kind precision/recall reported in `baseline.json` under a `conflicts` key.
+Per-kind precision/recall reported in `baseline.json` under a `conflicts` key. `expiry_mismatch` is *not* in `EXPECTED_VALIDATOR` — see "Conflict kinds in P4" decision; that kind lands in a Phase 4.5 follow-on.
 
-### `evals/runners/correlation.py`
+### `evals/runners/agreement.py`
+
+Replaces the earlier `correlation.py` plan — Spearman is wrong for 3-tier categorical labels at n=20 (ties dominate; ρ destabilizes; p-values become uninterpretable). Quadratic-weighted Cohen's κ is the standard ordinal-categorical agreement metric.
 
 ```python
-def spearman_against_labels(
+import numpy as np
+from scipy.stats import spearmanr  # kept only for the footnote
+
+TIER_TO_ORD = {"Red": 0, "Yellow": 1, "Green": 2}
+
+@dataclass
+class AgreementMetrics:
+    weighted_kappa: float        # quadratic weights; headline number
+    raw_agreement: float         # count(system_tier == human_tier) / n
+    confusion_3x3: list[list[int]]  # rows = human tier, cols = system tier
+    spearman_rho: float          # footnote only — score (continuous) vs human tier (ordinal)
+    n: int
+
+def measure(
     score_results: dict[str, ScoreResult],
-    labels: dict[str, Tier],
-) -> tuple[float, float]:
+    labels: dict[str, str],   # packet_id → "Red" | "Yellow" | "Green"
+) -> AgreementMetrics:
     """
-    Returns (rho, p_value). Tier mapping: Red=0, Yellow=1, Green=2.
-    n=20 means the p-value is informational; the rho is the headline.
+    Headline: quadratic-weighted Cohen's κ. Disagreement weights scale as
+    (distance / max_distance)² — Red→Yellow misses are penalized less than
+    Red→Green. Substantial-agreement floor (Landis-Koch) is 0.61; the P4 DoD
+    sets the floor at 0.50 because labeler is solo and the structural bias
+    (validator-designer-also-labels) means κ overstates ground-truth tracking.
     """
+```
+
+`baseline.json` carries the new shape under an `agreement` key:
+
+```json
+"agreement": {
+  "weightedKappa": 0.0,
+  "rawAgreement": 0.0,
+  "confusion3x3": [[0,0,0],[0,0,0],[0,0,0]],
+  "spearmanRho": 0.0,
+  "n": 20
+}
 ```
 
 ### `evals/labels/human_tiers.json`
@@ -331,67 +398,76 @@ def spearman_against_labels(
 {
   "_method": "Read each packet's PDFs without looking at PacketReady's computed score. Rate the provider's submission readiness as Red / Yellow / Green using the same rubric a credentialing admin would: critical blockers → Red; significant issues that need attention → Yellow; ready to submit → Green.",
   "_labeler": "Ben (solo for P4 — see README caveat)",
+  "_biasNote": "The labeler is also the designer of the validator suite. The agreement number this set produces measures self-consistency between the rules-in-the-validators and the rules-in-the-labeler's-head — NOT ground truth. A reader looking for 'does this system match an independent expert' should treat the κ as an upper-bound estimate. The README's accuracy section names this in plain language.",
   "_date": "2026-MM-DD",
   "labels": {
     "packet-001-clean-anderson": "Green",
     "packet-002-clean-bautista": "Green",
-    ...20 entries total
+    "...": "20 entries total"
   }
 }
 ```
 
-Labels are written **before** the eval runs against this dataset — so the labeler isn't anchored on PacketReady's output. Mechanically enforced: the runner refuses to compute correlation if `human_tiers.json`'s mtime is later than the corresponding `baseline.json`'s `generatedAt`.
+Labels are written **before** the eval runs against this dataset — so the labeler isn't anchored on PacketReady's output. Mechanically enforced: the runner refuses to compute agreement metrics if `human_tiers.json`'s mtime is later than the corresponding `baseline.json`'s `generatedAt`.
+
+The mtime check guards against **anchoring** (rating after seeing the system score). It does NOT guard against the **structural** bias above: same person who designed the validators is rating readiness. The bias survives any anchoring discipline. The fix is a second labeler from outside; until then, name the bias explicitly so a reader knows what the number does and doesn't claim.
 
 ---
 
 ## Task order
 
-1. **Confirm or add per-field confidence on extractions.** If P3 didn't emit it, step 0 is a small migration (`confidences JSONB` on `document_extractions`) + extractor prompt update to ask Sonnet for self-rated 0–1 confidence per field.
+1. **Confirm or add per-field confidence on extractions.** If P3 didn't emit it, step 0 is a small migration (`confidences JSONB` on `document_extractions`) + extractor prompt update to ask Sonnet for self-rated 0–1 confidence per field. Real chunk of work if it lands here — budget it before scoping P4 start.
 2. **NUCC + NPPES data snapshots committed** under `data/`. README in that dir names the file source and the snapshot date.
-3. **`nppes_sampling.py` + seeded `faker`.** Smoke: generate 5 profiles, eyeball the distribution.
-4. **`conflict_planters.py` for 3 kinds.** Unit tests on each planter: it mutates a spec, the resulting `plantedConflicts` matches what was planted, and the PDF rendering still works.
-5. **`packets.py` generates 50 packets.** Spot-check: open 3 random packets (one from each non-trivial bucket).
-6. **`IdentityCoherenceValidator` + prompt** wired in DI. Smoke against a clean packet (should emit zero Issues) and a planted-`name_variant` packet (should emit Critical with both source citations).
-7. **`NpiTaxonomyMatchValidator` + prompt + NUCC lookup.**
-8. **Per-payer YAML schema lock + 2 payers + `PayerRequirementLoader`.**
-9. **`MalpracticeCurrencyValidator` consumes payer config.**
-10. **`PayerSpecificValidator` consumes payer config.**
-11. **`ConfidenceGuard` + handler integration.** Unit-test the downgrade path explicitly.
-12. **`conflict_metrics.py`** + runner wiring. Smoke against 3 planted packets, confirm recall = 100% on that micro-set.
-13. **Hand-label 20 packets into `human_tiers.json`** — done *before* step 14 to avoid anchoring.
-14. **`correlation.py` + runner wiring.**
-15. **First full P4 eval run.** Pipe results into `evals/results/latest.json`.
-16. **Tune `identity_coherence` prompt until FP rate < 5%** on the 30 conflict-free packets. Recall comes later — don't co-optimize.
-17. **Tune `npi_taxonomy_match` prompt** to the same bar.
-18. **Commit `evals/results/baseline.json`** with `stub: false` and the locked numbers.
-19. **Update README** with accuracy table, conflict precision/recall, Spearman, competitor row.
-20. **Gate verification.**
+3. **Add `PayerId` to `Provider`.** Column + migration; defaults to `payer-a-national-hmo`. Seed CLI sets per fixture (roughly half each payer across the 50).
+4. **`nppes_sampling.py` + seeded `faker`.** Smoke: generate 5 profiles, eyeball the distribution.
+5. **`conflict_planters.py` for 2 kinds: `name_variant`, `taxonomy_specialty_mismatch`.** Each planter writes its own `plantedConflicts` entry with `kind`, `field`, `sources`, `expectedSeverity`. Unit tests on each planter: mutation correctness + golden.json consistency + PDF rendering still works.
+6. **`packets.py` generates 50 packets.** Open 3 random packets (one from each non-trivial bucket) and verify visually.
+7. **Per-payer YAML schema lock + 2 payers + `PayerRequirementLoader`.** Fail-loud at startup on schema violation or unreferenced `payerId`.
+8. **`IdentityCoherenceValidator` + prompt** wired in DI. **Cherry-pick a 10-packet tuning subset** (5 clean + 5 with planted `name_variant`) — *all* prompt tuning happens on this subset, NOT the full 50. Cuts prompt-iteration cost roughly 3× ($30/iteration on the 10-set vs $90+ on the 50-set).
+9. **Tune `IdentityCoherenceValidator` prompt on the 10-subset until FP rate < 5%** (zero fabrications on the 5 clean packets). Recall is secondary — don't co-optimize. If FP < 5% costs recall < 80%, the prompt is wrong, not the threshold.
+10. **`NpiTaxonomyMatchValidator`: CSV lookup helper + thin LLM compare prompt.** Same 10-subset tuning discipline (5 clean + 5 with `taxonomy_specialty_mismatch`).
+11. **`MalpracticeCurrencyValidator`** — pure code, consumes payer config for coverage minimums + window.
+12. **`RequiredDocumentsValidator`** — pure code, single responsibility (per-payer required-doc presence).
+13. **Extend `BoardCertificationValidator`** with the optional payer-config branch (`boardCertRequired: false` downgrades the missing-cert Critical to Pass; non-accepted board emits Major).
+14. **`ConfidenceGuard` + handler integration.** Add `IsLowConfidenceInput: bool` to `Issue`; mirror on `Citation.LowConfidence`. Unit-test the downgrade path explicitly. Verify the existing P1 IssueCard renders the pill.
+15. **`conflict_metrics.py`** + runner wiring. Smoke against 3 planted packets, confirm recall = 100% on that micro-set with the 3-predicate definition (validator + sources + field).
+16. **Hand-label 20 packets into `human_tiers.json`** — done *before* step 17 to avoid anchoring. Write the `_biasNote` block in the same commit.
+17. **`agreement.py`** + runner wiring (weighted κ + raw + 3×3 confusion; Spearman as footnote).
+18. **First full P4 eval run against the 50-packet set.** Use the final prompts. Pipe results into `evals/results/latest.json`.
+19. **Verify Appendix A competitor comparison rows.** Open each competitor's site and re-confirm the row's claims; soften any inferred-from-marketing language to "based on publicly marketed features as of YYYY-MM". Better no claim than a wrong one — the README publishes this table.
+20. **Commit `evals/results/baseline.json`** with `stub: false` and the locked numbers.
+21. **Update README** with accuracy table, conflict precision/recall, agreement metrics (κ headline, confusion matrix below), the verified competitor row, and the labeler-bias paragraph in plain language.
+22. **Gate verification.** Walk the 10 DoD checkboxes.
 
-Order matters: 1 unblocks 11; 2 unblocks 7; 4 unblocks 5; 6+7 unblock 12; 8 unblocks 9+10; 13 must precede 14; 15 unblocks 16+17; 18 must follow tuning.
+Order matters: 1 unblocks 14; 2+7 unblock 10; 3 unblocks 11+12+13; 4 unblocks 5; 5 unblocks 6; 6+7 unblock 8+10; 8+10 unblock 15; 11+12+13 unblock 18; 16 must precede 17; 18 unblocks 19+20; 20 must follow 9 and 10's tuning.
 
 ---
 
 ## Risks / open
 
-- **Hand-labeler bias.** The validator designer (Ben) labels — labels and validators aren't independent. The Spearman number measures "system tracks the designer's intuition," which is weaker than "system tracks ground truth." README must say this in plain language. A second labeler before launch is ideal; not gating the phase on finding one.
-- **Sample size for Spearman.** n=20 is small. The 0.65 floor in DoD reflects what's achievable; the 0.80 design-doc target is a stretch. Don't tune the system to maximize Spearman — overfitting to 20 labels is a textbook trap.
-- **Conflict-recall vs FP tradeoff on LLM validators.** Tightening the prompt to drive FP < 5% will cost recall. P4 commits to FP < 5% as the gate; recall ≥ 80% is the secondary target. If both can't be hit simultaneously, ship FP-tight and call out recall ceiling in the README.
+- **Hand-labeler bias is structural, not just mechanical.** The validator designer is also the labeler. The pre-eval mtime check protects against *anchoring* (seeing the system score first), but not against the deeper problem: the labeler is mentally simulating the validators while rating. The agreement number measures self-consistency between the rules-in-the-validators and the rules-in-the-labeler's-head — **not** ground truth. README must say this in plain language, and the `_biasNote` field in `human_tiers.json` carries it in-band. The honest fix is a second labeler from outside credentialing; we're shipping without one and naming it.
+- **Sample size for κ.** n=20 is small. The 0.50 floor in DoD reflects what's achievable given the structural bias; the design-doc Spearman target (0.80) was implicitly assuming continuous-on-both-sides and is replaced. Don't tune the system to maximize κ — overfitting to 20 labels is a textbook trap.
+- **Conflict-recall vs FP tradeoff on LLM validators.** Tightening the prompt to drive FP < 5% will cost recall. P4 commits to FP < 5% as the gate; recall ≥ 80% is the secondary target. If both can't be hit simultaneously, ship FP-tight and call out the recall ceiling in the README.
 - **NPPES sample staleness.** The snapshot is from 2026-Q2; specialty distributions don't shift fast but they shift. Treat the snapshot as immutable for P4; refresh in a future P6 follow-on if licensure patterns visibly drift.
-- **YAML schema as contract.** Two payers in P4 means we lock in a schema before payer #3 surfaces a counterexample. Mitigation: keep the schema minimal — required documents, malpractice minimums, expiry windows. Anything fancier is a P5+ negotiation.
-- **Cost per eval run.** Back-of-envelope: 50 packets × ~4 docs × Sonnet vision extraction × ~$0.02 ≈ $4 + identity_coherence ≈ $1 + npi_taxonomy_match ≈ $1 ≈ **~$6 per full eval**. Don't auto-run on every PR; the regression gate runs in CI on prompt/model changes, not on every diff.
-- **Confidence emission depends on P3.** If P3's extractor prompts don't ask Sonnet for per-field confidence, step 1 is genuinely a P3 patch — the chain `Sonnet → extraction row → ConfidenceGuard` is broken without it. Confirm before scoping.
-- **Hand-labeling 20 packets blocks the runner upgrade.** ~100 minutes of focused reading; the runner can be written in parallel, but the first full eval can't compute Spearman until labels exist.
+- **YAML schema as contract.** Two payers in P4 means we lock in a schema before payer #3 surfaces a counterexample. Mitigation: keep the schema minimal — required documents, malpractice minimums, accepted boards, expiry windows. Anything fancier is a P5+ negotiation.
+- **Cost per FULL eval run vs PROMPT-TUNING run.** Full eval (50 packets × ~4 docs × Sonnet vision × ~$0.02) + LLM validators ≈ **~$6/run** — that's the CI/regression cost, OK to run on prompt/model PRs. **Prompt tuning costs more.** An FP-rate measurement of `identity_coherence` against 30 conflict-free packets at ~$0.04/call ≈ $1.20/measurement; ten tuning iterations on the full set ≈ $12 — fine, but extrapolating to the 50-set with multi-tier checks pushes higher. Task 8 mitigates: tune on a **10-packet subset** (5 conflict-free + 5 planted) and final-validate on the full 50 once. Cuts tuning cost ~3×.
+- **Confidence emission depends on P3.** If P3's extractor prompts don't ask Sonnet for per-field confidence, step 1 is genuinely a P3 patch wearing P4 clothing — extractor prompt change + migration + schema flow-through, not just a column add. Confirm before scoping P4 start.
+- **Hand-labeling 20 packets blocks agreement metrics.** ~100 minutes of focused reading; the runner can be written in parallel, but the first agreement number can't compute until labels exist.
+- **PDF byte-stability is fragile.** Python `random` + `faker` + numpy sampling are deterministic. ReportLab embeds PDF creation timestamps and document IDs by default — pin both, or accept that PDF bytes vary per run. PyMuPDF's rasterization for the scanned bucket has platform-dependent JPEG quantization. **The claim is "deterministic field values + locked seeds for the data pipeline"; the PDF bytes themselves are *visually* identical, not bytewise.** A regen-twice-and-diff test catches the obvious drift; ship that as a smoke test before the dataset is checked in.
+- **Competitor-comparison claims in design.md Appendix A.** Earlier review flagged inferred-from-marketing entries (Verifiable's intake breadth, Assured's pre-submission positioning, Medallion's enterprise focus). The README publishes the table. Task 19 verifies each row against the current site before P4 closes; soften any unverifiable claims to "based on publicly marketed features as of 2026-MM". A wrong row there is worse than no row.
 
 ---
 
 ## Out of scope (resist)
 
 - **A third LLM validator.** `address_drift`, `dob_mismatch`, and friends wait for a Phase 4.5 once the two existing LLM validators are stable. Three LLM validators co-evolving = three prompts you can't tune independently.
+- **`ExpiryConsistencyValidator` (the missing piece for `expiry_mismatch`).** Cross-document date-disagreement detection is real work — its own prompt, its own field discriminator, its own FP-tuning curve. **Lands in Phase 4.5**, after the two existing LLM validators are stable and tunable independently. Until then, `expiry_mismatch` is NOT a planted kind in P4 and NOT measured.
 - **More than 2 payers in YAML.** Two is enough to exercise both branches (board-cert-required and board-cert-optional). Payer #3 lands when a real customer asks.
+- **Payer selection at intake.** P4's `PayerId` defaults at `Provider` creation; admin-driven payer choice surfaces in the intake portal in P5.
 - **Continuous integration of the regression gate.** Gate runs locally + on prompt/model change PRs. CI integration is P6.
 - **Real-time score recompute on extraction change.** The "drop a new PDF → score updates" UX is the intake-portal flow in P5. P4 still uses the seed CLI + P3 upload flow.
 - **Intake agent, outbox, magic-link portal.** P5.
-- **A real second labeler.** Acknowledge the bias; don't block the phase.
+- **A real second labeler.** Name the bias; don't block the phase.
 - **Bbox-quality metrics.** P3 reports bbox; we don't measure its accuracy in P4 (would require ground-truth bboxes on every field × every doc, which is days of labeling). The "dashboard highlights the right region" gate is human-eyeballed in P6 demo polish.
 - **Fancy conflict-detection metrics** (F1 per kind, AUC over confidence thresholds). Precision + recall per kind is the contract; everything else is P6.
 
