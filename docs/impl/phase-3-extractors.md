@@ -16,13 +16,13 @@
 ## Definition of done
 
 - [ ] EF migrations land two tables — `documents` and `document_extractions` — with the append-only `BEFORE UPDATE → RAISE` trigger on `document_extractions`. Both tables visible in the latest model snapshot.
-- [ ] `POST /api/extract` (the P2-locked surface) classifies + extracts the uploaded PDF in-memory and returns `{ fields }`. **Stateless**: no `documents` row, no `document_extractions` row, no idempotency cache. Used by the eval runner. Same wire shape as P2 — the body went from empty to populated.
+- [ ] `POST /api/extract` (the P2-locked surface) extracts the uploaded PDF in-memory for the caller-supplied `docType` and returns `{ fields }`. **Stateless**: no `documents` row, no `document_extractions` row, no idempotency cache, no classifier call (the eval runner already knows `docType` from `golden.json`). Same wire shape as P2 — the body went from empty to populated.
 - [ ] `POST /api/providers/{id}/documents` accepts a multipart PDF, persists the bytes to the local blob store, writes a `documents` row, runs the Haiku classifier inline, runs the Sonnet extractor inline, persists a `document_extractions` row, and returns `{ documentId, docType, docTypeConfidence, extractionId }`. **Stateful**: this is the intake path, idempotent on `(document_id, schema_version, model, prompt_hash)`.
 - [ ] Four prompt files checked in at `apps/api/Application/Extraction/Prompts/{License,Dea,BoardCert,Malpractice}ExtractionPrompt.v1.md` + one `ClassifierPrompt.v1.md`. Each row in `document_extractions` carries `schema_version = '<docType>.v1'` and a `prompt_hash` matching the file's SHA-256. Each row in `documents` carries `classifier_model` + `classifier_prompt_hash` for the same audit reason.
-- [ ] Idempotency on the stateful path: a second `POST /api/providers/{id}/documents` for the same content-addressed key returns the existing `extraction_id` without re-billing Sonnet. Visible in Langfuse — one trace per unique tuple, not per request.
+- [ ] Idempotency on the stateful path: `POST /api/documents/{id}/reextract` against an unchanged `(document_id, schema_version, model, prompt_hash)` tuple returns the existing `extraction_id` without re-billing Sonnet. (Re-uploading the same PDF via `POST /api/providers/{id}/documents` creates a new `documents` row by design — see decisions table on `document_id` provenance.) Visible in Langfuse — one trace per unique tuple, not per request.
 - [ ] `POST /api/providers/{id}/scores` reads the latest extraction per `doc_type` for the provider, aggregates into a `ProviderProfile`, and feeds the existing Phase 1 scorer. The endpoint stops accepting a JSON body for the profile; the body is now `{ providerId }` only.
-- [ ] `python -m runners.run evals/dataset/` against the live API produces a non-zero accuracy table. `evals/results/baseline.json` is rewritten with `stub: false` and real per-field numbers, in the same PR that flips `stub`. Eval runs re-bill Sonnet on every invocation (~$0.55/run) — accepted tradeoff for keeping `/api/extract` pure.
-- [ ] Citation drill-in works in the dashboard: clicking an Issue's citation opens the source PDF at the right page; on scanned documents the bbox highlight degrades gracefully to page-only.
+- [ ] `python -m runners.run evals/dataset/` against the live API produces a non-zero accuracy table. `evals/results/baseline.json` is rewritten with `stub: false` and real per-field numbers, in the same PR that flips `stub`. Eval runs re-bill Sonnet on every invocation (~$0.45/run, extract-only — no classifier on Path A) — accepted tradeoff for keeping `/api/extract` pure.
+- [ ] Citation drill-in works in the dashboard: clicking an Issue's citation opens the source PDF at the right page; on scanned documents the bbox highlight degrades gracefully to page-only. Citation provenance reaches the score response via the aggregator's `FieldProvenance` map → validators carry it on emitted `Issue.Citation`.
 
 All eight boxes check → Phase 3 closes. Move to [Phase 4 — Scale to 50 + LLM validators](./phase-4-scale-and-validators.md).
 
@@ -49,12 +49,13 @@ All eight boxes check → Phase 3 closes. Move to [Phase 4 — Scale to 50 + LLM
 | Classifier model | Claude Haiku 4.5 | Single-label task; ~6x cheaper than Sonnet, ~2x faster. Mirrors VaBene's inquiry-classifier split. |
 | Extractor model | Claude Sonnet 4.6 | Long-tail edge cases (multi-line addresses, ambiguous dates, scanned-doc OCR artifacts) need reasoning. Haiku flunked early bench on packet-005-scanned. |
 | Extractor count for P3 | 4 (license, dea, boardCert, malpractice) | Matches the P2 dataset exactly. CV waits for P4 — no point shipping a fifth extractor with no packet exercising it. |
-| `/api/extract` responsibility | **Stateless** — classify + extract in-memory, return `{ fields }`, no DB writes. Used by the eval runner only. | The eval runner has PDFs on disk, no `providerId`, no upload step. Conflating it with persistence would require a fake-provider FK hack or pollute the `documents` table with eval rows. Cost: Sonnet re-bills on every eval run (~$0.55/run), survivable through the demo. Content-hash cache is a later add. |
+| `/api/extract` responsibility | **Stateless** — extract in-memory for the caller-supplied `docType`, return `{ fields }`, no DB writes, no classifier call. Used by the eval runner only. | The eval runner has PDFs on disk, no `providerId`, no upload step, and already knows `docType` from `golden.json`. Conflating it with persistence would require a fake-provider FK hack or pollute the `documents` table with eval rows. Cost: Sonnet re-bills on every eval run (~$0.45/run, extractor-only), survivable through the demo. Content-hash cache is a later add. |
 | `/api/providers/{id}/documents` responsibility | **Stateful** — uploads blob, persists `documents` row, runs classifier + extractor inline, persists `document_extractions` row, idempotent on the content-addressed key. The intake path. | Two responsibilities, two endpoints. Application code shares the same `IClassifier` + `IExtractor` services; the difference is whether the result lands in the DB. |
 | Blob storage | Local filesystem | Single-process API. S3 contract documented for P6, but a folder works through the demo. Migrating the field is `IBlobStore.PutAsync` swap — three callers, two days. |
 | Idempotency key | `(document_id, schema_version, model, prompt_hash)` | Model is in the key so a Sonnet 4.6 → 4.7 bump invalidates the cache automatically. If model were only an audit column, an extractor swap would silently return stale extractions. Schema version describes the prompt + JSON schema, not the model. |
 | Classifier audit fields | `documents.classifier_model` + `documents.classifier_prompt_hash` columns | Same provenance discipline extractor rows already have. Two columns; without them, a `ClassifierPrompt.v1.md` edit silently re-attributes every prior classification. |
 | Bbox citation | Sonnet self-report on native PDFs; page-only fallback on scanned docs | Sonnet's bbox accuracy degrades on rasterized inputs (build-plan risk #2). Detection: PDF has no extractable text layer = scanned, fall back. |
+| Citation provenance channel | Aggregator returns `ProviderProfile` + parallel `Dictionary<string, FieldProvenance>` keyed by `<docType>.<field>`. Validators read both, emit `Issue.Citation` populated with `{ documentId, page, bbox }`. | Option A from review — least invasive. Keeps `ProviderProfile` a value type (validators stay pure-code, testable with Moq per project_test_infrastructure_reality). Option B (`CitedField<T>` wrappers) was rejected as invasive; option C (validators query the DB) was rejected because it makes validators DB-aware. |
 | Aggregator policy on conflicts | Keep per-doc fields; derive `ProviderProfile.FullName` by license-precedence; flag a Minor Issue if any other doc disagrees by Levenshtein ≥ 3 | From phase-2.md §"fullName per doc"; option (a). Cheapest. Leaves P4 validators room to flip a Minor → Critical with cross-doc evidence. |
 | Re-extraction trigger | Manual `POST /api/documents/{id}/reextract` only | No background polling, no auto-retry. P3 is happy-path; failures escalate via the Issue list, not a re-queue. |
 | Prompt versioning | Embedded `.md` resources, suffix-matched via existing `PromptLoader` | Already shipped in P0. Hashing the embedded resource bytes is one SHA-256 call at load. |
@@ -157,7 +158,7 @@ CREATE INDEX ix_documents_provider_doctype ON documents (provider_id, doc_type);
 CREATE TABLE document_extractions (
   id              UUID PRIMARY KEY,
   document_id     UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-  extraction_id   INT NOT NULL,                 -- monotonic per document_id; SELECT max+1 inside the same tx
+  extraction_id   INT NOT NULL,                 -- monotonic per document_id (1, 2, …); see "Why per-document extraction_id" below
   schema_version  TEXT NOT NULL,                -- 'license.v1', 'dea.v1', …
   status          TEXT NOT NULL,                -- 'Succeeded' | 'Failed'
   fields          JSONB NOT NULL,               -- camelCase keys; {} on Failed
@@ -193,11 +194,15 @@ CREATE TRIGGER document_extractions_immutable
 
 **Why classifier audit on `documents`:** the classifier's Haiku call is the upstream provenance for every extraction. If `ClassifierPrompt.v1.md` changes and no audit column captures it, every prior `doc_type` is silently re-attributed to the new prompt. Two columns close the loop.
 
+**Why per-document `extraction_id` (and how to allocate it safely):** the human-meaningful identifier is "extraction #2 of document X," not a global UUID. To allocate without a race: take `pg_advisory_xact_lock(hashtext(document_id::text))` at the start of the insert transaction, then `INSERT … SELECT COALESCE(MAX(extraction_id), 0) + 1 FROM document_extractions WHERE document_id = $1`. The advisory lock serializes concurrent inserts against the same document; the `UNIQUE (document_id, extraction_id)` constraint is the belt-and-braces — if two transactions ever skip the lock, the second insert raises and the handler retries with `MAX + 1` again.
+
 **Migration audit before `dotnet ef migrations add`:** confirm `ModelSnapshot.cs` is clean before adding (per project_migration_snapshot_drift). If P1's snapshot has drifted, fix the drift in a separate commit before this migration lands.
 
 ---
 
 ## Extraction flow — two paths
+
+> Diagram notation: `…Cmd` is the abbreviated form of the C# `…Command` class (`ExtractInMemoryCommand`, `UploadDocumentCommand`) — shortened to fit the column width.
 
 ### Path A — stateless (`/api/extract`, eval runner)
 
@@ -214,7 +219,7 @@ eval runner             Api                  Application                Infrastr
    │ 200 { fields } ◄────│                        │                            │
 ```
 
-No DB writes. No idempotency. Sonnet bills on every call. Eval runs at ~$0.55 per 20-doc pass — accepted; a content-hash cache layers in cleanly later if it bites.
+No DB writes. No classifier call (`docType` is in the request body). No idempotency. Sonnet bills on every call. Eval runs at ~$0.45 per 20-doc pass (5 packets × 4 doc types × ~$0.022 avg) — accepted; a content-hash cache layers in cleanly later if it bites.
 
 ### Path B — stateful (`/api/providers/{id}/documents`, intake)
 
@@ -366,7 +371,14 @@ catch (DbUpdateException ex) when (ex.IsUniqueViolation())
 
 public sealed record AggregatedProfile(
     ProviderProfile Profile,
+    IReadOnlyDictionary<string, FieldProvenance> Provenance,
     IReadOnlyList<AggregationIssue> Issues);
+
+public sealed record FieldProvenance(
+    Guid DocumentId,
+    int Page,
+    double[] Bbox,
+    double Confidence);
 
 public interface IProviderProfileAggregator
 {
@@ -377,13 +389,35 @@ public interface IProviderProfileAggregator
 For each `doc_type` in (License, Dea, BoardCert, Malpractice):
 
 1. Pull the latest `document_extractions` row for that document type for this provider (joined through `documents`).
-2. If no document of that type exists, emit a Missing-Document Issue (Critical).
-3. If the latest extraction is `Failed`, emit an Extraction-Failed Issue (Critical) with the persisted `error`.
-4. If `Succeeded`, map the `fields` JSONB into the strongly-typed `LicenseInfo` / `DeaInfo` / etc. that P1's scorer reads.
+2. If no document of that type exists, emit a Missing-Document Issue (Critical) — no `Citation` (there's nothing to point at).
+3. If the latest extraction is `Failed`, emit an Extraction-Failed Issue (Critical) carrying `documents.id` + the persisted `error` so the dashboard shows "license PDF unreadable: timed out at page 1" with a link to the source.
+4. If `Succeeded`, map `fields` JSONB → strongly-typed `LicenseInfo` / `DeaInfo` / etc.; populate `Provenance["license.fullName"] = new FieldProvenance(docId, page, bbox, conf)` for every scored field.
 
 The aggregator also runs the cross-doc reconciliation policy (license precedence on `fullName`; Minor on Levenshtein ≥ 3). Per the locked decision, that's the cheapest place to put it — Phase 4's LLM validators will eventually upgrade some of those Minors to Criticals with their own cross-doc evidence.
 
-`AggregationIssue` flows into `ScoreSynthesizer`'s existing Issue list. No change to the scorer; only the input pipe.
+### Citation provenance channel
+
+The `Provenance` map travels alongside `ProviderProfile` into every validator. Validators look up `<docType>.<fieldName>` and attach a `Citation` to each emitted `Issue`:
+
+```csharp
+public Issue Validate(ProviderProfile p, IReadOnlyDictionary<string, FieldProvenance> prov)
+{
+    if (p.License.ExpiryDate < _clock.GetUtcNow().AddDays(30))
+    {
+        var src = prov["license.expiryDate"];
+        return new Issue(
+            severity: Severity.Critical,
+            message: $"License expires {p.License.ExpiryDate:yyyy-MM-dd}.",
+            citation: new Citation(src.DocumentId, src.Page, src.Bbox),
+            confidence: src.Confidence);
+    }
+    return Issue.None;
+}
+```
+
+Validators stay pure-code (no DB queries, no `IAppDbContext` injection) so they remain testable with Moq + `BuildMockDbSet` per project_test_infrastructure_reality. `Provenance` enters as a method parameter; no service-locator surface.
+
+`AggregationIssue` flows into `ScoreSynthesizer`'s existing Issue list. The synthesizer is unchanged — it carries `Citation` through unmodified. The dashboard reads `Issue.Citation.DocumentId` to load the PDF and `{ Page, Bbox }` to anchor the highlight.
 
 **Wire shape, score endpoint:**
 
@@ -410,7 +444,10 @@ Per the build-plan §Phase 3 risk: **$0.40 / 4-PDF packet is the red line.** Bel
 | Extract — dea | Sonnet 4.6 | ~4,500 | ~350 | ~$0.020 |
 | Extract — boardCert | Sonnet 4.6 | ~4,500 | ~400 | ~$0.022 |
 | Extract — malpractice | Sonnet 4.6 | ~5,500 (often 2 pages) | ~450 | ~$0.025 |
-| **Per packet** | | | | **~$0.11** (4 doc-types, 1 classify each + 1 extract) |
+| **Per packet — Path B (intake)** | | | | **~$0.11** (4 doc-types × [1 classify + 1 extract]) |
+| **Per packet — Path A (eval)** | | | | **~$0.09** (4 extracts only; no classifier — `docType` is supplied) |
+
+Per-run eval cost: 5 packets × ~$0.09 = ~$0.45 (matches the DoD bullet 7 budget).
 
 Caching is the second lever — Sonnet's prompt cache holds the system instructions across a packet's four extractions. If first-call costs trend higher than the table, set up explicit cache breakpoints on the system prompt's last line (Anthropic SDK `CacheControl = "ephemeral"`).
 
@@ -430,11 +467,11 @@ Langfuse is the source of truth; if a single packet exceeds $0.20, file a regres
 8. **Run the eval against Path A.** `python -m runners.run evals/dataset/ --check-against evals/results/baseline.json`. Confirm numbers are non-zero. If they're worse than I'd want, *don't* re-tune yet — commit the real `baseline.json` with `stub: false` first, then iterate against the gate.
 9. **Path B intake endpoint.** `POST /api/providers/{id}/documents` — blob put, `documents` row insert (with classifier_model + classifier_prompt_hash), classifier call, extractor call with idempotency. 4xx if provider missing; 201 with `{ documentId, docType, docTypeConfidence, extractionId }` on success.
 10. **Idempotency cache.** Pre-call lookup keyed on `(document_id, schema_version, model, prompt_hash)` + post-call unique-violation catch. Confirm two back-to-back identical Path B calls produce one Langfuse trace, not two.
-11. **Aggregator + score endpoint rewire.** `ProviderProfileAggregator`. Update `ScoreEndpoint`. Old-body backwards-compat warning lands here; removal in PR+2.
+11. **Aggregator + score endpoint rewire.** `ProviderProfileAggregator`. Update `ScoreEndpoint`. Old-body backwards-compat warning lands here; removal in PR+2. Wiring-only against the type system; live exercise requires `document_extractions` rows, which step 9 is the only producer of — run one Path B upload per packet first.
 12. **Citation drill-in.** Dashboard reads `field_locations` from the extraction row; renders the source PDF at the right page; bbox overlay on native PDFs, page-only on scanned docs.
 13. **Gate walk.** Eight DoD checkboxes.
 
-Order matters: 2 depends on 1; 4 depends on 3; 6 depends on 4+5; 7 depends on 6; 8 depends on 7; 9 depends on 7 (extractors must exist before intake calls them); 10 depends on 9; 11 depends on 7. The early eval-runner-first sequence (steps 6–8) is deliberate — it gets `baseline.json` flipped to `stub: false` and the gate load-bearing before the more involved Path B + aggregator work lands.
+Order matters: 2 depends on 1; 4 depends on 3; 6 depends on 4+5; 7 depends on 6; 8 depends on 7; 9 depends on 7 (extractors must exist before intake calls them); 10 depends on 9; 11 depends on 7 for code, on 9 for live data; 12 depends on 9 for live data (the citation drill-in reads `field_locations` from rows only Path B writes); 13 (gate walk) depends on a Path B sweep over the 5 P2 packets to populate the rows 11 and 12 read. The early eval-runner-first sequence (steps 6–8) is deliberate — it gets `baseline.json` flipped to `stub: false` and the gate load-bearing before the more involved Path B + aggregator work lands.
 
 ---
 
