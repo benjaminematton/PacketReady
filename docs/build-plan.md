@@ -6,7 +6,7 @@
 |---|---|
 | **Owner** | Ben |
 | **Started** | 2026-05-21 |
-| **Last updated** | 2026-05-21 |
+| **Last updated** | 2026-05-22 |
 | **Data** | synthetic only · mocked PSV · no PHI |
 | **Companion doc** | [design.md](./design.md) |
 | **Style** | [style.md](./style.md) — voice, spine, callout vocabulary |
@@ -281,9 +281,9 @@ These are not in scope for the demo. If anything below feels tempting, that's th
 - [x] Build plan — done (this doc)
 - [x] Phase 0 — closed 2026-05-21, 3/4 gates green. Langfuse trace rendering deferred (Langfuse v2 has no OTLP receiver; needs v3 stack or Jaeger swap). Audit log + OTel in-process working. See [phase-0-walking-skeleton.md](./impl/phase-0-walking-skeleton.md#closing-notes-2026-05-21).
 - [x] Phase 1 — closed 2026-05-21, all 7 gates green. Fixtures hit 100/62/34 exactly; side-panel drill-in wired (Radix Sheet, per-card); POST /scores returns the full ReadinessScore shape; 13 ScoreComputed audit rows landed; 139 tests pass (58 in scoring). See [phase-1-score-from-clean-input.md](./impl/phase-1-score-from-clean-input.md).
-- [ ] Phase 2
-- [ ] Phase 3
-- [ ] Phase 4
+- [x] Phase 2 — closed 2026-05-22, harness end-to-end, 5 packets at `evals/dataset/`, baseline.json committed with `stub: true`. See [phase-2-eval-harness.md](./impl/phase-2-eval-harness.md).
+- [ ] Phase 3 — plan written + review-fixed (commits `1d3a53c` → `0ba94e7`), not started. See [phase-3-extractors.md](./impl/phase-3-extractors.md).
+- [ ] Phase 4 — plan written + review-fixed (commits `626fe8c` → `b79f995`), not started. See [phase-4-scale-and-llm-validators.md](./impl/phase-4-scale-and-llm-validators.md).
 - [ ] Phase 5
 - [ ] Phase 6
 
