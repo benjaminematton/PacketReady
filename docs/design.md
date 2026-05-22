@@ -65,7 +65,7 @@ A first-time denial restarts a 90–120 day enrollment cycle and costs a small p
 |---|---|
 | Extraction field accuracy (clean PDFs) | ≥ 95% |
 | Extraction field accuracy (scanned PDFs) | ≥ 85% |
-| Score correlation with human-labeled readiness (Spearman) | ≥ 0.80 on the eval set |
+| Tier agreement with human-labeled readiness (weighted Cohen's κ, quadratic weights) | ≥ 0.50 on the eval set; 3×3 confusion matrix + raw agreement reported alongside |
 | Cross-document conflict recall | ≥ 90% on synthetic conflicts |
 | End-to-end intake turn latency (p50) | < 30s after document upload |
 | End-to-end intake turn latency (p95) | < 90s |
@@ -264,6 +264,18 @@ type LicenseExtraction = {
 
 Per-field self-reported confidence is used by the validator suite to weight cross-document checks. Low-confidence extractions get flagged as Minor issues even when they "look" valid — confidence ≥ 0.85 to count as a passing input to a Critical-eligible validator.
 
+**Classifier confidence — three-band runtime handling.** The Haiku classifier emits a per-document confidence alongside the predicted `doc_type`. Three bands govern what happens next:
+
+| Band | Action |
+|---|---|
+| ≥ 0.85 | Trust. Route to the matching extractor; no Issue emitted on classification. |
+| 0.50–0.85 | Store the predicted `doc_type` and proceed to extraction, but the validator suite emits a Minor "low-confidence classification" Issue at score time so the admin sees the uncertainty. |
+| < 0.50 | Persist as `doc_type = 'other'`. The aggregator skips the document. A Critical "unclassified document" Issue surfaces unless another document of the expected type was uploaded for the same provider. |
+
+The ≥ 0.85 bench is on the synthetic eval set; runtime PDFs from real intake will be messier. The three-band split keeps the system honest about its own uncertainty rather than collapsing every classification into "trusted."
+
+**Extractor count for v1.** Four extractors ship in the first cut — `license`, `dea`, `board_cert`, `malpractice` — matching the four document types in the eval dataset. The `cv` extractor lands once a CV-bearing packet enters the eval set; shipping it without a regression target would invite silent bit rot.
+
 ### 7.3 Intake state machine
 
 The state machine is a five-state FSM owning the per-provider lifecycle. Transitions are deterministic; the LLM lives inside the `agent_turn` action, not in the transition logic.
@@ -295,6 +307,13 @@ These mirror the budgets I'm using on VaBene. They're chosen so a runaway loop c
 **Why a state machine and not a free-running agent loop:** the credentialing intake task has a known target shape (a complete profile against a known requirement set), so the orchestration is deterministic and the LLM lives inside the orchestration. Per Anthropic's framework, this is the orchestrator–workers workflow pattern, not an autonomous agent. The benefits I care about: every state transition is debuggable, mid-turn failures don't lose state, and the agent can't decide to "do something else" mid-intake.
 
 ### 7.4 Agent runtime — tools
+
+**Two endpoint surfaces for extraction.** The extraction tool surface and the HTTP surface diverge by use case:
+
+- `POST /api/extract` is **stateless** — accepts a PDF + `docType`, returns `{ fields }`, writes nothing. Used by the eval runner (which has the PDFs on disk and already knows `docType` from `golden.json`). No `documents` row, no idempotency cache, no classifier call.
+- `POST /api/providers/{id}/documents` is **stateful** — uploads the blob, persists a `documents` row, runs the Haiku classifier inline, runs the Sonnet extractor inline, persists a `document_extractions` row. Idempotent on `(document_id, schema_version, model, prompt_hash)` so a re-extract against the same prompt + model returns the cached row without re-billing Sonnet. This is the intake path.
+
+The `extract_fields` agent tool below maps to the stateful surface — by the time the agent is reasoning about a document, it has a `document_id` and the persistence trail is load-bearing for audit.
 
 The intake agent has five tools. Tool surface kept deliberately small because every extra tool increases miss-selection rate (this is the *Building Effective Agents* "tool inventory" principle — minimum set needed for the top tasks):
 
@@ -357,11 +376,11 @@ Validators run in parallel after the agent declares the profile complete. Each v
 | `identity_coherence` | Name, DOB, NPI, address agree across all documents | LLM-augmented (Sonnet, structured) — needs cross-doc reasoning |
 | `license_status` | License is active, not expired, state matches credentialing state | Pure code on extracted fields |
 | `dea_status` | DEA registration active, not expired, schedules cover prescribing needs | Pure code |
-| `malpractice_currency` | Policy in force, coverage limits meet payer minimums, expiry > 30 days out | Pure code + payer requirement table |
+| `malpractice_currency` | Policy in force, coverage limits ≥ payer minimums (`Provider.PayerId` → YAML), expiry > 30 days out | Pure code + per-payer YAML |
 | `npi_taxonomy_match` | NPI taxonomy code matches stated specialty | LLM-augmented (taxonomy lookup is fuzzy) |
-| `board_certification` | Board cert active for stated specialty, not expired | Pure code |
+| `board_certification` | Board cert active for stated specialty, not expired; payer-aware accepted-boards list when `Provider.PayerId` configures one | Pure code, payer-aware via YAML |
 | `sanctions_check` | OIG/SAM lookup result is clean | Pure code on lookup result |
-| `payer_specific` | Per-payer required documents present (e.g. CV gap explanations, work history coverage) | Pure code, configurable per payer |
+| `required_documents` | Each doc type listed in the payer's `requiredDocuments` is present on the provider | Pure code, per-payer YAML |
 
 Each validator returns:
 
@@ -378,6 +397,8 @@ type ValidatorResult = {
 **Why split pure-code from LLM-augmented:** field-level checks (expiry > today, status === 'active') are deterministic and shouldn't burn LLM budget. Cross-document reasoning (does "Jonathan Smith" on the license match "John Smith Jr." on the malpractice cert with the same DOB?) needs reasoning. Splitting the validator surface keeps cost down and makes the LLM-required portions debuggable in isolation.
 
 **Why parallel:** validators don't depend on each other's output. A single fan-out runs all of them in ~1–2 seconds with cached extractions.
+
+**Per-provider payer assignment.** Three validators above are payer-aware (`malpractice_currency`, `board_certification`, `required_documents`). Each `Provider` carries a `PayerId` (TEXT, defaults to `'payer-a-national-hmo'` at creation) that selects the YAML config at `Infrastructure/Payers/payers/<id>.yaml`. The admin sets `PayerId` at intake; the seed CLI varies it across fixtures so both YAML branches exercise. Missing-payer references fail loud at startup, not on first request — `PayerRequirementLoader` rejects an unresolved `PayerId`.
 
 ### 7.7 Score synthesis
 
@@ -416,10 +437,10 @@ This is intentionally simple. A weighted sum is easier to defend than a learned 
 
 ### 7.8 Audit log
 
-Every agent decision, tool call, validator result, and score computation is logged to two destinations:
+Every agent decision, tool call, validator result, and score computation is logged across two surfaces with distinct purposes:
 
-- **Langfuse** for traces (per-turn spans, model calls, tool calls, latencies, costs).
-- **JSONL audit log** per provider, for the citation drill-in UX.
+- **`audit_events` (Postgres, append-only)** — the durable source of truth. DB-enforced via `BEFORE UPDATE → RAISE` trigger. Every state-changing event lands here with `provider_id`, `turn_id`, `event_type`, JSONB payload, and `correlation_id`. This is what the dashboard's drill-in reads from and what NCQA-style audit-package exports would be generated from.
+- **Langfuse** — the trace UI. Per-turn spans, model calls, tool calls, latencies, costs. Best-effort fire-and-forget; an unreachable Langfuse never breaks a request. (Note: the local docker stack runs Langfuse v2, which has no OTLP receiver — traces emit but don't render. The v3-vs-Jaeger decision is parked for P4 when trace search becomes load-bearing for eval debugging.)
 
 ```typescript
 type AuditEvent = {
@@ -427,13 +448,13 @@ type AuditEvent = {
   provider_id: string;
   turn_id?: string;
   ts: Date;
-  kind: 'classify' | 'extract' | 'tool_call' | 'validator_run' | 'score_synthesis' | 'outbound_compose';
-  payload: object;
-  citations?: Citation[];
+  event_type: string;  // 'PingExecuted' | 'ScoreComputed' | 'ExtractionPersisted' | ...
+  payload: object;     // JSONB
+  correlation_id?: string;
 };
 ```
 
-The dashboard's "drill into this issue" UX is backed by JSONL. Every Critical/Major issue has a clickable card that opens a side panel showing: the validator that fired, the extracted value that triggered it, the source document with the cited page rendered and the bbox highlighted, and the primary-source link if the issue involved an external lookup.
+The dashboard's "drill into this issue" UX is backed by `audit_events` joined to `document_extractions.field_locations`. Every Critical/Major issue has a clickable card that opens a side panel showing: the validator that fired, the extracted value that triggered it, the source document with the cited page rendered and the bbox highlighted, and the primary-source link if the issue involved an external lookup.
 
 This is the cited-audit-log pattern Verifiable markets for CredAgent. Atano's homepage does not promise this. Building it is a strong differentiator and is also genuinely the right way to build credentialing software — the alternative is asking customers to trust a black box, which is the failure mode that produced the 2026 NCQA audit problems.
 
@@ -536,9 +557,11 @@ cross-document conflict detection:
   - conflict recall (we caught the planted issue)
   - conflict precision (we didn't fabricate a conflict on clean packets)
 
-score correlation:
-  - Spearman correlation between PacketReady score and a human-rated readiness label
-  - per-tier (green/yellow/red) confusion matrix vs. human tier assignment
+tier agreement:
+  - weighted Cohen's κ (quadratic weights) between PacketReady tier and a human-rated readiness tier (headline)
+  - 3×3 confusion matrix (rows = human tier, cols = system tier)
+  - raw agreement rate (count(system == human) / n)
+  - Spearman correlation kept as a footnote — 3-tier categorical labels at n=20 make ρ heavy-tied and unstable; κ is the standard ordinal-categorical agreement metric
 ```
 
 ### 9.3 Regression suite
@@ -577,11 +600,11 @@ I considered an end-of-flow "submit to payer" demo where the score, if green, au
 
 ## 11. Risks
 
-1. **Extraction accuracy on scanned documents.** Sonnet's vision is strong but not perfect on faxed, slightly rotated PDFs. Mitigation: the eval set includes scanned variants explicitly, and the validator suite weights low-confidence extractions down rather than treating them as ground truth. Critical issues require ≥ 0.85 confidence on their inputs.
+1. **Extraction accuracy on scanned documents.** Sonnet's vision is strong but not perfect on faxed, slightly rotated PDFs. Mitigation: the eval set includes scanned variants explicitly, and the validator suite weights low-confidence extractions down rather than treating them as ground truth. Critical Issues whose citations reference any field with confidence < 0.85 are auto-downgraded to Minor via a structural `IsLowConfidenceInput: true` flag on the `Issue` (mirrored on `Citation.LowConfidence`) — not a message suffix, so the dashboard and tests can branch on the flag without string-sniffing.
 
 2. **Hallucinated conflicts.** The identity coherence validator could fabricate a conflict (LLM "sees" a name mismatch that isn't there). Mitigation: every claimed conflict carries a citation; the eval set's clean-packet portion measures false-positive rate explicitly.
 
-3. **Validator coverage gaps.** Payer-specific requirements vary; I'm implementing a configurable subset, not full coverage. Mitigation: the `payer_specific` validator is data-driven (a YAML requirement file per payer) so adding a payer is config, not code.
+3. **Validator coverage gaps.** Payer-specific requirements vary; I'm implementing a configurable subset, not full coverage. Mitigation: the payer-aware validators (`required_documents`, `malpractice_currency`, `board_certification`) all read from a per-payer YAML file, so adding a payer is config, not code.
 
 4. **The 0–100 score as a UX decision.** Some reviewers may prefer a checklist. Mitigation: the score is paired with the tier and the issue list, so the consumer can use whichever framing they want. The number is sortable; the issue list is actionable.
 
