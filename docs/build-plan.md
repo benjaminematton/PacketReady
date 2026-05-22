@@ -7,6 +7,7 @@
 | **Owner** | Ben |
 | **Started** | 2026-05-21 |
 | **Last updated** | 2026-05-21 |
+| **Data** | synthetic only · mocked PSV · no PHI |
 | **Companion doc** | [design.md](./design.md) |
 | **Style** | [style.md](./style.md) — voice, spine, callout vocabulary |
 

@@ -8,6 +8,7 @@
 | **Author** | Ben Matton |
 | **Audience** | Atano (Jake + eng) |
 | **Date** | May 2026 |
+| **Data** | synthetic only · mocked PSV · no PHI |
 | **Related** | [Atano homepage](https://getatano.com/), Anthropic *Building Effective Agents* (Dec 2024) |
 | **Style** | [style.md](./style.md) — voice, spine, callout vocabulary |
 
