@@ -38,6 +38,15 @@ export class ApiError extends Error {
   get isProviderNotFound(): boolean {
     return this.problem.type === ProblemTypes.ProviderNotFound;
   }
+
+  /**
+   * True when the API rejected the id as syntactically invalid (e.g. the
+   * all-zeros GUID). Treated as a not-found at the dashboard surface — from
+   * the operator's perspective the row doesn't exist either way.
+   */
+  get isInvalidProviderId(): boolean {
+    return this.problem.type === ProblemTypes.EmptyProviderId;
+  }
 }
 
 type RequestInitWithNext = RequestInit & {
@@ -126,14 +135,24 @@ export const api = {
     return assertJsonArray<ProviderListItem[]>(data, path);
   },
 
-  /** Returns the provider detail, or `null` on 404 (treated as a not-error). */
+  /**
+   * Returns the provider detail, or `null` when the row doesn't exist. Both
+   * "no such provider" (404) and "syntactically invalid id" (400 on the
+   * all-zeros GUID) collapse to `null` here — the route layer renders the
+   * same `not-found.tsx` for both, which matches operator intent.
+   */
   async getProviderDetail(providerId: string): Promise<ProviderDetail | null> {
     const path = `/api/providers/${encodeURIComponent(providerId)}`;
     try {
       const data = await request<unknown>(path);
       return assertJsonObject<ProviderDetail>(data, path);
     } catch (err) {
-      if (err instanceof ApiError && err.isProviderNotFound) return null;
+      if (
+        err instanceof ApiError &&
+        (err.isProviderNotFound || err.isInvalidProviderId)
+      ) {
+        return null;
+      }
       throw err;
     }
   },

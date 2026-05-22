@@ -13,6 +13,11 @@ public sealed record ComputeReadinessScoreCommand(Guid ProviderId) : IRequest<Re
 /// <summary>
 /// Wire-format projection of <see cref="ReadinessScore"/>. Exposes <see cref="Issues"/>
 /// inline so the dashboard's side-panel doesn't have to round-trip the JSONB blob.
+///
+/// <para>Issues are returned sorted (Severity DESC, then Validator ASC) — this is the
+/// canonical wire-format ordering and is enforced here, not at the storage boundary,
+/// so the contract holds across compute, get-detail, and any future read site even
+/// if the underlying storage representation changes.</para>
 /// </summary>
 public sealed record ReadinessScoreDto(
     Guid Id,
@@ -27,11 +32,17 @@ public sealed record ReadinessScoreDto(
 {
     /// <summary>
     /// Projects a persisted <see cref="ReadinessScore"/> to wire shape, deserializing
-    /// <c>IssuesJson</c> once. Single source of truth for read handlers and the
-    /// score-compute command.
+    /// <c>IssuesJson</c> once and re-sorting defensively. Single source of truth for
+    /// read handlers and the score-compute command.
     /// </summary>
-    public static ReadinessScoreDto From(ReadinessScore score) =>
-        new(
+    public static ReadinessScoreDto From(ReadinessScore score)
+    {
+        var issues = score.GetIssues()
+            .OrderByDescending(i => i.Severity)
+            .ThenBy(i => i.Validator, StringComparer.Ordinal)
+            .ToList();
+
+        return new ReadinessScoreDto(
             Id: score.Id,
             ProviderId: score.ProviderId,
             Score: score.Score,
@@ -39,8 +50,9 @@ public sealed record ReadinessScoreDto(
             CriticalCount: score.CriticalCount,
             MajorCount: score.MajorCount,
             MinorCount: score.MinorCount,
-            Issues: score.GetIssues(),
+            Issues: issues,
             ComputedAt: score.ComputedAt);
+    }
 }
 
 /// <summary>
