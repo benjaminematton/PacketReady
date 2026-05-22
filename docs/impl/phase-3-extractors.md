@@ -59,7 +59,9 @@ All eight boxes check → Phase 3 closes. Move to [Phase 4 — Scale to 50 + LLM
 | Aggregator policy on conflicts | Keep per-doc fields; derive `ProviderProfile.FullName` by license-precedence; flag a Minor Issue if any other doc disagrees by Levenshtein ≥ 3 | From phase-2.md §"fullName per doc"; option (a). Cheapest. Leaves P4 validators room to flip a Minor → Critical with cross-doc evidence. |
 | Re-extraction trigger | Manual `POST /api/documents/{id}/reextract` only | No background polling, no auto-retry. P3 is happy-path; failures escalate via the Issue list, not a re-queue. |
 | Prompt versioning | Embedded `.md` resources, suffix-matched via existing `PromptLoader` | Already shipped in P0. Hashing the embedded resource bytes is one SHA-256 call at load. |
-| Extraction failure surface | Persist a row with `fields = {}`, `status = 'Failed'`, `error = '<reason>'`; aggregator skips it; scorer sees a missing-doc Issue | Failure is data, not exception. A broken extraction is information the score should reflect, not a 500. |
+| Extraction failure surface | Persist a row with `fields = {}`, `status = 'Failed'`, `error = '<reason>'`. Aggregator emits an **Extraction-Failed Issue (Critical)** with the persisted `error` so the user sees "license PDF unreadable: timed out at page 1" rather than "no license on file." | Failure is data, not exception. A broken extraction is distinct information from a missing document; collapsing them would lose context the user needs to act. |
+| Confidence partial-map default | Missing per-field confidence in Sonnet's output defaults to `0.0`, not `1.0` | Fail loud on uncertainty. A field returned with no confidence assertion is treated as low-confidence; P4 validators will gate Critical-eligible checks accordingly. |
+| Classifier runtime fallback | `confidence ≥ 0.85`: trust. `0.50 ≤ confidence < 0.85`: store the predicted `doc_type`, emit a Minor "low-confidence classification" Issue at score time. `< 0.50`: persist as `doc_type = 'Other'`, classifier sets the row aside from the aggregator's pipeline. | The DoD ≥ 0.85 bench is on the 5 P2 packets only — runtime PDFs from real intake will be messier. Three-band split keeps the system honest about its own uncertainty. |
 
 The two open lanes from build-plan that **don't** lock here: object storage (P6) and the full 5-extractor set (P4 with CV). Resist scope drift on either.
 
@@ -163,7 +165,7 @@ CREATE TABLE document_extractions (
   status          TEXT NOT NULL,                -- 'Succeeded' | 'Failed'
   fields          JSONB NOT NULL,               -- camelCase keys; {} on Failed
   field_locations JSONB NOT NULL,               -- { field: { page, bbox: [x,y,w,h] } }; {} on Failed
-  confidence      JSONB NOT NULL,               -- { field: 0.00–1.00 }; {} on Failed
+  confidence      JSONB NOT NULL,               -- { field: 0.00–1.00 }; missing key = 0.0; {} on Failed
   error           TEXT,                          -- NULL when status='Succeeded'
   model           TEXT NOT NULL,                -- 'claude-sonnet-4-6'; part of idempotency key
   prompt_hash     TEXT NOT NULL,                -- SHA-256 of the embedded extractor prompt resource
@@ -190,7 +192,7 @@ CREATE TRIGGER document_extractions_immutable
 
 **Why the unique-by-(model, prompt_hash) constraint:** it does the idempotency work the application would otherwise have to remember to do. A duplicate insert raises; the handler catches it and returns the existing `extraction_id`. No race, no double-billing. `model` is in the key so a Sonnet version bump invalidates the cache automatically — otherwise the cache would silently return stale extractions and the audit column would be the only signal anything changed.
 
-**Why `confidence` as its own column:** P4's validators read it directly to gate Critical-eligible checks at ≥ 0.85. Pulling it out of `fields` avoids re-parsing the JSON every validation run.
+**Why `confidence` as its own column:** P4's validators read it directly to gate Critical-eligible checks at ≥ 0.85. Pulling it out of `fields` avoids re-parsing the JSON every validation run. Missing key in the per-field map defaults to `0.0` (fail loud on uncertainty) — Sonnet sometimes omits the confidence object entirely on edge inputs; treating absence as 1.0 would silently upgrade unknowns to passing.
 
 **Why classifier audit on `documents`:** the classifier's Haiku call is the upstream provenance for every extraction. If `ClassifierPrompt.v1.md` changes and no audit column captures it, every prior `doc_type` is silently re-attributed to the new prompt. Two columns close the loop.
 
