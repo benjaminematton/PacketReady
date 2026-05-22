@@ -23,8 +23,9 @@
 - [ ] `POST /api/providers/{id}/scores` reads the latest extraction per `doc_type` for the provider, aggregates into a `ProviderProfile`, and feeds the existing Phase 1 scorer. The endpoint stops accepting a JSON body for the profile; the body is now `{ providerId }` only.
 - [ ] `python -m runners.run evals/dataset/` against the live API produces a non-zero accuracy table. `evals/results/baseline.json` is rewritten with `stub: false` and real per-field numbers, in the same PR that flips `stub`. Eval runs re-bill Sonnet on every invocation (~$0.45/run, extract-only — no classifier on Path A) — accepted tradeoff for keeping `/api/extract` pure.
 - [ ] Citation drill-in works in the dashboard: clicking an Issue's citation opens the source PDF at the right page; on scanned documents the bbox highlight degrades gracefully to page-only. Citation provenance reaches the score response via the aggregator's `FieldProvenance` map → validators carry it on emitted `Issue.Citation`.
+- [ ] **§7.9 schema columns land; UX does not.** The `document_extractions` migration includes `source`, `edited_by`, `confirmed_at`, and the sibling `primary_source_results` table (per design.md §7.1 + §7.9). P3 writes LLM rows with `source = 'llm'`, `edited_by = null`, `confirmed_at = extracted_at` (auto-confirm) so the aggregator + score path stays unblocked. The provider-facing confirmation card, field-level edit endpoint, and time-travel rewind are P5 work — the columns just need to exist so P5 doesn't need a second migration.
 
-All eight boxes check → Phase 3 closes. Move to [Phase 4 — Scale to 50 + LLM validators](./phase-4-scale-and-validators.md).
+All nine boxes check → Phase 3 closes. Move to [Phase 4 — Scale to 50 + LLM validators](./phase-4-scale-and-validators.md).
 
 ---
 
@@ -62,6 +63,7 @@ All eight boxes check → Phase 3 closes. Move to [Phase 4 — Scale to 50 + LLM
 | Extraction failure surface | Persist a row with `fields = {}`, `status = 'Failed'`, `error = '<reason>'`. Aggregator emits an **Extraction-Failed Issue (Critical)** with the persisted `error` so the user sees "license PDF unreadable: timed out at page 1" rather than "no license on file." | Failure is data, not exception. A broken extraction is distinct information from a missing document; collapsing them would lose context the user needs to act. |
 | Confidence partial-map default | Missing per-field confidence in Sonnet's output defaults to `0.0`, not `1.0` | Fail loud on uncertainty. A field returned with no confidence assertion is treated as low-confidence; P4 validators will gate Critical-eligible checks accordingly. |
 | Classifier runtime fallback | `confidence ≥ 0.85`: trust. `0.50 ≤ confidence < 0.85`: store the predicted `doc_type`, emit a Minor "low-confidence classification" Issue at score time. `< 0.50`: persist as `doc_type = 'Other'`, classifier sets the row aside from the aggregator's pipeline. | The DoD ≥ 0.85 bench is on the 5 P2 packets only — runtime PDFs from real intake will be messier. Three-band split keeps the system honest about its own uncertainty. |
+| Confirmation row provenance in P3 | Auto-confirm at extraction time: `source = 'llm'`, `edited_by = null`, `confirmed_at = extracted_at`. | Design §7.9 introduces a provider-facing confirmation card (layer 1) and field-level edit (layer 2). Both are intake-portal UX and land in P5. The schema columns land in P3 so the §7.9 migration is one-shot; the wiring stays auto-confirm until a real provider session exists to confirm against. |
 
 The two open lanes from build-plan that **don't** lock here: object storage (P6) and the full 5-extractor set (P4 with CV). Resist scope drift on either.
 
@@ -167,14 +169,17 @@ CREATE TABLE document_extractions (
   field_locations JSONB NOT NULL,               -- { field: { page, bbox: [x,y,w,h] } }; {} on Failed
   confidence      JSONB NOT NULL,               -- { field: 0.00–1.00 }; missing key = 0.0; {} on Failed
   error           TEXT,                          -- NULL when status='Succeeded'
-  model           TEXT NOT NULL,                -- 'claude-sonnet-4-6'; part of idempotency key
-  prompt_hash     TEXT NOT NULL,                -- SHA-256 of the embedded extractor prompt resource
-  input_tokens    INT NOT NULL,
-  output_tokens   INT NOT NULL,
+  source          TEXT NOT NULL,                -- 'llm' | 'provider_edit' | 'admin_edit'  (design §7.9)
+  edited_by       UUID,                          -- null when source='llm'; user id otherwise
+  model           TEXT,                          -- 'claude-sonnet-4-6'; null when source != 'llm'
+  prompt_hash     TEXT,                          -- SHA-256 of the embedded extractor prompt; null when source != 'llm'
+  input_tokens    INT,                           -- null when source != 'llm'
+  output_tokens   INT,                           -- null when source != 'llm'
   extracted_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  confirmed_at    TIMESTAMPTZ,                   -- null until provider/admin confirms (§7.9); validators read latest row WHERE confirmed_at IS NOT NULL
 
   UNIQUE (document_id, extraction_id),
-  UNIQUE (document_id, schema_version, model, prompt_hash)   -- idempotency includes model
+  UNIQUE (document_id, schema_version, model, prompt_hash)   -- idempotency on LLM rows only (NULL model => no dedup, by design — edit rows are not deduped)
 );
 
 -- Append-only: BEFORE UPDATE raises. Phase 1's audit_events table uses the same
@@ -196,7 +201,25 @@ CREATE TRIGGER document_extractions_immutable
 
 **Why classifier audit on `documents`:** the classifier's Haiku call is the upstream provenance for every extraction. If `ClassifierPrompt.v1.md` changes and no audit column captures it, every prior `doc_type` is silently re-attributed to the new prompt. Two columns close the loop.
 
-**Why per-document `extraction_id` (and how to allocate it safely):** the human-meaningful identifier is "extraction #2 of document X," not a global UUID. To allocate without a race: take `pg_advisory_xact_lock(hashtext(document_id::text))` at the start of the insert transaction, then `INSERT … SELECT COALESCE(MAX(extraction_id), 0) + 1 FROM document_extractions WHERE document_id = $1`. The advisory lock serializes concurrent inserts against the same document; the `UNIQUE (document_id, extraction_id)` constraint is the belt-and-braces — if two transactions ever skip the lock, the second insert raises and the handler retries with `MAX + 1` again.
+**Why per-document `extraction_id` (and how to allocate it safely):** the human-meaningful identifier is "extraction #2 of document X," not a global UUID. To allocate without a race: take `pg_advisory_xact_lock(hashtext(document_id::text))` at the start of the insert transaction, then `INSERT … SELECT COALESCE(MAX(extraction_id), 0) + 1 FROM document_extractions WHERE document_id = $1`. The advisory lock serializes concurrent inserts against the same document; the `UNIQUE (document_id, extraction_id)` constraint is the belt-and-braces — if two transactions ever skip the lock, the second insert raises and the handler retries with `MAX + 1` again. The same allocator handles confirmation-edit rows in P5 (§7.9 layer 2): a `provider_edit` or `admin_edit` row is appended with `extraction_id + 1`, `model = null`, `prompt_hash = null`.
+
+**Append `primary_source_results` in the same migration.** Design §7.9 names this table for replay-safe caching of `lookup_primary_source` (P5 tool). P3 has no caller yet, but adding it now means the §7.9 work doesn't need a second migration to alter the schema.
+
+```sql
+CREATE TABLE primary_source_results (
+  id                UUID PRIMARY KEY,
+  source            TEXT NOT NULL,        -- 'nppes' | 'oig' | 'sam' | 'state_board' | 'caqh'
+  identifiers       JSONB NOT NULL,       -- canonicalized input identifiers
+  identifiers_hash  TEXT NOT NULL,        -- SHA-256 of canonicalized identifiers; cache key
+  result            JSONB NOT NULL,       -- the lookup response payload
+  status            TEXT NOT NULL,        -- 'ok' | 'not_found' | 'error'
+  turn_id           UUID,                 -- the agent turn that triggered the first call (P5)
+  requested_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (source, identifiers_hash)
+);
+```
+
+The UNIQUE constraint is the cache. `identifiers_hash` is computed by canonicalizing the input JSON (sorted keys, normalized casing, trimmed whitespace) before hashing — otherwise the LLM regenerating the request with reordered keys defeats the cache. No P3 callers; the table sits empty until P5 wires `lookup_primary_source`.
 
 **Migration audit before `dotnet ef migrations add`:** confirm `ModelSnapshot.cs` is clean before adding (per project_migration_snapshot_drift). If P1's snapshot has drifted, fix the drift in a separate commit before this migration lands.
 
@@ -501,6 +524,10 @@ Order matters: 2 depends on 1; 4 depends on 3; 6 depends on 4+5; 7 depends on 6;
 - **Confidence-threshold gates.** Per design.md §7.2, "confidence ≥ 0.85 to count as a passing input to a Critical-eligible validator" is a P4 concern (the validators don't exist yet to gate). P3 captures confidence and stores it; no consumer reads it.
 - **Multi-state licensing.** Single-state provider assumption: each `(provider, doc_type)` has one canonical extraction. A provider with NY + CA licenses produces two `documents` rows of type `License`; the aggregator picks the latest by `extracted_at` and ignores the rest, no flagging. Multi-state credentialing is a real workflow but its surface (which state for which payer, primary vs reciprocity) only matters when intake supports it. P5 problem.
 - **Content-hash cache on `/api/extract`.** A SHA-256 of the uploaded PDF bytes as a cache key would deduplicate eval re-runs that hit the same packet twice. P3 accepts the re-bill (~$0.45/run, runs a couple times per day at most). If usage grows or someone wires `/api/extract` into a UI flow, revisit.
+- **§7.9 layer 1 — provider-facing confirmation card.** Columns exist on `document_extractions`; the UX (extracted-field card with bbox highlight, "looks right" / edit-this-field controls) lands in P5 with the intake portal. P3 writes `confirmed_at = extracted_at` so validators don't stall.
+- **§7.9 layer 2 — provider/admin field-level editing endpoint.** Same reasoning. The append-an-edit-row mechanic is a P5 dashboard concern.
+- **§7.9 layer 4 — time-travel rewind API.** The substrate (append-only `document_extractions` + `audit_events`) is in place from P3; the rewind endpoint and the cascading replay logic land in P5 once a real intake session exists to rewind.
+- **`lookup_primary_source` tool wiring.** The `primary_source_results` table lands in the P3 migration so §7.9's cache-or-fork policy is schema-ready, but the agent tool that writes to it is a P5 concern.
 
 ---
 
