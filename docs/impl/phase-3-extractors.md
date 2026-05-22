@@ -16,12 +16,12 @@
 ## Definition of done
 
 - [ ] EF migrations land two tables — `documents` and `document_extractions` — with the append-only `BEFORE UPDATE → RAISE` trigger on `document_extractions`. Both tables visible in the latest model snapshot.
-- [ ] `POST /api/providers/{id}/documents` accepts a multipart PDF, persists the bytes to the local blob store, writes a `documents` row, runs the Haiku classifier inline, and returns `{ documentId, docType, docTypeConfidence }`.
-- [ ] `POST /api/extract` (the P2-locked surface) now classifies → extracts → persists. Returns the same `{ fields }` shape; the body went from empty to populated.
-- [ ] Four prompt files checked in at `apps/api/Application/Extraction/Prompts/{License,Dea,BoardCert,Malpractice}ExtractionPrompt.v1.md`. Each row in `document_extractions` carries `schema_version = '<docType>.v1'` and a `prompt_hash` matching the file's SHA-256.
-- [ ] Idempotency: a second call for the same `(document_id, schema_version, prompt_hash)` returns the existing `extraction_id` without re-billing Sonnet. Visible in Langfuse — one trace per unique tuple, not per request.
+- [ ] `POST /api/extract` (the P2-locked surface) classifies + extracts the uploaded PDF in-memory and returns `{ fields }`. **Stateless**: no `documents` row, no `document_extractions` row, no idempotency cache. Used by the eval runner. Same wire shape as P2 — the body went from empty to populated.
+- [ ] `POST /api/providers/{id}/documents` accepts a multipart PDF, persists the bytes to the local blob store, writes a `documents` row, runs the Haiku classifier inline, runs the Sonnet extractor inline, persists a `document_extractions` row, and returns `{ documentId, docType, docTypeConfidence, extractionId }`. **Stateful**: this is the intake path, idempotent on `(document_id, schema_version, model, prompt_hash)`.
+- [ ] Four prompt files checked in at `apps/api/Application/Extraction/Prompts/{License,Dea,BoardCert,Malpractice}ExtractionPrompt.v1.md` + one `ClassifierPrompt.v1.md`. Each row in `document_extractions` carries `schema_version = '<docType>.v1'` and a `prompt_hash` matching the file's SHA-256. Each row in `documents` carries `classifier_model` + `classifier_prompt_hash` for the same audit reason.
+- [ ] Idempotency on the stateful path: a second `POST /api/providers/{id}/documents` for the same content-addressed key returns the existing `extraction_id` without re-billing Sonnet. Visible in Langfuse — one trace per unique tuple, not per request.
 - [ ] `POST /api/providers/{id}/scores` reads the latest extraction per `doc_type` for the provider, aggregates into a `ProviderProfile`, and feeds the existing Phase 1 scorer. The endpoint stops accepting a JSON body for the profile; the body is now `{ providerId }` only.
-- [ ] `python -m runners.run evals/dataset/` against the live API produces a non-zero accuracy table. `evals/results/baseline.json` is rewritten with `stub: false` and real per-field numbers, in the same PR that flips `stub`.
+- [ ] `python -m runners.run evals/dataset/` against the live API produces a non-zero accuracy table. `evals/results/baseline.json` is rewritten with `stub: false` and real per-field numbers, in the same PR that flips `stub`. Eval runs re-bill Sonnet on every invocation (~$0.55/run) — accepted tradeoff for keeping `/api/extract` pure.
 - [ ] Citation drill-in works in the dashboard: clicking an Issue's citation opens the source PDF at the right page; on scanned documents the bbox highlight degrades gracefully to page-only.
 
 All eight boxes check → Phase 3 closes. Move to [Phase 4 — Scale to 50 + LLM validators](./phase-4-scale-and-validators.md).
@@ -49,8 +49,11 @@ All eight boxes check → Phase 3 closes. Move to [Phase 4 — Scale to 50 + LLM
 | Classifier model | Claude Haiku 4.5 | Single-label task; ~6x cheaper than Sonnet, ~2x faster. Mirrors VaBene's inquiry-classifier split. |
 | Extractor model | Claude Sonnet 4.6 | Long-tail edge cases (multi-line addresses, ambiguous dates, scanned-doc OCR artifacts) need reasoning. Haiku flunked early bench on packet-005-scanned. |
 | Extractor count for P3 | 4 (license, dea, boardCert, malpractice) | Matches the P2 dataset exactly. CV waits for P4 — no point shipping a fifth extractor with no packet exercising it. |
+| `/api/extract` responsibility | **Stateless** — classify + extract in-memory, return `{ fields }`, no DB writes. Used by the eval runner only. | The eval runner has PDFs on disk, no `providerId`, no upload step. Conflating it with persistence would require a fake-provider FK hack or pollute the `documents` table with eval rows. Cost: Sonnet re-bills on every eval run (~$0.55/run), survivable through the demo. Content-hash cache is a later add. |
+| `/api/providers/{id}/documents` responsibility | **Stateful** — uploads blob, persists `documents` row, runs classifier + extractor inline, persists `document_extractions` row, idempotent on the content-addressed key. The intake path. | Two responsibilities, two endpoints. Application code shares the same `IClassifier` + `IExtractor` services; the difference is whether the result lands in the DB. |
 | Blob storage | Local filesystem | Single-process API. S3 contract documented for P6, but a folder works through the demo. Migrating the field is `IBlobStore.PutAsync` swap — three callers, two days. |
-| Idempotency key | `(document_id, schema_version, prompt_hash)` | Same inputs → same `extraction_id`, no new row, no Sonnet call. From build-plan §Phase 3 decision log. |
+| Idempotency key | `(document_id, schema_version, model, prompt_hash)` | Model is in the key so a Sonnet 4.6 → 4.7 bump invalidates the cache automatically. If model were only an audit column, an extractor swap would silently return stale extractions. Schema version describes the prompt + JSON schema, not the model. |
+| Classifier audit fields | `documents.classifier_model` + `documents.classifier_prompt_hash` columns | Same provenance discipline extractor rows already have. Two columns; without them, a `ClassifierPrompt.v1.md` edit silently re-attributes every prior classification. |
 | Bbox citation | Sonnet self-report on native PDFs; page-only fallback on scanned docs | Sonnet's bbox accuracy degrades on rasterized inputs (build-plan risk #2). Detection: PDF has no extractable text layer = scanned, fall back. |
 | Aggregator policy on conflicts | Keep per-doc fields; derive `ProviderProfile.FullName` by license-precedence; flag a Minor Issue if any other doc disagrees by Levenshtein ≥ 3 | From phase-2.md §"fullName per doc"; option (a). Cheapest. Leaves P4 validators room to flip a Minor → Critical with cross-doc evidence. |
 | Re-extraction trigger | Manual `POST /api/documents/{id}/reextract` only | No background polling, no auto-retry. P3 is happy-path; failures escalate via the Issue list, not a re-queue. |
@@ -135,16 +138,18 @@ The P2 stub at `ExtractEndpoint.cs` keeps its file path, its route, and its resp
 -- project_migration_folder_consolidation (two migration folders is a footgun).
 
 CREATE TABLE documents (
-  id              UUID PRIMARY KEY,
-  provider_id     UUID NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
-  doc_type        TEXT,                       -- License | Dea | BoardCert | Malpractice | Cv | Other
-  doc_type_conf   FLOAT,                      -- 0.00–1.00, Haiku self-report
-  storage_uri     TEXT NOT NULL,              -- file:///… or s3://… (P3 emits file://)
-  original_name   TEXT NOT NULL,
-  mime_type       TEXT NOT NULL,
-  page_count      INT NOT NULL,
-  uploaded_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  uploaded_by     TEXT NOT NULL               -- 'provider' | 'admin' | 'eval'
+  id                       UUID PRIMARY KEY,
+  provider_id              UUID NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+  doc_type                 TEXT,                  -- License | Dea | BoardCert | Malpractice | Cv | Other
+  doc_type_conf            FLOAT,                 -- 0.00–1.00, Haiku self-report
+  classifier_model         TEXT NOT NULL,         -- 'claude-haiku-4-5'
+  classifier_prompt_hash   TEXT NOT NULL,         -- SHA-256 of ClassifierPrompt.v1.md
+  storage_uri              TEXT NOT NULL,         -- file:///… or s3://… (P3 emits file://)
+  original_name            TEXT NOT NULL,
+  mime_type                TEXT NOT NULL,
+  page_count               INT NOT NULL,
+  uploaded_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  uploaded_by              TEXT NOT NULL          -- 'provider' | 'admin'
 );
 
 CREATE INDEX ix_documents_provider_doctype ON documents (provider_id, doc_type);
@@ -159,14 +164,14 @@ CREATE TABLE document_extractions (
   field_locations JSONB NOT NULL,               -- { field: { page, bbox: [x,y,w,h] } }; {} on Failed
   confidence      JSONB NOT NULL,               -- { field: 0.00–1.00 }; {} on Failed
   error           TEXT,                          -- NULL when status='Succeeded'
-  model           TEXT NOT NULL,                -- 'claude-haiku-4-5' for classifier, 'claude-sonnet-4-6' for extractors
-  prompt_hash     TEXT NOT NULL,                -- SHA-256 of the embedded prompt resource
+  model           TEXT NOT NULL,                -- 'claude-sonnet-4-6'; part of idempotency key
+  prompt_hash     TEXT NOT NULL,                -- SHA-256 of the embedded extractor prompt resource
   input_tokens    INT NOT NULL,
   output_tokens   INT NOT NULL,
   extracted_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
   UNIQUE (document_id, extraction_id),
-  UNIQUE (document_id, schema_version, prompt_hash)   -- idempotency
+  UNIQUE (document_id, schema_version, model, prompt_hash)   -- idempotency includes model
 );
 
 -- Append-only: BEFORE UPDATE raises. Phase 1's audit_events table uses the same
@@ -182,47 +187,65 @@ CREATE TRIGGER document_extractions_immutable
   FOR EACH ROW EXECUTE FUNCTION raise_immutable();
 ```
 
-**Why the unique-by-prompt-hash constraint:** it does the idempotency work the application would otherwise have to remember to do. A duplicate insert raises; the handler catches it and returns the existing `extraction_id`. No race, no double-billing.
+**Why the unique-by-(model, prompt_hash) constraint:** it does the idempotency work the application would otherwise have to remember to do. A duplicate insert raises; the handler catches it and returns the existing `extraction_id`. No race, no double-billing. `model` is in the key so a Sonnet version bump invalidates the cache automatically — otherwise the cache would silently return stale extractions and the audit column would be the only signal anything changed.
 
 **Why `confidence` as its own column:** P4's validators read it directly to gate Critical-eligible checks at ≥ 0.85. Pulling it out of `fields` avoids re-parsing the JSON every validation run.
+
+**Why classifier audit on `documents`:** the classifier's Haiku call is the upstream provenance for every extraction. If `ClassifierPrompt.v1.md` changes and no audit column captures it, every prior `doc_type` is silently re-attributed to the new prompt. Two columns close the loop.
 
 **Migration audit before `dotnet ef migrations add`:** confirm `ModelSnapshot.cs` is clean before adding (per project_migration_snapshot_drift). If P1's snapshot has drifted, fix the drift in a separate commit before this migration lands.
 
 ---
 
-## Extraction flow
+## Extraction flow — two paths
+
+### Path A — stateless (`/api/extract`, eval runner)
 
 ```
-client                  Api                    Application                   Infrastructure
-  │                       │                          │                              │
-  │  POST /providers/    │                          │                              │
-  │      {id}/documents  │                          │                              │
-  │  (multipart PDF) ───►│                          │                              │
-  │                       │  ClassifyDocumentCmd ──►│                              │
-  │                       │                          │  HaikuClassifier.Classify ──►│ Anthropic API
-  │                       │                          │       (Haiku 4.5)            │
-  │                       │                          │◄── { docType, conf } ────────│
-  │                       │  persist Document row    │                              │
-  │                       │◄────────────────────────│                              │
-  │  201 { documentId,    │                          │                              │
-  │       docType, conf}◄─│                          │                              │
-  │                       │                          │                              │
-  │  POST /api/extract    │                          │                              │
-  │  (file, docType) ────►│                          │                              │
-  │                       │  ExtractDocumentCmd ────►│                              │
-  │                       │                          │  resolve idempotency key      │
-  │                       │                          │  (doc_id, schema_ver, hash)   │
-  │                       │                          │                              │
-  │                       │                          │  hit?  ──► return cached row  │
-  │                       │                          │  miss? ──► call extractor:    │
-  │                       │                          │     Sonnet 4.6 + JSON schema  │
-  │                       │                          │     persist extraction row    │
-  │                       │                          │     (Succeeded or Failed)     │
-  │                       │◄── { fields } ──────────│                              │
-  │  200 { fields } ◄─────│                          │                              │
+eval runner             Api                  Application                Infrastructure
+   │                     │                        │                            │
+   │ POST /api/extract   │                        │                            │
+   │ (file, docType) ───►│                        │                            │
+   │                     │ ExtractInMemoryCmd ───►│                            │
+   │                     │                        │ SonnetExtractor.Extract ──►│ Anthropic API
+   │                     │                        │       (4.6 + JSON schema)  │
+   │                     │                        │◄── { fields, locs, conf } ─│
+   │                     │◄── { fields (flat) } ──│                            │
+   │ 200 { fields } ◄────│                        │                            │
 ```
 
-The eval runner calls only `POST /api/extract`. The upload step is exercised by a smoke test, not by the harness — the runner reads PDFs from disk and posts each one directly. Wiring upload into the runner is P5 work (intake portal); the contract here is "an extraction can be requested for any PDF on disk."
+No DB writes. No idempotency. Sonnet bills on every call. Eval runs at ~$0.55 per 20-doc pass — accepted; a content-hash cache layers in cleanly later if it bites.
+
+### Path B — stateful (`/api/providers/{id}/documents`, intake)
+
+```
+intake client          Api                   Application                Infrastructure
+   │                    │                          │                            │
+   │ POST /providers/   │                          │                            │
+   │   {id}/documents   │                          │                            │
+   │ (multipart PDF) ──►│                          │                            │
+   │                    │ UploadDocumentCmd ──────►│                            │
+   │                    │                          │ IBlobStore.PutAsync ──────►│ local FS
+   │                    │                          │ HaikuClassifier ──────────►│ Anthropic API
+   │                    │                          │ persist `documents` row    │
+   │                    │                          │   (incl. classifier_model, │
+   │                    │                          │    classifier_prompt_hash) │
+   │                    │                          │                            │
+   │                    │                          │ resolve idempotency key:   │
+   │                    │                          │  (doc_id, schema_ver,      │
+   │                    │                          │   model, prompt_hash)      │
+   │                    │                          │  hit?  ─► return cached    │
+   │                    │                          │  miss? ─► SonnetExtractor  │
+   │                    │                          │           persist          │
+   │                    │                          │           `document_       │
+   │                    │                          │            extractions`    │
+   │                    │◄── { documentId, docType,│                            │
+   │                    │     confidence,          │                            │
+   │                    │     extractionId } ──────│                            │
+   │ 201 { … } ◄────────│                          │                            │
+```
+
+The two paths share `IClassifier` and `IExtractor` services in `Application/Extraction/`. The difference is whether the caller asks for persistence; the LLM-call logic is identical. The eval runner stays on Path A through the demo — wiring the harness to Path B would require an "eval pseudo-provider" or a nullable FK, both worse than re-billing Sonnet.
 
 ---
 
@@ -263,7 +286,9 @@ The `rationale` is for Langfuse debugging only — not persisted to `documents`.
 }
 ```
 
-**Wire-shape flattening:** the eval runner expects a flat `{ "fields": { "fullName": "Henry Anderson, MD", … } }` per the P2 contract. The endpoint flattens `fields[k].value → fields[k]` before returning; `field_locations` and `confidence` go to the database, not the response. This keeps the P2-locked surface intact and the eval harness untouched.
+**Wire-shape flattening (Path A):** the eval runner expects a flat `{ "fields": { "fullName": "Henry Anderson, MD", … } }` per the P2 contract. The `/api/extract` endpoint flattens `fields[k].value → fields[k]` before returning; `field_locations` and `confidence` are discarded on Path A (no DB write, no consumer in the runner). This keeps the P2-locked surface intact and the eval harness untouched.
+
+**Persistence (Path B):** the intake endpoint persists the full structured output — `fields` (flattened to value-only for the JSONB column), `field_locations`, and `confidence` — to `document_extractions`. The response body is `{ documentId, docType, docTypeConfidence, extractionId }`; no fields in the response (the dashboard reads them back through the score endpoint).
 
 **Prompt-file shape (locked):**
 
@@ -291,13 +316,15 @@ Same skeleton for DEA / boardCert / malpractice, varying the field list and the 
 
 ---
 
-## Idempotency policy
+## Idempotency policy (Path B only)
+
+Path A (`/api/extract`) has no idempotency — it never writes. The block below is the intake path.
 
 The unique-index does the heavy lifting; the application code is small:
 
 ```csharp
-// ExtractDocumentCommandHandler — pseudocode.
-var key = new ExtractionKey(documentId, schemaVersion, promptHash);
+// UploadDocumentCommandHandler — pseudocode (Sonnet portion only).
+var key = new ExtractionKey(documentId, schemaVersion, model, promptHash);
 
 // 1) Look up by the same tuple. Same content addresses = same answer.
 var existing = await _db.DocumentExtractions
@@ -305,6 +332,7 @@ var existing = await _db.DocumentExtractions
     .FirstOrDefaultAsync(e =>
         e.DocumentId == key.DocumentId &&
         e.SchemaVersion == key.SchemaVersion &&
+        e.Model == key.Model &&
         e.PromptHash == key.PromptHash, ct);
 if (existing is not null) return existing.ToDto();
 
@@ -323,7 +351,7 @@ catch (DbUpdateException ex) when (ex.IsUniqueViolation())
 }
 ```
 
-**What this does NOT do:** invalidate on PDF-bytes change. The idempotency key is on `(document_id, schema_version, prompt_hash)`, not on the blob hash. The implicit assumption is that documents are immutable post-upload — a re-upload creates a new `documents` row, not a re-extraction of the old one. If a customer wants to "replace" a doc, that's a P5 intake-state-machine concern, out of scope here.
+**What this does NOT do:** invalidate on PDF-bytes change. The idempotency key is on `(document_id, schema_version, model, prompt_hash)`, not on the blob hash. The implicit assumption is that documents are immutable post-upload — a re-upload creates a new `documents` row, not a re-extraction of the old one. If a customer wants to "replace" a doc, that's a P5 intake-state-machine concern, out of scope here.
 
 **Prompt-hash discipline:** `PromptHasher.HashOf("LicenseExtractionPrompt.v1.md")` reads the embedded resource bytes and SHA-256s them. Editing `v1.md` after extractions exist invalidates the cache silently — every extraction row claims to be produced by a prompt that no longer exists at that hash. Don't do it. Promote to `v2.md` instead.
 
@@ -393,21 +421,20 @@ Langfuse is the source of truth; if a single packet exceeds $0.20, file a regres
 ## Task order
 
 1. **Migration scaffold.** `dotnet ef migrations add AddDocumentStore --output-dir Infrastructure/Persistence/Migrations`. Confirm `ModelSnapshot.cs` is clean *first*. Hand-edit the migration to include the `BEFORE UPDATE` trigger raw-SQL block (EF doesn't emit triggers).
-2. **Domain entities + EF configuration.** `Document`, `DocumentExtraction`, `DocType`, `ExtractionStatus`. JSONB columns mapped via `HasColumnType("jsonb")` + `JsonDocument`.
+2. **Domain entities + EF configuration.** `Document` (incl. `classifier_model` + `classifier_prompt_hash`), `DocumentExtraction`, `DocType`, `ExtractionStatus`. JSONB columns mapped via `HasColumnType("jsonb")` + `JsonDocument`.
 3. **Local blob store.** `IBlobStore.PutAsync(stream, mime) → storageUri`. `LocalFileBlobStore` writes to `apps/api/Api/blob-store/<yyyy>/<MM>/<guid>.<ext>`. Gitignored.
-4. **Upload endpoint.** `POST /api/providers/{id}/documents` — 4xx if provider missing, 201 with `{ documentId }` on success. No classifier call yet; just blob + row.
-5. **Classifier prompt + service.** `ClassifierPrompt.v1.md`, `HaikuDocumentClassifier`. Bench against the 5 P2 packets manually: every PDF classifies correctly with confidence ≥ 0.85 or P3 doesn't ship.
-6. **Wire classifier into upload.** Upload now writes `doc_type` + `doc_type_conf` after the blob lands. Return shape grows: `{ documentId, docType, docTypeConfidence }`.
-7. **Extractor prompts.** Four `v1.md` files. Stub each handler to throw `NotImplementedException` so the project compiles before extractor code exists.
-8. **One extractor end-to-end.** Pick license — simplest layout, most variety to study. Implement `LicenseExtractor`, the structured-output JSON schema, the bbox capture, the flatten-to-wire transform.
-9. **Idempotency cache.** Pre-call lookup + post-call unique-violation catch. Confirm two back-to-back identical `POST /api/extract` calls produce one Langfuse trace, not two.
-10. **Remaining three extractors.** DEA, board cert, malpractice. Same shape as license; each one is a couple hours.
+4. **Classifier prompt + service.** `ClassifierPrompt.v1.md`, `HaikuDocumentClassifier`. Bench against the 5 P2 packets manually: every PDF classifies correctly with confidence ≥ 0.85 or P3 doesn't ship.
+5. **Extractor prompts.** Four `*ExtractionPrompt.v1.md` files. Stub `IClassifier` + `IExtractor` handlers so the project compiles before LLM code exists.
+6. **One extractor end-to-end against `/api/extract` (Path A).** Pick license — simplest layout, most variety. Implement `LicenseExtractor` (structured output + bbox capture). Wire it through the existing P2 stub endpoint; the body changes, the surface doesn't. Eval runner can now hit it directly; numbers go from all-zero to non-zero on license fields.
+7. **Remaining three extractors.** DEA, board cert, malpractice. Same shape; each one is a couple hours. Eval runner now scores non-zero across all four doc types.
+8. **Run the eval against Path A.** `python -m runners.run evals/dataset/ --check-against evals/results/baseline.json`. Confirm numbers are non-zero. If they're worse than I'd want, *don't* re-tune yet — commit the real `baseline.json` with `stub: false` first, then iterate against the gate.
+9. **Path B intake endpoint.** `POST /api/providers/{id}/documents` — blob put, `documents` row insert (with classifier_model + classifier_prompt_hash), classifier call, extractor call with idempotency. 4xx if provider missing; 201 with `{ documentId, docType, docTypeConfidence, extractionId }` on success.
+10. **Idempotency cache.** Pre-call lookup keyed on `(document_id, schema_version, model, prompt_hash)` + post-call unique-violation catch. Confirm two back-to-back identical Path B calls produce one Langfuse trace, not two.
 11. **Aggregator + score endpoint rewire.** `ProviderProfileAggregator`. Update `ScoreEndpoint`. Old-body backwards-compat warning lands here; removal in PR+2.
-12. **Run the eval against the live API.** `python -m runners.run evals/dataset/ --check-against evals/results/baseline.json`. Numbers should be non-zero. If they're worse than I'd want, *don't* re-tune yet — commit the real `baseline.json` with `stub: false` first, then iterate against the gate.
-13. **Citation drill-in.** Dashboard reads `field_locations` from the extraction row; renders the source PDF at the right page; bbox overlay on native PDFs, page-only on scanned docs.
-14. **Gate walk.** Eight DoD checkboxes.
+12. **Citation drill-in.** Dashboard reads `field_locations` from the extraction row; renders the source PDF at the right page; bbox overlay on native PDFs, page-only on scanned docs.
+13. **Gate walk.** Eight DoD checkboxes.
 
-Order matters: 2 depends on 1; 4–6 depend on 3; 8 depends on 7; 9 depends on 8; 10 depends on 9; 11 depends on 10; 12 depends on 11. Citation drill-in (13) is parallelizable with 10–11 — it reads from the DB, not from the in-flight extractor pipe.
+Order matters: 2 depends on 1; 4 depends on 3; 6 depends on 4+5; 7 depends on 6; 8 depends on 7; 9 depends on 7 (extractors must exist before intake calls them); 10 depends on 9; 11 depends on 7. The early eval-runner-first sequence (steps 6–8) is deliberate — it gets `baseline.json` flipped to `stub: false` and the gate load-bearing before the more involved Path B + aggregator work lands.
 
 ---
 
