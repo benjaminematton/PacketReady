@@ -17,7 +17,10 @@ class DeaFields:
     dea_number: str
     expiry_date: str
     status: str
-    schedules: list[str]      # e.g. ["II", "III", "IV", "V"]
+    # Tuple, not list — `frozen=True` blocks reassignment but doesn't stop
+    # `fields.schedules.append(...)` on a list, which silently mutates a
+    # supposedly-immutable spec. Tuple makes the immutability real.
+    schedules: tuple[str, ...]      # e.g. ("II", "III", "IV", "V")
 
 
 def render(fields: DeaFields, out: Path) -> None:

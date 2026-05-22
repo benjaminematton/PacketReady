@@ -7,8 +7,8 @@ not chrome — extractor robustness to chrome variation is a P4 problem.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import LETTER
@@ -65,7 +65,9 @@ def draw_header(c: Canvas, h: HeaderSpec) -> float:
     c.drawString(badge_x + 0.2 * inch, badge_y + 0.075 * inch, h.badge)
 
     c.setFillColor(colors.black)
-    return band_top - band_height - 0.3 * inch
+    # Cast because `inch` from unstubbed reportlab makes the arithmetic
+    # produce Any; mypy-strict wants the return type narrowed.
+    return float(band_top - band_height - 0.3 * inch)
 
 
 def draw_field_grid(

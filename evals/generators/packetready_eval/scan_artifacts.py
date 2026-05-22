@@ -15,7 +15,7 @@ from __future__ import annotations
 import io
 from pathlib import Path
 
-import fitz                          # PyMuPDF
+import fitz  # PyMuPDF
 from PIL import Image
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.utils import ImageReader
@@ -37,11 +37,13 @@ def rasterize_and_degrade(
     clipped; the result is centered on the LETTER page so the visible
     document still fits the printable area.
     """
-    src = fitz.open(str(src_pdf))
     page_w_pt, page_h_pt = LETTER
 
-    out = Canvas(str(dst_pdf), pagesize=LETTER)
-    try:
+    # `fitz.open` and the Canvas constructor are both opened inside the `with`
+    # so a failure in either (permission denied, malformed source) closes the
+    # other deterministically. PyMuPDF supports the context-manager protocol.
+    with fitz.open(str(src_pdf)) as src:
+        out = Canvas(str(dst_pdf), pagesize=LETTER)
         for page in src:
             zoom = dpi / 72.0
             matrix = fitz.Matrix(zoom, zoom)
@@ -52,7 +54,7 @@ def rasterize_and_degrade(
             # doesn't turn the page corners black.
             img = img.rotate(
                 skew_degrees,
-                resample=Image.BICUBIC,
+                resample=Image.Resampling.BICUBIC,
                 expand=True,
                 fillcolor=(255, 255, 255),
             )
@@ -73,7 +75,5 @@ def rasterize_and_degrade(
 
             out.drawImage(ImageReader(buf), x, y, width=draw_w, height=draw_h)
             out.showPage()
-    finally:
-        src.close()
 
-    out.save()
+        out.save()

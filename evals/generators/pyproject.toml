@@ -16,7 +16,11 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0.0",
+    # Upper bound: pytest 9 is a major and may carry breaking changes. Bump
+    # deliberately when it ships, don't let CI silently float onto it.
+    "pytest>=8.0.0,<9",
+    "ruff>=0.6,<1",
+    "mypy>=1.10,<3",
 ]
 
 [project.scripts]
@@ -25,3 +29,35 @@ packetready-eval-packets = "packetready_eval.packets:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["packetready_eval*"]
+
+[tool.setuptools.package-data]
+# Ship the py.typed marker so mypy follows into this package's annotations
+# in downstream consumers (e.g. the runners package).
+"packetready_eval" = ["py.typed"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# E/W = pycodestyle, F = pyflakes, I = isort, B = bugbear, UP = pyupgrade,
+# SIM = simplify. Keep the set narrow until a noisy rule lands; expand only
+# when we actually want a new check enforced.
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+ignore = ["E501"]  # line-length is wrist-slap; ruff format owns wrapping.
+
+[tool.ruff.lint.isort]
+# Keep aliased imports on one line ("X, render as render_x"); the default
+# splits them, which doubles the import block height for no benefit.
+combine-as-imports = true
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+# ReportLab + PyMuPDF have no shipped stubs; surface a single ignore instead
+# of `# type: ignore` sprinkles in modules that touch them.
+[[tool.mypy.overrides]]
+module = ["fitz", "reportlab.*", "PIL", "PIL.*"]
+ignore_missing_imports = true

@@ -12,7 +12,6 @@ field happens in exactly one place; drift is impossible by construction.
 
 from __future__ import annotations
 
-
 # Doc-type strings as they appear in golden.json `documents[].type` and as
 # the `docType` form field in the extractor request.
 LICENSE = "license"

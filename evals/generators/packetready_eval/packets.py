@@ -58,7 +58,7 @@ _ANDERSON_DEA = DeaFields(
     dea_number="BA1234567",
     expiry_date="2027-08-31",
     status="Active",
-    schedules=["II", "III", "IV", "V"],
+    schedules=("II", "III", "IV", "V"),
 )
 _ANDERSON_BOARD = BoardCertFields(
     full_name="Henry Anderson, MD",
@@ -108,7 +108,7 @@ PACKET_SPECS: list[PacketSpec] = [
             dea_number="FB7654321",
             expiry_date="2028-02-28",
             status="Active",
-            schedules=["II", "III", "IV", "V"],
+            schedules=("II", "III", "IV", "V"),
         ),
         board_cert_fields=BoardCertFields(
             full_name="Marisol Bautista, MD",
@@ -147,7 +147,7 @@ PACKET_SPECS: list[PacketSpec] = [
             dea_number="MC4422100",
             expiry_date="2027-12-31",
             status="Active",
-            schedules=["II", "III", "IV", "V"],
+            schedules=("II", "III", "IV", "V"),
         ),
         board_cert_fields=BoardCertFields(
             full_name="Jane Calloway, MD",
@@ -195,7 +195,7 @@ PACKET_SPECS: list[PacketSpec] = [
             dea_number="AD5803100",
             expiry_date="2027-05-31",
             status="Active",
-            schedules=["II", "III", "IV", "V"],
+            schedules=("II", "III", "IV", "V"),
         ),
         board_cert_fields=BoardCertFields(
             full_name="Amadou Diallo, MD",
@@ -337,9 +337,17 @@ def _write_packet(packet_dir: Path, spec: PacketSpec) -> None:
 
 
 def generate_all(output_root: Path) -> None:
-    """Idempotent: wipes each packet directory before regenerating."""
+    """Idempotent: wipes each packet directory before regenerating.
+
+    Per-packet progress is printed because scanned packets take multiple
+    seconds (200 dpi rasterization × 4 docs) and silent output reads as a
+    hang in CI logs.
+    """
     output_root.mkdir(parents=True, exist_ok=True)
-    for spec in PACKET_SPECS:
+    total = len(PACKET_SPECS)
+    for idx, spec in enumerate(PACKET_SPECS, start=1):
+        suffix = " (scanned)" if spec.scanned else ""
+        print(f"  [{idx}/{total}] {spec.id}{suffix}", flush=True)
         packet_dir = output_root / spec.id
         if packet_dir.exists():
             shutil.rmtree(packet_dir)

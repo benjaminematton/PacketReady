@@ -10,7 +10,6 @@ from reportlab.pdfgen.canvas import Canvas
 
 from ._layout import HeaderSpec, draw_field_grid, draw_footer, draw_header
 
-
 _STATE_NAMES = {
     "NY": "New York",
     "CA": "California",

@@ -10,7 +10,6 @@ from reportlab.pdfgen.canvas import Canvas
 
 from ._layout import HeaderSpec, draw_field_grid, draw_footer, draw_header
 
-
 _BOARD_NAMES = {
     "ABIM": "American Board of Internal Medicine",
     "ABFM": "American Board of Family Medicine",
@@ -31,7 +30,16 @@ class BoardCertFields:
 
 
 def render(fields: BoardCertFields, out: Path) -> None:
-    board_full = _BOARD_NAMES.get(fields.board, fields.board)
+    # Fail at generation time rather than silently emit `issuing_body=ABEM`
+    # (the abbreviation) as if it were the full body name. Adding a new
+    # board means extending _BOARD_NAMES — that's the whole point of the
+    # map.
+    if fields.board not in _BOARD_NAMES:
+        raise ValueError(
+            f"unknown board code {fields.board!r}; "
+            f"add it to _BOARD_NAMES in {__file__}"
+        )
+    board_full = _BOARD_NAMES[fields.board]
     header = HeaderSpec(
         issuing_body=board_full,
         title="Diplomate Certification",
@@ -40,6 +48,10 @@ def render(fields: BoardCertFields, out: Path) -> None:
 
     c = Canvas(str(out), pagesize=LETTER)
     body_top = draw_header(c, header)
+    # The PDF labels this "Recertification Due", but the scored golden key is
+    # `expiryDate`. This is deliberate: it forces P3's extractor to do semantic
+    # label mapping (the underlying credentialing concept is the same, the
+    # printed wording varies across issuing bodies). Don't "fix" the label.
     draw_field_grid(c, body_top, [
         ("Diplomate", fields.full_name),
         ("Board", fields.board),
