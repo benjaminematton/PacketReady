@@ -121,6 +121,8 @@ Each phase 1–2 weeks solo at full focus. Estimates are intentionally vague —
 
 **Gate:** `npm run eval` (or equivalent) runs against the 5 packets, prints an accuracy table, writes a results JSON. With no extractors yet, the table will be all zeros — that's fine; the harness is what's being validated.
 
+**Status: closed 2026-05-22.** Five packets at `evals/dataset/`, four PDFs + `golden.json` each. Runner is Python (`python -m runners.run evals/dataset/`) against a P2 stub at `POST /api/extract`. `evals/results/baseline.json` committed as `stub: true` + all-zeros; the regression gate is schema-only until P3 flips `stub: false`. See [impl/phase-2-eval-harness.md](./impl/phase-2-eval-harness.md).
+
 **Risks:**
 - PDF realism. If the synthetic PDFs are too clean, accuracy claims won't transfer to real customer documents. Plant artifacts deliberately: misaligned fields, OCR noise on the scanned bucket, line wrapping on addresses.
 - Golden-label correctness. Errors in golden.json silently corrupt all downstream metrics. Cross-check at least one packet manually after generation.

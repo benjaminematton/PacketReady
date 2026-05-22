@@ -10,8 +10,10 @@ namespace PacketReady.Api.Endpoints;
 /// </summary>
 internal static class ProblemResults
 {
-    private const string ProviderNotFoundType = "urn:packetready:error:provider_not_found";
-    private const string EmptyProviderIdType  = "urn:packetready:error:empty_provider_id";
+    private const string ProviderNotFoundType       = "urn:packetready:error:provider_not_found";
+    private const string EmptyProviderIdType        = "urn:packetready:error:empty_provider_id";
+    private const string ExtractMissingFileType     = "urn:packetready:error:extract_missing_file";
+    private const string ExtractInvalidDocTypeType  = "urn:packetready:error:extract_invalid_doc_type";
 
     public static IResult ProviderNotFound(Guid providerId) =>
         Results.Problem(
@@ -25,5 +27,17 @@ internal static class ProblemResults
         Results.Problem(
             type: EmptyProviderIdType,
             title: "providerId must be a non-empty Guid.",
+            statusCode: StatusCodes.Status400BadRequest);
+
+    public static IResult ExtractMissingFile() =>
+        Results.Problem(
+            type: ExtractMissingFileType,
+            title: "file is required (multipart form field).",
+            statusCode: StatusCodes.Status400BadRequest);
+
+    public static IResult ExtractInvalidDocType(IEnumerable<string> allowed) =>
+        Results.Problem(
+            type: ExtractInvalidDocTypeType,
+            title: $"docType must be one of: {string.Join(", ", allowed)}.",
             statusCode: StatusCodes.Status400BadRequest);
 }

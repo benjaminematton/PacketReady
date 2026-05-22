@@ -1,0 +1,70 @@
+{
+  "packetId": "packet-004-conflict-expiry",
+  "label": "Dr. Amadou Diallo",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Amadou Diallo, MD",
+        "licenseNumber": "036-IL-58031",
+        "state": "IL",
+        "issueDate": "2015-03-20",
+        "expiryDate": "2026-09-30",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Amadou Diallo",
+        "deaNumber": "AD5803100",
+        "expiryDate": "2027-05-31",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Amadou Diallo, MD",
+        "board": "ABFM",
+        "specialty": "Family Medicine",
+        "issueDate": "2016-08-01",
+        "expiryDate": "2026-08-01",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Amadou Diallo, MD",
+        "carrier": "Midwest Health Indemnity",
+        "policyNumber": "MHI-IL-580310",
+        "expiryDate": "2027-03-31",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [
+    {
+      "kind": "expiry_mismatch",
+      "field": "license.expiryDate",
+      "sources": [
+        "license",
+        "malpractice"
+      ],
+      "description": "license.pdf shows expiry 2026-09-30; malpractice.pdf's Licensee footer records expiry 2027-09-30 for the same license number 036-IL-58031",
+      "expectedSeverity": "Critical"
+    }
+  ],
+  "notes": "Per-doc extraction reads each PDF accurately. P4 cross-doc validator catches the disagreement."
+}

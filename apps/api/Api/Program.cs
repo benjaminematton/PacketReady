@@ -80,6 +80,7 @@ app.UseCors();
 app.MapPingEndpoint();
 app.MapProviderEndpoints();
 app.MapScoreEndpoints();
+app.MapExtractEndpoint();
 app.Run();
 
 public partial class Program;

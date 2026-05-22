@@ -1,0 +1,59 @@
+{
+  "packetId": "packet-005-scanned-anderson",
+  "label": "Dr. Henry Anderson",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Henry Anderson, MD",
+        "licenseNumber": "MD-NY-99001",
+        "state": "NY",
+        "issueDate": "2020-04-15",
+        "expiryDate": "2027-04-14",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Henry Anderson",
+        "deaNumber": "BA1234567",
+        "expiryDate": "2027-08-31",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Henry Anderson, MD",
+        "board": "ABIM",
+        "specialty": "Internal Medicine",
+        "issueDate": "2018-06-01",
+        "expiryDate": "2028-06-01",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Henry Anderson, MD",
+        "carrier": "MedProtect Mutual",
+        "policyNumber": "MPM-NY-00099001",
+        "expiryDate": "2026-12-31",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [],
+  "notes": "Rasterized clone of 001 at 200dpi + 0.7° skew + JPEG q=70. Same expected fields; isolates extractor robustness to fax-pipeline artifacts."
+}

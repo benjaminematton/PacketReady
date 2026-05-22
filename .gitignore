@@ -26,3 +26,14 @@ coverage/
 
 # Docker volumes (in case anyone bind-mounts)
 .data/
+
+# Python (eval harness)
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+
+# Eval runner output — `baseline.json` is the gate's reference and IS committed;
+# `latest.json` is regenerated on every run and should not be.
+evals/results/latest.json

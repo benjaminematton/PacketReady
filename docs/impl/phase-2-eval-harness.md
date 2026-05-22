@@ -6,7 +6,7 @@
 |---|---|
 | **Parent** | [build-plan.md](../build-plan.md) — Phase 2 row |
 | **Goal** | The harness exists. Every Phase 3+ extractor change runs through it and is measured. |
-| **Status** | Not started |
+| **Status** | Closed 2026-05-22 — harness end-to-end, all 6 DoD gates green, baseline `stub: true` committed |
 | **Data** | synthetic PDFs + golden JSON labels · no PHI · operator-only |
 | **Depends on** | [Phase 1](./phase-1-score-from-clean-input.md) — closed 2026-05-21 |
 | **Style** | [../style.md](../style.md) |
@@ -15,12 +15,12 @@
 
 ## Definition of done
 
-- [ ] `evals/dataset/` holds 5 hand-curated synthetic packets, each in its own directory.
-- [ ] Each packet has 4–5 PDFs (license / DEA / board cert / malpractice / [CV]) and a `golden.json` with every field's expected value.
-- [ ] Packet mix: **2 clean + valid**, **2 clean + planted conflicts** (one name-variant, one expiry-mismatch), **1 scanned-style clean** (rasterized + skew + JPEG noise).
-- [ ] `evals/runners/run.py` runs end-to-end. With no extractor wired (P3 problem), it produces an all-zeros accuracy table and writes `evals/results/<ISO-timestamp>.json` — the harness is what's being validated, not the accuracy.
-- [ ] At least one planted-conflict packet has been hand-verified — the file claims one thing and the planted-conflict marker in `golden.json` is recoverable from the PDFs by a human reader.
-- [ ] Regression gate: `python evals/runners/run.py --check-against evals/results/baseline.json` exits non-zero if any per-field metric drops > 2 pp from the baseline.
+- [x] `evals/dataset/` holds 5 hand-curated synthetic packets, each in its own directory.
+- [x] Each packet has 4 PDFs (license / DEA / board cert / malpractice) and a `golden.json` with every field's expected value. (CV deferred to P4 with NPPES-distribution dataset; 4-doc set is the locked P2 contract.)
+- [x] Packet mix: **2 clean + valid**, **2 clean + planted conflicts** (`name_variant` on 003, `expiry_mismatch` on 004), **1 scanned-style clean** (005 = rasterized 001 at 200 dpi + 0.7° skew + JPEG q=70).
+- [x] `python -m runners.run evals/dataset/` runs end-to-end against the P2 stub endpoint, produces an all-zeros accuracy table, and writes `evals/results/latest.json`. (Single-file overwrite instead of `<ISO-timestamp>.json` — explicit + diff-friendly; `ranAt` lives inside the payload.)
+- [x] Conflict packets hand-verified — license.pdf in 003 reads `Jane Calloway, MD`; malpractice.pdf in 003 reads `Jane C. Calloway-Smith, MD`; license.pdf in 004 reads expiry `2026-09-30` while malpractice.pdf Licensee footer reads `2027-09-30`. `plantedConflicts` markers name both sources.
+- [x] Regression gate: `python -m runners.run evals/dataset/ --check-against evals/results/baseline.json` exits non-zero if any per-field metric drops > 2 pp. Honors `stub: true` on either side (schema-only check). Boundary case (exactly 2 pp drop) PASSes after snapping `drop_pp` to a 0.0001-grid.
 
 All six boxes check → Phase 2 closes. Move to [Phase 3 — Extractors + classifier](./phase-3-extractors.md).
 
@@ -319,7 +319,7 @@ import httpx
 
 @dataclass
 class ExtractorClient:
-    base_url: str = "http://localhost:5099"
+    base_url: str = "http://localhost:5066"
 
     def extract(self, pdf_path: Path, doc_type: str) -> dict:
         """
@@ -430,7 +430,7 @@ CLI surface, locked:
 python -m evals.runners.run \
   --dataset evals/dataset/ \
   --output  evals/results/ \
-  --api-url http://localhost:5099   (default)
+  --api-url http://localhost:5066   (default — matches apps/api/Api launch profile)
   --check-against evals/results/baseline.json   (optional; enables the regression gate)
 ```
 
