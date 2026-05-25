@@ -1,3 +1,4 @@
+using PacketReady.Application.Providers.Aggregation;
 using PacketReady.Domain.Providers;
 using PacketReady.Domain.Scoring;
 
@@ -33,7 +34,14 @@ public sealed class SanctionsCheckValidator(TimeProvider clock) : IValidator
     private const int MajorStalenessDays = 365;
     private const int MinorStalenessDays = 90;
 
-    public Task<IReadOnlyList<Issue>> RunAsync(ProviderProfile profile, CancellationToken ct)
+    // Sanctions aren't extracted from any P3 doc type — provenance is always
+    // empty for this validator. Citations keep null DocumentId/Page/Bbox by
+    // design; the dashboard renders sanctions citations as "PSV lookup" rather
+    // than a PDF link.
+    public Task<IReadOnlyList<Issue>> RunAsync(
+        ProviderProfile profile,
+        IReadOnlyDictionary<string, FieldProvenance> provenance,
+        CancellationToken ct)
     {
         var issues = new List<Issue>();
         var nowUtc = clock.GetUtcNow();

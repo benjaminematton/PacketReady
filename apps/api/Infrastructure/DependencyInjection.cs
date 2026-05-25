@@ -10,6 +10,7 @@ using PacketReady.Application.Extraction.Classify;
 using PacketReady.Application.Extraction.Extract;
 using PacketReady.Application.Extraction.Persist;
 using PacketReady.Application.Prompts;
+using PacketReady.Application.Providers.Aggregation;
 using PacketReady.Domain.Documents;
 using PacketReady.Infrastructure.Audit;
 using PacketReady.Infrastructure.Blob;
@@ -17,6 +18,7 @@ using PacketReady.Infrastructure.Extraction;
 using PacketReady.Infrastructure.Extraction.Classifier;
 using PacketReady.Infrastructure.Extraction.SonnetExtractors;
 using PacketReady.Infrastructure.Persistence;
+using PacketReady.Infrastructure.Providers;
 
 namespace PacketReady.Infrastructure;
 
@@ -92,6 +94,9 @@ public static class DependencyInjection
 
         // ExtractionPersister depends on the scoped DbContext, so itself scoped.
         services.AddScoped<IExtractionPersister, ExtractionPersister>();
+
+        // ProviderProfileAggregator depends on the scoped DbContext as well.
+        services.AddScoped<IProviderProfileAggregator, ProviderProfileAggregator>();
 
         return services;
     }

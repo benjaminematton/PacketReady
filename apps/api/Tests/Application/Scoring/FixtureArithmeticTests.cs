@@ -48,7 +48,8 @@ public sealed class FixtureArithmeticTests
             new SanctionsCheckValidator(clock),
         };
 
-        var perValidator = await Task.WhenAll(validators.Select(v => v.RunAsync(fixture.Profile, default)));
+        var perValidator = await Task.WhenAll(
+            validators.Select(v => Validators.ValidatorTestExtensions.RunAsync(v, fixture.Profile, default)));
         var issues = perValidator.SelectMany(x => x).ToList();
 
         var score = ScoreSynthesizer.Compute(issues);

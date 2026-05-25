@@ -85,9 +85,13 @@ internal sealed class ExtractionPersister : IExtractionPersister
                 e.PromptHash == promptHash, ct);
         if (cached is not null)
         {
+            // Log the full idempotency tuple so a "why was this a cache hit?"
+            // investigation can be answered from logs alone. PromptHash is the
+            // sha256 hex (64 chars); first 12 is enough to disambiguate without
+            // bloating log lines.
             _logger.LogInformation(
-                "Extraction cache hit: documentId={DocumentId}, schema={Schema}, extractionId={ExtractionId}",
-                document.Id, schemaVersion, cached.ExtractionId);
+                "Extraction cache hit: documentId={DocumentId}, schema={Schema}, model={Model}, promptHash={PromptHashPrefix}, extractionId={ExtractionId}",
+                document.Id, schemaVersion, model, PromptHashPrefix(promptHash), cached.ExtractionId);
             return new ExtractionPersistResult(cached.ExtractionId, WasCacheHit: true, cached.Status);
         }
 
@@ -129,8 +133,8 @@ internal sealed class ExtractionPersister : IExtractionPersister
             // (one wasted LLM call) is the trade for not holding a transaction
             // open across the LLM round-trip.
             _logger.LogInformation(
-                "Idempotency race lost: documentId={DocumentId}, schema={Schema} — re-reading winner",
-                document.Id, schemaVersion);
+                "Idempotency race lost: documentId={DocumentId}, schema={Schema}, model={Model}, promptHash={PromptHashPrefix} — re-reading winner",
+                document.Id, schemaVersion, model, PromptHashPrefix(promptHash));
             var winner = await _db.DocumentExtractions
                 .AsNoTracking()
                 .FirstAsync(e =>
@@ -204,11 +208,14 @@ internal sealed class ExtractionPersister : IExtractionPersister
         await tx.CommitAsync(ct);
 
         _logger.LogInformation(
-            "Persisted extraction: documentId={DocumentId}, schema={Schema}, extractionId={ExtractionId}, status={Status}",
-            document.Id, extractor.SchemaVersion, nextExtractionId, row.Status);
+            "Persisted extraction: documentId={DocumentId}, schema={Schema}, model={Model}, promptHash={PromptHashPrefix}, extractionId={ExtractionId}, status={Status}",
+            document.Id, extractor.SchemaVersion, model, PromptHashPrefix(promptHash), nextExtractionId, row.Status);
 
         return new ExtractionPersistResult(nextExtractionId, WasCacheHit: false, row.Status);
     }
+
+    private static string PromptHashPrefix(string promptHash) =>
+        promptHash.Length <= 12 ? promptHash : promptHash[..12];
 
     // Pinned to the idempotency UNIQUE by constraint name — a future UNIQUE
     // added to this table (e.g. a derived dedup column) will NOT be treated

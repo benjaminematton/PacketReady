@@ -14,4 +14,13 @@ public sealed record Issue(
     Severity Severity,
     string Message,
     string Remediation,
-    IReadOnlyList<Citation> Citations);
+    IReadOnlyList<Citation> Citations)
+{
+    /// <summary>
+    /// Set true when P4's confidence-threshold gate downgrades a Critical to a
+    /// Minor because at least one cited field had extractor confidence &lt; 0.85.
+    /// P3 never flips it; the field lands now so the issues-JSONB shape doesn't
+    /// churn when P4 ships.
+    /// </summary>
+    public bool IsLowConfidenceInput { get; init; } = false;
+}

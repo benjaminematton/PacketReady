@@ -1,3 +1,4 @@
+using PacketReady.Application.Providers.Aggregation;
 using PacketReady.Domain.Providers;
 using PacketReady.Domain.Scoring;
 
@@ -18,7 +19,10 @@ public sealed class DeaStatusValidator(TimeProvider clock) : IValidator
 {
     public string Name => "dea_status";
 
-    public Task<IReadOnlyList<Issue>> RunAsync(ProviderProfile profile, CancellationToken ct)
+    public Task<IReadOnlyList<Issue>> RunAsync(
+        ProviderProfile profile,
+        IReadOnlyDictionary<string, FieldProvenance> provenance,
+        CancellationToken ct)
     {
         var issues = new List<Issue>();
         var today = clock.Today();
@@ -35,8 +39,10 @@ public sealed class DeaStatusValidator(TimeProvider clock) : IValidator
         }
 
         var dea = profile.Dea;
-        IReadOnlyList<Citation> cite =
-            [new Citation(Name, $"{dea.Number} status={dea.Status} expires={dea.ExpiryDate:yyyy-MM-dd}")];
+        IReadOnlyList<Citation> cite = [provenance.Cite(
+            Name,
+            $"{dea.Number} status={dea.Status} expires={dea.ExpiryDate:yyyy-MM-dd}",
+            "dea.expiryDate")];
 
         if (dea.Status != DeaStatus.Active)
             issues.Add(new Issue(Name, Severity.Critical,

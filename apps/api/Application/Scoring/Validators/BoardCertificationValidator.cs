@@ -1,3 +1,4 @@
+using PacketReady.Application.Providers.Aggregation;
 using PacketReady.Domain.Providers;
 using PacketReady.Domain.Scoring;
 
@@ -19,7 +20,10 @@ public sealed class BoardCertificationValidator(TimeProvider clock) : IValidator
 {
     public string Name => "board_certification";
 
-    public Task<IReadOnlyList<Issue>> RunAsync(ProviderProfile profile, CancellationToken ct)
+    public Task<IReadOnlyList<Issue>> RunAsync(
+        ProviderProfile profile,
+        IReadOnlyDictionary<string, FieldProvenance> provenance,
+        CancellationToken ct)
     {
         var issues = new List<Issue>();
         var today = clock.Today();
@@ -36,8 +40,10 @@ public sealed class BoardCertificationValidator(TimeProvider clock) : IValidator
         }
 
         var bc = profile.BoardCert;
-        IReadOnlyList<Citation> cite =
-            [new Citation(Name, $"{bc.Board} {bc.Specialty} status={bc.Status} expires={bc.ExpiryDate:yyyy-MM-dd}")];
+        IReadOnlyList<Citation> cite = [provenance.Cite(
+            Name,
+            $"{bc.Board} {bc.Specialty} status={bc.Status} expires={bc.ExpiryDate:yyyy-MM-dd}",
+            "boardCert.expiryDate")];
 
         if (bc.Status != BoardCertStatus.Active)
             issues.Add(new Issue(Name, Severity.Critical,

@@ -15,7 +15,17 @@ public sealed record Citation(
     string ExtractedValue,
     Guid? DocumentId = null,
     int? Page = null,
-    BoundingBox? Bbox = null);
+    BoundingBox? Bbox = null)
+{
+    /// <summary>
+    /// Mirror of <see cref="Issue.IsLowConfidenceInput"/> at the citation
+    /// level — set when the underlying extracted field had &lt; 0.85
+    /// confidence. P3 never flips it; the dashboard can already render
+    /// "low-confidence source" badges from the column without further
+    /// schema changes once P4 starts populating it.
+    /// </summary>
+    public bool LowConfidence { get; init; } = false;
+}
 
 /// <summary>
 /// Axis-aligned bounding box in normalized PDF page coordinates (top-left origin,

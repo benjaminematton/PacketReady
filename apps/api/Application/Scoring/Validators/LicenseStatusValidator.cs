@@ -1,3 +1,4 @@
+using PacketReady.Application.Providers.Aggregation;
 using PacketReady.Domain.Providers;
 using PacketReady.Domain.Scoring;
 
@@ -22,13 +23,19 @@ public sealed class LicenseStatusValidator(TimeProvider clock) : IValidator
 {
     public string Name => "license_status";
 
-    public Task<IReadOnlyList<Issue>> RunAsync(ProviderProfile profile, CancellationToken ct)
+    public Task<IReadOnlyList<Issue>> RunAsync(
+        ProviderProfile profile,
+        IReadOnlyDictionary<string, FieldProvenance> provenance,
+        CancellationToken ct)
     {
         var issues = new List<Issue>();
         var today = clock.Today();
 
         if (profile.License is null)
         {
+            // Missing-document case is owned by the aggregator's
+            // DocumentStore-Critical Issue; emit ours too so removing the
+            // aggregator doesn't silently drop coverage during a refactor.
             issues.Add(new Issue(
                 Validator: Name,
                 Severity: Severity.Critical,
@@ -39,8 +46,13 @@ public sealed class LicenseStatusValidator(TimeProvider clock) : IValidator
         }
 
         var lic = profile.License;
-        IReadOnlyList<Citation> cite =
-            [new Citation(Name, $"{lic.State} {lic.Number} status={lic.Status} expires={lic.ExpiryDate:yyyy-MM-dd}")];
+        // One citation per emission, anchored on the expiry-date field — that's
+        // the most frequent trigger across the validator's branches; the
+        // dashboard's PDF drill-in highlights the right box for the common case.
+        IReadOnlyList<Citation> cite = [provenance.Cite(
+            Name,
+            $"{lic.State} {lic.Number} status={lic.Status} expires={lic.ExpiryDate:yyyy-MM-dd}",
+            "license.expiryDate")];
 
         if (lic.Status != LicenseStatus.Active)
             issues.Add(new Issue(Name, Severity.Critical,

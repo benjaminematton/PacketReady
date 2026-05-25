@@ -154,4 +154,36 @@ public sealed class LicenseStatusValidatorTests
         Assert.All(issues, i => Assert.Equal("license_status", i.Validator));
         Assert.All(issues, i => Assert.All(i.Citations, c => Assert.Equal("license_status", c.SourceValidator)));
     }
+
+    [Fact]
+    public async Task CitationCarriesProvenance_WhenProvenanceMapHasLicenseExpiry()
+    {
+        // Slice-8 contract: when the aggregator threads provenance for
+        // "license.expiryDate", the validator's emitted Citation carries
+        // DocumentId/Page/Bbox so the dashboard can drill into the PDF.
+        var (v, _) = Build();
+        var profile = MakeProfile() with
+        {
+            License = new LicenseInfo(
+                Number: "MD-NY-00001",
+                State: "NY",
+                IssueDate: DateOnly.Parse("2020-01-01"),
+                ExpiryDate: DateOnly.Parse("2024-01-01"),   // expired → Critical
+                Status: LicenseStatus.Active),
+        };
+
+        var docId = Guid.NewGuid();
+        var bbox = new BoundingBox(120, 400, 260, 422);
+        var provenance = new Dictionary<string, PacketReady.Application.Providers.Aggregation.FieldProvenance>
+        {
+            ["license.expiryDate"] = new(docId, Page: 1, Bbox: bbox, Confidence: 0.95),
+        };
+
+        var issues = await v.RunAsync(profile, provenance, default);
+
+        var citation = issues.Single().Citations.Single();
+        Assert.Equal(docId, citation.DocumentId);
+        Assert.Equal(1, citation.Page);
+        Assert.Equal(bbox, citation.Bbox);
+    }
 }

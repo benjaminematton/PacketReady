@@ -56,6 +56,9 @@ public sealed class ReextractDocumentCommandHandler
         if (request.DocumentId == Guid.Empty)
             throw new ArgumentException("Document id is required.", nameof(request));
 
+        // AsNoTracking: Document is read as FK + doc_type only; never mutated
+        // through this path. The persister writes a new DocumentExtraction row,
+        // not back to the Document.
         var document = await _db.Documents
             .AsNoTracking()
             .FirstOrDefaultAsync(d => d.Id == request.DocumentId, ct);

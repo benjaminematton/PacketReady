@@ -158,7 +158,9 @@ public class UploadDocumentCommandHandlerTests
     [InlineData(0.50)]   // exact band floor — predicted preserved
     [InlineData(0.65)]   // mid-band
     [InlineData(0.84)]   // just under the trust ceiling
-    public async Task Handle_MidConfidenceClassifier_PreservesPredictedDocType(double confidence)
+    [InlineData(0.85)]   // exact trust-band floor — pinned so a `<` → `<=` flip is caught
+    [InlineData(1.00)]   // trust ceiling
+    public async Task Handle_MidOrHighConfidenceClassifier_PreservesPredictedDocType(double confidence)
     {
         // 0.50 ≤ x < 0.85: predicted doc_type is persisted as-is. Aggregator
         // emits the Minor Issue in slice 8; the handler doesn't decide that.

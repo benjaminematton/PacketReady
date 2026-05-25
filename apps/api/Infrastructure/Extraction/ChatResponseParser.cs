@@ -23,6 +23,9 @@ internal static class ChatResponseParser
     /// </summary>
     public static string ExtractStructuredJson(ChatResponse response)
     {
+        // First non-empty FunctionCallContent wins. The schema enforces a single
+        // forced tool call; if a future adapter version surfaces multiple, the
+        // additional calls are model misbehavior, not signal we want to merge.
         foreach (var msg in response.Messages)
         {
             foreach (var content in msg.Contents)

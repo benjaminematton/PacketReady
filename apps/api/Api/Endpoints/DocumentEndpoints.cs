@@ -93,6 +93,10 @@ public static class DocumentEndpoints
             })
             .WithName("UploadDocument")
             .WithTags("Documents")
+            // Antiforgery is off because this is a programmatic multipart upload
+            // — no browser-form/cookie auth path, so there's no CSRF surface to
+            // protect. Auth happens at the gateway (P5); revisit if a browser
+            // upload flow is ever added.
             .DisableAntiforgery()
             .WithMetadata(new RequestSizeLimitAttribute(ExtractEndpoint.MaxUploadBytes))
             .Accepts<IFormFile>("multipart/form-data")
