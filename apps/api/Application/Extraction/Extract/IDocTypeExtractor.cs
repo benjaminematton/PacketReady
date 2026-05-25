@@ -31,6 +31,14 @@ public interface IDocTypeExtractor
     string PromptResourceName { get; }
 
     /// <summary>
+    /// LLM model id landing on <c>document_extractions.model</c>. Part of the
+    /// idempotency key alongside <c>prompt_hash</c> — the upload/reextract
+    /// handlers need it BEFORE the extractor runs, to short-circuit duplicate
+    /// extractions against the cache.
+    /// </summary>
+    string Model { get; }
+
+    /// <summary>
     /// Extracts fields from <paramref name="pdf"/>. Bytes-in (not Stream-in)
     /// because the Anthropic SDK takes bytes anyway, both call sites have a
     /// fully-materialized buffer in hand (Path A reads the upload to a byte[]

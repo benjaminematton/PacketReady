@@ -58,6 +58,11 @@ internal abstract class SonnetExtractorBase : IDocTypeExtractor
     public abstract string SchemaVersion { get; }
     public abstract string PromptResourceName { get; }
 
+    // Shared across all four P3 Sonnet extractors. If a future extractor wants
+    // to override (e.g. Sonnet 4.7 for a single doc type during a rollout),
+    // make this virtual — for now `sealed` matches the spec lock.
+    public string Model => ModelId;
+
     /// <summary>
     /// Human-friendly schema name passed to the Anthropic adapter. Used as a
     /// tool-name hint when MS.Extensions.AI synthesizes a forced tool call to
@@ -115,7 +120,7 @@ internal abstract class SonnetExtractorBase : IDocTypeExtractor
 
         var response = await _chat.GetResponseAsync(messages, options, ct);
 
-        var rawJson = ExtractStructuredJson(response);
+        var rawJson = ChatResponseParser.ExtractStructuredJson(response);
         if (string.IsNullOrWhiteSpace(rawJson))
             throw new ExtractorResponseException(
                 $"Extractor {DocType} returned no usable JSON in response (neither FunctionCallContent nor Text).");
@@ -137,29 +142,6 @@ internal abstract class SonnetExtractorBase : IDocTypeExtractor
             PromptHash: promptHash,
             InputTokens: inputTokens,
             OutputTokens: outputTokens);
-    }
-
-    /// <summary>
-    /// Pulls the structured JSON out of a M.E.AI <see cref="ChatResponse"/>.
-    /// <c>ChatResponseFormat.ForJsonSchema</c> is implemented as a forced tool
-    /// call on the Anthropic adapter, so <see cref="FunctionCallContent"/> is
-    /// the load-bearing path. <see cref="ChatResponse.Text"/> is a fallback
-    /// for adapter versions that surfaced the JSON as plain text — and for
-    /// versions that emit both (text wrapper + tool call), the function call
-    /// wins so we never feed the wrapper into <c>JsonDocument.Parse</c>.
-    /// </summary>
-    internal static string ExtractStructuredJson(ChatResponse response)
-    {
-        foreach (var msg in response.Messages)
-        {
-            foreach (var content in msg.Contents)
-            {
-                if (content is FunctionCallContent fc && fc.Arguments is { Count: > 0 } args)
-                    return JsonSerializer.Serialize(args);
-            }
-        }
-
-        return response.Text ?? string.Empty;
     }
 
     /// <summary>
@@ -188,7 +170,7 @@ internal abstract class SonnetExtractorBase : IDocTypeExtractor
                 ? $" (output tokens {outputTokens} ≥ {NearCapOutputTokens}/{MaxOutputTokens} — likely truncated)"
                 : "";
             throw new ExtractorResponseException(
-                $"Extractor response was not valid JSON{hint}: {Truncate(rawJson)}", ex);
+                $"Extractor response was not valid JSON{hint}: {ChatResponseParser.TruncateForError(rawJson)}", ex);
         }
 
         using (doc)
@@ -360,8 +342,6 @@ internal abstract class SonnetExtractorBase : IDocTypeExtractor
         return Encoding.UTF8.GetString(buf.WrittenSpan);
     }
 
-    private static string Truncate(string s) =>
-        s.Length <= 200 ? s : s[..200] + "…";
 }
 
 /// <summary>

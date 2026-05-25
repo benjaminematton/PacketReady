@@ -15,6 +15,8 @@ internal static class ProblemResults
     private const string ExtractMissingFileType       = "urn:packetready:error:extract_missing_file";
     private const string ExtractInvalidDocTypeType    = "urn:packetready:error:extract_invalid_doc_type";
     private const string ExtractDocTypeUnimplementedType  = "urn:packetready:error:extract_doc_type_unimplemented";
+    private const string DocumentNotFoundType         = "urn:packetready:error:document_not_found";
+    private const string UploadInvalidPdfType         = "urn:packetready:error:upload_invalid_pdf";
 
     public static IResult ProviderNotFound(Guid providerId) =>
         Results.Problem(
@@ -54,4 +56,24 @@ internal static class ProblemResults
             title: $"docType '{docType}' is not yet supported by this build.",
             statusCode: StatusCodes.Status400BadRequest,
             extensions: new Dictionary<string, object?> { ["docType"] = docType });
+
+    public static IResult DocumentNotFound(Guid documentId) =>
+        Results.Problem(
+            type: DocumentNotFoundType,
+            title: "Document not found.",
+            detail: $"No document exists with id {documentId}.",
+            statusCode: StatusCodes.Status404NotFound,
+            extensions: new Dictionary<string, object?> { ["documentId"] = documentId });
+
+    /// <summary>
+    /// PdfPig couldn't parse the uploaded bytes. 400 with the parser's
+    /// message so the client knows what shape was rejected. No documents row
+    /// is written; the blob is never uploaded.
+    /// </summary>
+    public static IResult UploadInvalidPdf(string parserMessage) =>
+        Results.Problem(
+            type: UploadInvalidPdfType,
+            title: "Uploaded file could not be parsed as a PDF.",
+            detail: parserMessage,
+            statusCode: StatusCodes.Status400BadRequest);
 }

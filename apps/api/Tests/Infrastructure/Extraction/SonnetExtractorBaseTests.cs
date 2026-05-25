@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.AI;
+using PacketReady.Infrastructure.Extraction;
 using PacketReady.Infrastructure.Extraction.SonnetExtractors;
 using Xunit;
 
@@ -267,7 +268,7 @@ public class SonnetExtractorBaseTests
         });
         var response = new ChatResponse(message);
 
-        var raw = SonnetExtractorBase.ExtractStructuredJson(response);
+        var raw = ChatResponseParser.ExtractStructuredJson(response);
 
         using var doc = JsonDocument.Parse(raw);
         Assert.Equal(JsonValueKind.Object, doc.RootElement.GetProperty("fields").ValueKind);
@@ -279,7 +280,7 @@ public class SonnetExtractorBaseTests
     {
         var response = new ChatResponse(new ChatMessage(ChatRole.Assistant, """{"fields":{},"confidence":{}}"""));
 
-        var raw = SonnetExtractorBase.ExtractStructuredJson(response);
+        var raw = ChatResponseParser.ExtractStructuredJson(response);
 
         Assert.Equal("""{"fields":{},"confidence":{}}""", raw);
     }

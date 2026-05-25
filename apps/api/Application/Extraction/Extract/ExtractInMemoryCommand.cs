@@ -21,12 +21,12 @@ public sealed record ExtractInMemoryCommand(
 public sealed class ExtractInMemoryCommandHandler
     : IRequestHandler<ExtractInMemoryCommand, ExtractionResult>
 {
-    private readonly IServiceProvider _services;
+    // IKeyedServiceProvider, not IServiceProvider — the handler needs nothing
+    // beyond keyed resolution, so the tighter surface keeps the dependency
+    // honest and prevents future drift into service-locator territory.
+    private readonly IKeyedServiceProvider _services;
 
-    // IServiceProvider rather than IKeyedServiceProvider so the same handler
-    // works against the .NET 8+ keyed DI surface without an extra abstraction
-    // layer. GetRequiredKeyedService is an extension on IServiceProvider.
-    public ExtractInMemoryCommandHandler(IServiceProvider services)
+    public ExtractInMemoryCommandHandler(IKeyedServiceProvider services)
     {
         _services = services;
     }

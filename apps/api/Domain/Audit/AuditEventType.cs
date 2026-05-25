@@ -11,4 +11,7 @@ public static class AuditEventType
 
     // Phase 1
     public const string ScoreComputed = "ScoreComputed";
+
+    // Phase 3
+    public const string DocumentUploaded = "DocumentUploaded";
 }

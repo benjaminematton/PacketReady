@@ -6,12 +6,15 @@ using Microsoft.Extensions.DependencyInjection;
 using PacketReady.Application.Abstractions;
 using PacketReady.Application.Audit;
 using PacketReady.Application.Documents;
+using PacketReady.Application.Extraction.Classify;
 using PacketReady.Application.Extraction.Extract;
+using PacketReady.Application.Extraction.Persist;
 using PacketReady.Application.Prompts;
 using PacketReady.Domain.Documents;
 using PacketReady.Infrastructure.Audit;
 using PacketReady.Infrastructure.Blob;
 using PacketReady.Infrastructure.Extraction;
+using PacketReady.Infrastructure.Extraction.Classifier;
 using PacketReady.Infrastructure.Extraction.SonnetExtractors;
 using PacketReady.Infrastructure.Persistence;
 
@@ -82,6 +85,13 @@ public static class DependencyInjection
         services.AddKeyedSingleton<IDocTypeExtractor, DeaExtractor>(DocType.Dea);
         services.AddKeyedSingleton<IDocTypeExtractor, BoardCertExtractor>(DocType.BoardCert);
         services.AddKeyedSingleton<IDocTypeExtractor, MalpracticeExtractor>(DocType.Malpractice);
+
+        // Single Haiku-backed classifier — Path B's first step. Stateless after
+        // construction; singleton.
+        services.AddSingleton<IDocumentClassifier, HaikuDocumentClassifier>();
+
+        // ExtractionPersister depends on the scoped DbContext, so itself scoped.
+        services.AddScoped<IExtractionPersister, ExtractionPersister>();
 
         return services;
     }

@@ -19,3 +19,23 @@ public enum DocType
     Cv,
     Other,
 }
+
+/// <summary>
+/// Wire-format mapping for <see cref="DocType"/>. Single source of truth so the
+/// classifier prompt, audit payloads, and API responses all agree on the camelCase
+/// spelling. The PascalCase enum name is the DB representation; the camelCase
+/// string is the external contract.
+/// </summary>
+public static class DocTypeWire
+{
+    public static string ToWireString(this DocType docType) => docType switch
+    {
+        DocType.License     => "license",
+        DocType.Dea         => "dea",
+        DocType.BoardCert   => "boardCert",
+        DocType.Malpractice => "malpractice",
+        DocType.Cv          => "cv",
+        DocType.Other       => "other",
+        _ => throw new ArgumentOutOfRangeException(nameof(docType), docType, "Unmapped DocType."),
+    };
+}

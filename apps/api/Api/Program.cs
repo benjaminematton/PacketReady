@@ -98,6 +98,7 @@ app.MapPingEndpoint();
 app.MapProviderEndpoints();
 app.MapScoreEndpoints();
 app.MapExtractEndpoint();
+app.MapDocumentEndpoints();
 app.Run();
 
 public partial class Program;
