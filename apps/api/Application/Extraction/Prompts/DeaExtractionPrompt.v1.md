@@ -37,4 +37,4 @@ Return one JSON object matching this schema exactly. No prose, no markdown fence
 }
 ```
 
-Every field in the schema must be present. If a field is genuinely absent, set `value` to null (or `[]` for `schedules`) and report confidence as 0.00.
+Every field in the schema must be present. If a field is genuinely absent, set `value` to null and report confidence as 0.00. (Use `null`, not `[]`, for an absent `schedules` value — downstream consumers treat "field absent" uniformly.)

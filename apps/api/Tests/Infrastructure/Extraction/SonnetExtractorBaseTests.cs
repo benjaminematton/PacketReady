@@ -55,6 +55,32 @@ public class SonnetExtractorBaseTests
     }
 
     [Fact]
+    public void Split_PreservesArrayValues_Unchanged()
+    {
+        // DEA's `schedules` is the only array-valued field across the four P3
+        // extractors. The splitter must pass arrays into FieldsJson byte-for-byte
+        // so downstream consumers (aggregator, profile builder) see the array
+        // shape they expect — not a stringified or flattened version.
+        var raw = """
+        {
+          "fields": {
+            "schedules": { "value": ["II", "IV"], "page": 1, "bbox": [120, 400, 200, 22] }
+          },
+          "confidence": { "schedules": 0.96 }
+        }
+        """;
+
+        var (fields, _, _) = SonnetExtractorBase.SplitLlmResponse(raw);
+
+        using var doc = JsonDocument.Parse(fields);
+        var schedules = doc.RootElement.GetProperty("schedules");
+        Assert.Equal(JsonValueKind.Array, schedules.ValueKind);
+        Assert.Equal(2, schedules.GetArrayLength());
+        Assert.Equal("II", schedules[0].GetString());
+        Assert.Equal("IV", schedules[1].GetString());
+    }
+
+    [Fact]
     public void Split_PreservesNullValues_InsteadOfDroppingThem()
     {
         // A field the LLM couldn't read returns value=null per the prompt spec.

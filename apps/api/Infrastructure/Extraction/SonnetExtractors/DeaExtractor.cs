@@ -47,9 +47,9 @@ internal sealed class DeaExtractor : SonnetExtractorBase
               "additionalProperties": false,
               "required": ["value", "page", "bbox"],
               "properties": {
-                "value": { "type": ["string", "null"] },
-                "page":  { "type": "integer", "minimum": 1 },
-                "bbox":  { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 }
+                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
+                "page":  { "type": "integer" },
+                "bbox":  { "type": "array", "items": { "type": "number" } }
               }
             },
             "deaNumber": {
@@ -57,9 +57,9 @@ internal sealed class DeaExtractor : SonnetExtractorBase
               "additionalProperties": false,
               "required": ["value", "page", "bbox"],
               "properties": {
-                "value": { "type": ["string", "null"] },
-                "page":  { "type": "integer", "minimum": 1 },
-                "bbox":  { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 }
+                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
+                "page":  { "type": "integer" },
+                "bbox":  { "type": "array", "items": { "type": "number" } }
               }
             },
             "expiryDate": {
@@ -67,9 +67,9 @@ internal sealed class DeaExtractor : SonnetExtractorBase
               "additionalProperties": false,
               "required": ["value", "page", "bbox"],
               "properties": {
-                "value": { "type": ["string", "null"] },
-                "page":  { "type": "integer", "minimum": 1 },
-                "bbox":  { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 }
+                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
+                "page":  { "type": "integer" },
+                "bbox":  { "type": "array", "items": { "type": "number" } }
               }
             },
             "status": {
@@ -77,9 +77,9 @@ internal sealed class DeaExtractor : SonnetExtractorBase
               "additionalProperties": false,
               "required": ["value", "page", "bbox"],
               "properties": {
-                "value": { "type": ["string", "null"] },
-                "page":  { "type": "integer", "minimum": 1 },
-                "bbox":  { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 }
+                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
+                "page":  { "type": "integer" },
+                "bbox":  { "type": "array", "items": { "type": "number" } }
               }
             },
             "schedules": {
@@ -88,11 +88,13 @@ internal sealed class DeaExtractor : SonnetExtractorBase
               "required": ["value", "page", "bbox"],
               "properties": {
                 "value": {
-                  "type": ["array", "null"],
-                  "items": { "type": "string", "enum": ["II", "III", "IV", "V"] }
+                  "anyOf": [
+                    { "type": "array", "items": { "type": "string", "enum": ["II", "III", "IV", "V"] } },
+                    { "type": "null" }
+                  ]
                 },
-                "page":  { "type": "integer", "minimum": 1 },
-                "bbox":  { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 }
+                "page":  { "type": "integer" },
+                "bbox":  { "type": "array", "items": { "type": "number" } }
               }
             }
           }
@@ -102,11 +104,11 @@ internal sealed class DeaExtractor : SonnetExtractorBase
           "additionalProperties": false,
           "required": ["fullName", "deaNumber", "expiryDate", "status", "schedules"],
           "properties": {
-            "fullName":   { "type": "number", "minimum": 0, "maximum": 1 },
-            "deaNumber":  { "type": "number", "minimum": 0, "maximum": 1 },
-            "expiryDate": { "type": "number", "minimum": 0, "maximum": 1 },
-            "status":     { "type": "number", "minimum": 0, "maximum": 1 },
-            "schedules":  { "type": "number", "minimum": 0, "maximum": 1 }
+            "fullName":   { "type": "number" },
+            "deaNumber":  { "type": "number" },
+            "expiryDate": { "type": "number" },
+            "status":     { "type": "number" },
+            "schedules":  { "type": "number" }
           }
         }
       }

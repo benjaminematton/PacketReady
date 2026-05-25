@@ -42,9 +42,9 @@ internal sealed class BoardCertExtractor : SonnetExtractorBase
               "additionalProperties": false,
               "required": ["value", "page", "bbox"],
               "properties": {
-                "value": { "type": ["string", "null"] },
-                "page":  { "type": "integer", "minimum": 1 },
-                "bbox":  { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 }
+                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
+                "page":  { "type": "integer" },
+                "bbox":  { "type": "array", "items": { "type": "number" } }
               }
             },
             "board": {
@@ -52,9 +52,9 @@ internal sealed class BoardCertExtractor : SonnetExtractorBase
               "additionalProperties": false,
               "required": ["value", "page", "bbox"],
               "properties": {
-                "value": { "type": ["string", "null"] },
-                "page":  { "type": "integer", "minimum": 1 },
-                "bbox":  { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 }
+                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
+                "page":  { "type": "integer" },
+                "bbox":  { "type": "array", "items": { "type": "number" } }
               }
             },
             "specialty": {
@@ -62,9 +62,9 @@ internal sealed class BoardCertExtractor : SonnetExtractorBase
               "additionalProperties": false,
               "required": ["value", "page", "bbox"],
               "properties": {
-                "value": { "type": ["string", "null"] },
-                "page":  { "type": "integer", "minimum": 1 },
-                "bbox":  { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 }
+                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
+                "page":  { "type": "integer" },
+                "bbox":  { "type": "array", "items": { "type": "number" } }
               }
             },
             "issueDate": {
@@ -72,9 +72,9 @@ internal sealed class BoardCertExtractor : SonnetExtractorBase
               "additionalProperties": false,
               "required": ["value", "page", "bbox"],
               "properties": {
-                "value": { "type": ["string", "null"] },
-                "page":  { "type": "integer", "minimum": 1 },
-                "bbox":  { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 }
+                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
+                "page":  { "type": "integer" },
+                "bbox":  { "type": "array", "items": { "type": "number" } }
               }
             },
             "expiryDate": {
@@ -82,9 +82,9 @@ internal sealed class BoardCertExtractor : SonnetExtractorBase
               "additionalProperties": false,
               "required": ["value", "page", "bbox"],
               "properties": {
-                "value": { "type": ["string", "null"] },
-                "page":  { "type": "integer", "minimum": 1 },
-                "bbox":  { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 }
+                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
+                "page":  { "type": "integer" },
+                "bbox":  { "type": "array", "items": { "type": "number" } }
               }
             },
             "status": {
@@ -92,9 +92,9 @@ internal sealed class BoardCertExtractor : SonnetExtractorBase
               "additionalProperties": false,
               "required": ["value", "page", "bbox"],
               "properties": {
-                "value": { "type": ["string", "null"] },
-                "page":  { "type": "integer", "minimum": 1 },
-                "bbox":  { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 }
+                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
+                "page":  { "type": "integer" },
+                "bbox":  { "type": "array", "items": { "type": "number" } }
               }
             }
           }
@@ -104,12 +104,12 @@ internal sealed class BoardCertExtractor : SonnetExtractorBase
           "additionalProperties": false,
           "required": ["fullName", "board", "specialty", "issueDate", "expiryDate", "status"],
           "properties": {
-            "fullName":   { "type": "number", "minimum": 0, "maximum": 1 },
-            "board":      { "type": "number", "minimum": 0, "maximum": 1 },
-            "specialty":  { "type": "number", "minimum": 0, "maximum": 1 },
-            "issueDate":  { "type": "number", "minimum": 0, "maximum": 1 },
-            "expiryDate": { "type": "number", "minimum": 0, "maximum": 1 },
-            "status":     { "type": "number", "minimum": 0, "maximum": 1 }
+            "fullName":   { "type": "number" },
+            "board":      { "type": "number" },
+            "specialty":  { "type": "number" },
+            "issueDate":  { "type": "number" },
+            "expiryDate": { "type": "number" },
+            "status":     { "type": "number" }
           }
         }
       }

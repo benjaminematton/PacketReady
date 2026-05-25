@@ -1,45 +1,45 @@
 {
   "datasetDir": "evals/dataset",
-  "baseUrl": "http://localhost:5066",
-  "ranAt": "2026-05-22T13:05:07+00:00",
-  "stub": true,
+  "baseUrl": "http://localhost:5000",
+  "ranAt": "2026-05-25T19:35:52+00:00",
+  "stub": false,
   "rollups": {
     "perField": {
-      "license.fullName": 0.0,
-      "license.licenseNumber": 0.0,
-      "license.state": 0.0,
-      "license.issueDate": 0.0,
-      "license.expiryDate": 0.0,
-      "license.status": 0.0,
-      "dea.fullName": 0.0,
-      "dea.deaNumber": 0.0,
-      "dea.expiryDate": 0.0,
-      "dea.status": 0.0,
-      "dea.schedules": 0.0,
-      "boardCert.fullName": 0.0,
-      "boardCert.board": 0.0,
-      "boardCert.specialty": 0.0,
-      "boardCert.issueDate": 0.0,
-      "boardCert.expiryDate": 0.0,
-      "boardCert.status": 0.0,
-      "malpractice.fullName": 0.0,
-      "malpractice.carrier": 0.0,
-      "malpractice.policyNumber": 0.0,
-      "malpractice.expiryDate": 0.0,
-      "malpractice.status": 0.0
+      "license.fullName": 1.0,
+      "license.licenseNumber": 1.0,
+      "license.state": 1.0,
+      "license.issueDate": 1.0,
+      "license.expiryDate": 1.0,
+      "license.status": 1.0,
+      "dea.fullName": 1.0,
+      "dea.deaNumber": 1.0,
+      "dea.expiryDate": 1.0,
+      "dea.status": 1.0,
+      "dea.schedules": 1.0,
+      "boardCert.fullName": 1.0,
+      "boardCert.board": 1.0,
+      "boardCert.specialty": 1.0,
+      "boardCert.issueDate": 1.0,
+      "boardCert.expiryDate": 1.0,
+      "boardCert.status": 1.0,
+      "malpractice.fullName": 1.0,
+      "malpractice.carrier": 1.0,
+      "malpractice.policyNumber": 1.0,
+      "malpractice.expiryDate": 1.0,
+      "malpractice.status": 1.0
     },
     "perDocType": {
-      "license": 0.0,
-      "dea": 0.0,
-      "boardCert": 0.0,
-      "malpractice": 0.0
+      "license": 1.0,
+      "dea": 1.0,
+      "boardCert": 1.0,
+      "malpractice": 1.0
     },
     "perPacket": {
-      "packet-001-clean-anderson": 0.0,
-      "packet-002-clean-bautista": 0.0,
-      "packet-003-conflict-name": 0.0,
-      "packet-004-conflict-expiry": 0.0,
-      "packet-005-scanned-anderson": 0.0
+      "packet-001-clean-anderson": 1.0,
+      "packet-002-clean-bautista": 1.0,
+      "packet-003-conflict-name": 1.0,
+      "packet-004-conflict-expiry": 1.0,
+      "packet-005-scanned-anderson": 1.0
     }
   },
   "packets": [
@@ -50,81 +50,81 @@
           "doc_type": "license",
           "field": "fullName",
           "expected": "Henry Anderson, MD",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Henry Anderson, MD",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "license",
           "field": "licenseNumber",
           "expected": "MD-NY-99001",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "MD-NY-99001",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "license",
           "field": "state",
           "expected": "NY",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "NY",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "license",
           "field": "issueDate",
           "expected": "2020-04-15",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2020-04-15",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "license",
           "field": "expiryDate",
           "expected": "2027-04-14",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2027-04-14",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "license",
           "field": "status",
           "expected": "Active",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Active",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "dea",
           "field": "fullName",
           "expected": "Henry Anderson",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Henry Anderson",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "dea",
           "field": "deaNumber",
           "expected": "BA1234567",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "BA1234567",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "dea",
           "field": "expiryDate",
           "expected": "2027-08-31",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2027-08-31",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "dea",
           "field": "status",
           "expected": "Active",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Active",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "dea",
@@ -135,97 +135,102 @@
             "IV",
             "V"
           ],
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": [
+            "II",
+            "III",
+            "IV",
+            "V"
+          ],
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "fullName",
           "expected": "Henry Anderson, MD",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Henry Anderson, MD",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "board",
           "expected": "ABIM",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "ABIM",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "specialty",
           "expected": "Internal Medicine",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Internal Medicine",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "issueDate",
           "expected": "2018-06-01",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2018-06-01",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "expiryDate",
           "expected": "2028-06-01",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2028-06-01",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "status",
           "expected": "Active",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Active",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "malpractice",
           "field": "fullName",
           "expected": "Henry Anderson, MD",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Henry Anderson, MD",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "malpractice",
           "field": "carrier",
           "expected": "MedProtect Mutual",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "MedProtect Mutual",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "malpractice",
           "field": "policyNumber",
           "expected": "MPM-NY-00099001",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "MPM-NY-00099001",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "malpractice",
           "field": "expiryDate",
           "expected": "2026-12-31",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2026-12-31",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "malpractice",
           "field": "status",
           "expected": "Active",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Active",
+          "match": true,
+          "present": true
         }
       ]
     },
@@ -236,81 +241,81 @@
           "doc_type": "license",
           "field": "fullName",
           "expected": "Marisol Bautista, MD",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Marisol Bautista, MD",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "license",
           "field": "licenseNumber",
           "expected": "A-CA-72145",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "A-CA-72145",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "license",
           "field": "state",
           "expected": "CA",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "CA",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "license",
           "field": "issueDate",
           "expected": "2016-09-12",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2016-09-12",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "license",
           "field": "expiryDate",
           "expected": "2027-09-11",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2027-09-11",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "license",
           "field": "status",
           "expected": "Active",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Active",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "dea",
           "field": "fullName",
           "expected": "Marisol Bautista",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Marisol Bautista",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "dea",
           "field": "deaNumber",
           "expected": "FB7654321",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "FB7654321",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "dea",
           "field": "expiryDate",
           "expected": "2028-02-28",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2028-02-28",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "dea",
           "field": "status",
           "expected": "Active",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Active",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "dea",
@@ -321,97 +326,102 @@
             "IV",
             "V"
           ],
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": [
+            "II",
+            "III",
+            "IV",
+            "V"
+          ],
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "fullName",
           "expected": "Marisol Bautista, MD",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Marisol Bautista, MD",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "board",
           "expected": "ABIM",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "ABIM",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "specialty",
           "expected": "Cardiovascular Disease",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Cardiovascular Disease",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "issueDate",
           "expected": "2019-10-15",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2019-10-15",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "expiryDate",
           "expected": "2029-10-15",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2029-10-15",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "status",
           "expected": "Active",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Active",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "malpractice",
           "field": "fullName",
           "expected": "Marisol Bautista, MD",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Marisol Bautista, MD",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "malpractice",
           "field": "carrier",
           "expected": "Pacific Indemnity Group",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Pacific Indemnity Group",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "malpractice",
           "field": "policyNumber",
           "expected": "PIG-CA-721450",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "PIG-CA-721450",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "malpractice",
           "field": "expiryDate",
           "expected": "2027-01-31",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2027-01-31",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "malpractice",
           "field": "status",
           "expected": "Active",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Active",
+          "match": true,
+          "present": true
         }
       ]
     },
@@ -422,81 +432,81 @@
           "doc_type": "license",
           "field": "fullName",
           "expected": "Jane Calloway, MD",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Jane Calloway, MD",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "license",
           "field": "licenseNumber",
           "expected": "MD-NY-44210",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "MD-NY-44210",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "license",
           "field": "state",
           "expected": "NY",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "NY",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "license",
           "field": "issueDate",
           "expected": "2017-07-01",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2017-07-01",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "license",
           "field": "expiryDate",
           "expected": "2027-06-30",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2027-06-30",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "license",
           "field": "status",
           "expected": "Active",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Active",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "dea",
           "field": "fullName",
           "expected": "Jane Calloway",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Jane Calloway",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "dea",
           "field": "deaNumber",
           "expected": "MC4422100",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "MC4422100",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "dea",
           "field": "expiryDate",
           "expected": "2027-12-31",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2027-12-31",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "dea",
           "field": "status",
           "expected": "Active",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Active",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "dea",
@@ -507,97 +517,102 @@
             "IV",
             "V"
           ],
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": [
+            "II",
+            "III",
+            "IV",
+            "V"
+          ],
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "fullName",
           "expected": "Jane Calloway, MD",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Jane Calloway, MD",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "board",
           "expected": "ABEM",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "ABEM",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "specialty",
           "expected": "Emergency Medicine",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Emergency Medicine",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "issueDate",
           "expected": "2017-11-01",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2017-11-01",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "expiryDate",
           "expected": "2027-11-01",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2027-11-01",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "status",
           "expected": "Active",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Active",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "malpractice",
           "field": "fullName",
           "expected": "Jane C. Calloway-Smith, MD",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Jane C. Calloway-Smith, MD",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "malpractice",
           "field": "carrier",
           "expected": "Atlantic Liability Mutual",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Atlantic Liability Mutual",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "malpractice",
           "field": "policyNumber",
           "expected": "ALM-NY-44210-S",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "ALM-NY-44210-S",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "malpractice",
           "field": "expiryDate",
           "expected": "2026-11-30",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2026-11-30",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "malpractice",
           "field": "status",
           "expected": "Active",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Active",
+          "match": true,
+          "present": true
         }
       ]
     },
@@ -608,81 +623,81 @@
           "doc_type": "license",
           "field": "fullName",
           "expected": "Amadou Diallo, MD",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Amadou Diallo, MD",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "license",
           "field": "licenseNumber",
           "expected": "036-IL-58031",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "036-IL-58031",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "license",
           "field": "state",
           "expected": "IL",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "IL",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "license",
           "field": "issueDate",
           "expected": "2015-03-20",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2015-03-20",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "license",
           "field": "expiryDate",
           "expected": "2026-09-30",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2026-09-30",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "license",
           "field": "status",
           "expected": "Active",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Active",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "dea",
           "field": "fullName",
           "expected": "Amadou Diallo",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Amadou Diallo",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "dea",
           "field": "deaNumber",
           "expected": "AD5803100",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "AD5803100",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "dea",
           "field": "expiryDate",
           "expected": "2027-05-31",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2027-05-31",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "dea",
           "field": "status",
           "expected": "Active",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Active",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "dea",
@@ -693,97 +708,102 @@
             "IV",
             "V"
           ],
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": [
+            "II",
+            "III",
+            "IV",
+            "V"
+          ],
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "fullName",
           "expected": "Amadou Diallo, MD",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Amadou Diallo, MD",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "board",
           "expected": "ABFM",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "ABFM",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "specialty",
           "expected": "Family Medicine",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Family Medicine",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "issueDate",
           "expected": "2016-08-01",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2016-08-01",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "expiryDate",
           "expected": "2026-08-01",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2026-08-01",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "status",
           "expected": "Active",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Active",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "malpractice",
           "field": "fullName",
           "expected": "Amadou Diallo, MD",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Amadou Diallo, MD",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "malpractice",
           "field": "carrier",
           "expected": "Midwest Health Indemnity",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Midwest Health Indemnity",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "malpractice",
           "field": "policyNumber",
           "expected": "MHI-IL-580310",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "MHI-IL-580310",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "malpractice",
           "field": "expiryDate",
           "expected": "2027-03-31",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2027-03-31",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "malpractice",
           "field": "status",
           "expected": "Active",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Active",
+          "match": true,
+          "present": true
         }
       ]
     },
@@ -794,81 +814,81 @@
           "doc_type": "license",
           "field": "fullName",
           "expected": "Henry Anderson, MD",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Henry Anderson, MD",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "license",
           "field": "licenseNumber",
           "expected": "MD-NY-99001",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "MD-NY-99001",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "license",
           "field": "state",
           "expected": "NY",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "NY",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "license",
           "field": "issueDate",
           "expected": "2020-04-15",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2020-04-15",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "license",
           "field": "expiryDate",
           "expected": "2027-04-14",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2027-04-14",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "license",
           "field": "status",
           "expected": "Active",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Active",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "dea",
           "field": "fullName",
           "expected": "Henry Anderson",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Henry Anderson",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "dea",
           "field": "deaNumber",
           "expected": "BA1234567",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "BA1234567",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "dea",
           "field": "expiryDate",
           "expected": "2027-08-31",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2027-08-31",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "dea",
           "field": "status",
           "expected": "Active",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Active",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "dea",
@@ -879,97 +899,102 @@
             "IV",
             "V"
           ],
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": [
+            "II",
+            "III",
+            "IV",
+            "V"
+          ],
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "fullName",
           "expected": "Henry Anderson, MD",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Henry Anderson, MD",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "board",
           "expected": "ABIM",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "ABIM",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "specialty",
           "expected": "Internal Medicine",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Internal Medicine",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "issueDate",
           "expected": "2018-06-01",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2018-06-01",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "expiryDate",
           "expected": "2028-06-01",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2028-06-01",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "boardCert",
           "field": "status",
           "expected": "Active",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Active",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "malpractice",
           "field": "fullName",
           "expected": "Henry Anderson, MD",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Henry Anderson, MD",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "malpractice",
           "field": "carrier",
           "expected": "MedProtect Mutual",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "MedProtect Mutual",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "malpractice",
           "field": "policyNumber",
           "expected": "MPM-NY-00099001",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "MPM-NY-00099001",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "malpractice",
           "field": "expiryDate",
           "expected": "2026-12-31",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "2026-12-31",
+          "match": true,
+          "present": true
         },
         {
           "doc_type": "malpractice",
           "field": "status",
           "expected": "Active",
-          "extracted": null,
-          "match": false,
-          "present": false
+          "extracted": "Active",
+          "match": true,
+          "present": true
         }
       ]
     }

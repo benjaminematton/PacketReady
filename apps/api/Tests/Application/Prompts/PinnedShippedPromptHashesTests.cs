@@ -29,7 +29,7 @@ public class PinnedShippedPromptHashesTests
     private const string LicenseExtractionHash =
         "62b8dd7331e38cb4fde7c78a92a1472c9ee3ca12240ab747aa9947cf54f1b0e1";
     private const string DeaExtractionHash =
-        "a87a6a954cbed007b78397820317338edd0542d5b330406adcb909543272b78c";
+        "f873ced7b1baece2c05e9aa51b6fafa9cbb5fd9bad33293b2c02cce7cdd95e4e";
     private const string BoardCertExtractionHash =
         "ad9c0db03b4c9b2226ba096c02a68f08a34f42286cfd46ce754514ecd28f19d5";
     private const string MalpracticeExtractionHash =

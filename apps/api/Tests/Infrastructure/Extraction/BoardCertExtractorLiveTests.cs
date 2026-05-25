@@ -38,8 +38,8 @@ public class BoardCertExtractorLiveTests
 
         Assert.Equal("claude-sonnet-4-6", result.Model);
         Assert.Equal(64, result.PromptHash.Length);
-        Assert.True(result.InputTokens > 0);
-        Assert.True(result.OutputTokens > 0);
+        Assert.True(result.InputTokens > 0, "Anthropic should report input tokens.");
+        Assert.True(result.OutputTokens > 0, "Anthropic should report output tokens.");
 
         using var fields = System.Text.Json.JsonDocument.Parse(result.FieldsJson);
         var board = fields.RootElement.GetProperty("board").GetString();

@@ -47,9 +47,9 @@ internal sealed class LicenseExtractor : SonnetExtractorBase
               "additionalProperties": false,
               "required": ["value", "page", "bbox"],
               "properties": {
-                "value": { "type": ["string", "null"] },
-                "page":  { "type": "integer", "minimum": 1 },
-                "bbox":  { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 }
+                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
+                "page":  { "type": "integer" },
+                "bbox":  { "type": "array", "items": { "type": "number" } }
               }
             },
             "licenseNumber": {
@@ -57,9 +57,9 @@ internal sealed class LicenseExtractor : SonnetExtractorBase
               "additionalProperties": false,
               "required": ["value", "page", "bbox"],
               "properties": {
-                "value": { "type": ["string", "null"] },
-                "page":  { "type": "integer", "minimum": 1 },
-                "bbox":  { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 }
+                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
+                "page":  { "type": "integer" },
+                "bbox":  { "type": "array", "items": { "type": "number" } }
               }
             },
             "state": {
@@ -67,9 +67,9 @@ internal sealed class LicenseExtractor : SonnetExtractorBase
               "additionalProperties": false,
               "required": ["value", "page", "bbox"],
               "properties": {
-                "value": { "type": ["string", "null"] },
-                "page":  { "type": "integer", "minimum": 1 },
-                "bbox":  { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 }
+                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
+                "page":  { "type": "integer" },
+                "bbox":  { "type": "array", "items": { "type": "number" } }
               }
             },
             "issueDate": {
@@ -77,9 +77,9 @@ internal sealed class LicenseExtractor : SonnetExtractorBase
               "additionalProperties": false,
               "required": ["value", "page", "bbox"],
               "properties": {
-                "value": { "type": ["string", "null"] },
-                "page":  { "type": "integer", "minimum": 1 },
-                "bbox":  { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 }
+                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
+                "page":  { "type": "integer" },
+                "bbox":  { "type": "array", "items": { "type": "number" } }
               }
             },
             "expiryDate": {
@@ -87,9 +87,9 @@ internal sealed class LicenseExtractor : SonnetExtractorBase
               "additionalProperties": false,
               "required": ["value", "page", "bbox"],
               "properties": {
-                "value": { "type": ["string", "null"] },
-                "page":  { "type": "integer", "minimum": 1 },
-                "bbox":  { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 }
+                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
+                "page":  { "type": "integer" },
+                "bbox":  { "type": "array", "items": { "type": "number" } }
               }
             },
             "status": {
@@ -97,9 +97,9 @@ internal sealed class LicenseExtractor : SonnetExtractorBase
               "additionalProperties": false,
               "required": ["value", "page", "bbox"],
               "properties": {
-                "value": { "type": ["string", "null"] },
-                "page":  { "type": "integer", "minimum": 1 },
-                "bbox":  { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 }
+                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
+                "page":  { "type": "integer" },
+                "bbox":  { "type": "array", "items": { "type": "number" } }
               }
             }
           }
@@ -109,12 +109,12 @@ internal sealed class LicenseExtractor : SonnetExtractorBase
           "additionalProperties": false,
           "required": ["fullName", "licenseNumber", "state", "issueDate", "expiryDate", "status"],
           "properties": {
-            "fullName":      { "type": "number", "minimum": 0, "maximum": 1 },
-            "licenseNumber": { "type": "number", "minimum": 0, "maximum": 1 },
-            "state":         { "type": "number", "minimum": 0, "maximum": 1 },
-            "issueDate":     { "type": "number", "minimum": 0, "maximum": 1 },
-            "expiryDate":    { "type": "number", "minimum": 0, "maximum": 1 },
-            "status":        { "type": "number", "minimum": 0, "maximum": 1 }
+            "fullName":      { "type": "number" },
+            "licenseNumber": { "type": "number" },
+            "state":         { "type": "number" },
+            "issueDate":     { "type": "number" },
+            "expiryDate":    { "type": "number" },
+            "status":        { "type": "number" }
           }
         }
       }
