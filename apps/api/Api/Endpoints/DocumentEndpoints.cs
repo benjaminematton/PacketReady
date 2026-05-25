@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Net.Http.Headers;
 using PacketReady.Application.Abstractions;
 using PacketReady.Application.Documents;
 using PacketReady.Application.Extraction;
@@ -145,6 +146,7 @@ public static class DocumentEndpoints
         // portal will need its own session story.
         app.MapGet("/api/documents/{documentId:guid}/blob", async (
                 Guid documentId,
+                HttpContext http,
                 IAppDbContext db,
                 IBlobStore blobs,
                 CancellationToken ct) =>
@@ -160,18 +162,10 @@ public static class DocumentEndpoints
                 if (doc is null)
                     return ProblemResults.DocumentNotFound(documentId);
 
+                Stream stream;
                 try
                 {
-                    var stream = await blobs.GetAsync(doc.StorageUri, ct);
-                    // inline so the browser's PDF viewer renders the response
-                    // rather than triggering a download dialog. The dashboard's
-                    // react-pdf component fetches with credentials and renders
-                    // the stream directly.
-                    return Results.File(
-                        fileStream: stream,
-                        contentType: doc.MimeType,
-                        fileDownloadName: doc.OriginalName,
-                        enableRangeProcessing: true);
+                    stream = await blobs.GetAsync(doc.StorageUri, ct);
                 }
                 catch (FileNotFoundException)
                 {
@@ -179,8 +173,32 @@ public static class DocumentEndpoints
                     // — the documents row and the blob got out of sync (blob
                     // store wiped, restored from backup, etc.). 410 Gone is
                     // honest: the resource WAS here, isn't now.
-                    return ProblemResults.DocumentBlobMissing(documentId, doc.StorageUri);
+                    return ProblemResults.DocumentBlobMissing(documentId);
                 }
+                catch (Exception ex) when (ex is ArgumentException or UnauthorizedAccessException)
+                {
+                    // documents.storage_uri is malformed or resolves outside the
+                    // configured blob root — same drift class as FileNotFound
+                    // (tampered row, post-cutover scheme mismatch, root path
+                    // moved). Same 410 lane: the resource is unreachable.
+                    return ProblemResults.DocumentBlobMissing(documentId);
+                }
+
+                // Inline Content-Disposition with a filename hint so the
+                // dashboard's PDF viewer renders the response in-place, and
+                // direct navigation to /blob still gets a sensible filename
+                // if a user does Save As. Results.File's fileDownloadName
+                // overload forces attachment, so set the header ourselves.
+                http.Response.Headers.ContentDisposition =
+                    new ContentDispositionHeaderValue("inline")
+                    {
+                        FileNameStar = doc.OriginalName,
+                    }.ToString();
+
+                return Results.File(
+                    fileStream: stream,
+                    contentType: doc.MimeType,
+                    enableRangeProcessing: true);
             })
             .WithName("DownloadDocumentBlob")
             .WithTags("Documents")

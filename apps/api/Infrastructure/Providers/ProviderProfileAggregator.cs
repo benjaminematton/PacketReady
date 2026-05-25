@@ -83,9 +83,13 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
                 g => g.Key,
                 g => g.OrderByDescending(d => d.UploadedAt).First());
 
-        // Single round-trip for the latest extraction per document. Pulling
-        // every extraction and grouping in memory keeps the query simple and
-        // O(1) round-trips as the doc-type set grows in P4+.
+        // Single round-trip for every extraction across the dispatchable docs;
+        // group in memory and pick the latest per document. One query
+        // regardless of doc count (the IN clause grows linearly, but it's
+        // still one round-trip), where the previous implementation issued
+        // one query per document. Tie-break on ExtractionId DESC keeps the
+        // winner deterministic when two extractions share an ExtractedAt tick
+        // (batch backfill, fast retry, low-resolution timestamp column).
         var docIds = latestByDocType.Values.Select(d => d.Id).ToList();
         var extractionsByDocId = await _db.DocumentExtractions
             .AsNoTracking()
@@ -95,7 +99,9 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
             .GroupBy(e => e.DocumentId)
             .ToDictionary(
                 g => g.Key,
-                g => g.OrderByDescending(e => e.ExtractedAt).First());
+                g => g.OrderByDescending(e => e.ExtractedAt)
+                      .ThenByDescending(e => e.ExtractionId)
+                      .First());
 
         var provenance = new Dictionary<string, FieldProvenance>(StringComparer.Ordinal);
         var issues = new List<Issue>();
@@ -346,10 +352,17 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
                 || locEl.ValueKind != JsonValueKind.Object)
                 continue;
 
+            // Malformed bbox → skip the entire provenance entry rather than
+            // anchor the dashboard's drill-in at a placeholder rectangle.
+            // A missing entry causes validators' Cite() to emit all-null
+            // doc-ref fields, which the dashboard renders as "no PDF anchor";
+            // a 1×1pt fallback at origin would be invisible-but-clickable —
+            // worse UX than no anchor at all.
+            var bbox = ParseBbox(locEl);
+            if (bbox is null) continue;
+
             var page = locEl.TryGetProperty("page", out var pEl) && pEl.ValueKind == JsonValueKind.Number
                 ? pEl.GetInt32() : 1;
-
-            var bbox = ParseBbox(locEl);
 
             // Per spec §"Why confidence as its own column": missing key
             // defaults to 0.0 — fail loud on uncertainty.
@@ -364,18 +377,18 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
         }
     }
 
-    private static BoundingBox ParseBbox(JsonElement locEl)
+    private static BoundingBox? ParseBbox(JsonElement locEl)
     {
         // Sonnet self-reports bbox as [x, y, w, h] (PDF points, top-left
         // origin). Domain.BoundingBox is X1Y1X2Y2; convert at this boundary.
-        // Default to a unit-size bbox at origin so a malformed value doesn't
-        // crash the aggregator — the dashboard will render a tiny highlight
-        // rather than nothing.
+        // Return null on malformed input; the caller skips the provenance
+        // entry rather than placing the dashboard's highlight at a bogus
+        // anchor.
         if (!locEl.TryGetProperty("bbox", out var bboxEl)
             || bboxEl.ValueKind != JsonValueKind.Array
             || bboxEl.GetArrayLength() < 4)
         {
-            return new BoundingBox(0, 0, 1, 1);
+            return null;
         }
 
         var x = bboxEl[0].GetDouble();

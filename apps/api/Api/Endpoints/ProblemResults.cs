@@ -88,18 +88,20 @@ internal static class ProblemResults
     /// <summary>
     /// Document row exists but its storage URI doesn't resolve to a readable
     /// blob — documents and blob store drifted out of sync (blob store wiped,
-    /// restored from older backup, etc.). 410 Gone signals "this resource
-    /// existed but is no longer available", distinct from 404 "never existed".
+    /// restored from older backup, scheme rolled back post-cutover, etc.).
+    /// 410 Gone signals "this resource existed but is no longer available",
+    /// distinct from 404 "never existed". <c>storageUri</c> is intentionally
+    /// not surfaced in the body — it would leak deployment filesystem layout
+    /// to anyone who can hit the endpoint.
     /// </summary>
-    public static IResult DocumentBlobMissing(Guid documentId, string storageUri) =>
+    public static IResult DocumentBlobMissing(Guid documentId) =>
         Results.Problem(
             type: DocumentBlobMissingType,
             title: "Document blob is missing from storage.",
-            detail: $"Document {documentId} references {storageUri}, but the blob is not present.",
+            detail: $"Document {documentId} is recorded but its underlying file is no longer reachable.",
             statusCode: StatusCodes.Status410Gone,
             extensions: new Dictionary<string, object?>
             {
                 ["documentId"] = documentId,
-                ["storageUri"] = storageUri,
             });
 }
