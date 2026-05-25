@@ -37,3 +37,8 @@ __pycache__/
 # Eval runner output — `baseline.json` is the gate's reference and IS committed;
 # `latest.json` is regenerated on every run and should not be.
 evals/results/latest.json
+
+# P3 local blob store — uploaded PDFs persist here in dev; never committed.
+# Default root is apps/api/Api/blob-store via Program.cs; ops can override
+# via BLOB_STORE_ROOT.
+apps/api/Api/blob-store/

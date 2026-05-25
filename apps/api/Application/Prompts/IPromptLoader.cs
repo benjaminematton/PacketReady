@@ -20,17 +20,31 @@ public interface IPromptLoader
         string promptPath,
         IReadOnlyDictionary<string, string> variables,
         CancellationToken ct);
+
+    /// <summary>
+    /// Raw embedded-resource bytes. Used by <c>PromptHasher</c> to compute the
+    /// SHA-256 that lands on every extraction row — line-ending normalization or
+    /// UTF-8 decoding would change the hash silently, so callers go through
+    /// bytes, not strings.
+    /// </summary>
+    Task<byte[]> LoadBytesAsync(string promptPath, CancellationToken ct);
 }
 
 /// <summary>
 /// Canonical resource paths for prompts. Each constant value is a filename matching an
-/// <c>EmbeddedResource</c> under <c>Application/Prompts/</c>. Empty in Phase 0; phases
-/// add entries as their first LLM call lands.
+/// <c>EmbeddedResource</c> under <c>Application/Prompts/</c> or
+/// <c>Application/Extraction/Prompts/</c>. Phase 0: empty; Phase 3 adds the
+/// classifier + four extractor prompts below; Phase 4 will add identity_coherence
+/// and npi_taxonomy_match validator prompts.
 /// </summary>
 public static class PromptKeys
 {
-    // Phase 3 will add license / dea / malpractice / board_cert / cv extraction prompts.
-    // Phase 4 will add identity_coherence and npi_taxonomy_match validator prompts.
+    // Phase 3 — document classification + per-doc-type field extraction.
+    public const string Classifier = "ClassifierPrompt.v1.md";
+    public const string LicenseExtraction = "LicenseExtractionPrompt.v1.md";
+    public const string DeaExtraction = "DeaExtractionPrompt.v1.md";
+    public const string BoardCertExtraction = "BoardCertExtractionPrompt.v1.md";
+    public const string MalpracticeExtraction = "MalpracticeExtractionPrompt.v1.md";
 }
 
 public sealed class PromptNotFoundException : Exception

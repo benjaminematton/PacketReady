@@ -17,7 +17,8 @@ namespace PacketReady.Application.Prompts;
 public sealed class PromptLoader : IPromptLoader
 {
     private readonly Assembly _assembly;
-    private readonly ConcurrentDictionary<string, string> _cache = new();
+    private readonly ConcurrentDictionary<string, string> _textCache = new();
+    private readonly ConcurrentDictionary<string, byte[]> _bytesCache = new();
 
     public PromptLoader() : this(typeof(PromptLoader).Assembly) { }
 
@@ -28,16 +29,15 @@ public sealed class PromptLoader : IPromptLoader
 
     public async Task<string> LoadAsync(string promptPath, CancellationToken ct)
     {
-        if (_cache.TryGetValue(promptPath, out var cached))
+        if (_textCache.TryGetValue(promptPath, out var cached))
             return cached;
 
-        var resourceName = ResolveResourceName(promptPath);
-        await using var stream = _assembly.GetManifestResourceStream(resourceName)
-            ?? throw new PromptNotFoundException(promptPath);
-        using var reader = new StreamReader(stream, Encoding.UTF8);
-        var text = await reader.ReadToEndAsync(ct);
-
-        _cache[promptPath] = text;
+        // Go through the byte path so the underlying read happens once even when
+        // callers alternate between LoadAsync and LoadBytesAsync. The decoded
+        // string lives alongside the bytes for fast subsequent reads.
+        var bytes = await LoadBytesAsync(promptPath, ct);
+        var text = Encoding.UTF8.GetString(bytes);
+        _textCache[promptPath] = text;
         return text;
     }
 
@@ -55,12 +55,40 @@ public sealed class PromptLoader : IPromptLoader
         return sb.ToString();
     }
 
+    public async Task<byte[]> LoadBytesAsync(string promptPath, CancellationToken ct)
+    {
+        if (_bytesCache.TryGetValue(promptPath, out var cached))
+            return cached;
+
+        var resourceName = ResolveResourceName(promptPath);
+        await using var stream = _assembly.GetManifestResourceStream(resourceName)
+            ?? throw new PromptNotFoundException(promptPath);
+        using var ms = new MemoryStream(capacity: (int)stream.Length);
+        await stream.CopyToAsync(ms, ct);
+        var bytes = ms.ToArray();
+
+        _bytesCache[promptPath] = bytes;
+        return bytes;
+    }
+
     private string ResolveResourceName(string promptPath)
     {
+        // Suffix-match is unique by construction iff no two source files share a leaf
+        // name across the .csproj's EmbeddedResource roots. We have two roots today
+        // (Prompts/** and Extraction/Prompts/**) and the audit trail depends on the
+        // hash corresponding to *the* file — collisions must fail loud, not silently
+        // pick whichever the loader iterates first.
         var suffix = "." + promptPath;
-        var resources = _assembly.GetManifestResourceNames();
-        var match = resources.FirstOrDefault(r => r.EndsWith(suffix, StringComparison.Ordinal))
-            ?? throw new PromptNotFoundException(promptPath);
-        return match;
+        var matches = _assembly.GetManifestResourceNames()
+            .Where(r => r.EndsWith(suffix, StringComparison.Ordinal))
+            .ToList();
+
+        if (matches.Count == 0) throw new PromptNotFoundException(promptPath);
+        if (matches.Count > 1)
+            throw new InvalidOperationException(
+                $"Prompt '{promptPath}' is ambiguous — multiple embedded resources match: " +
+                string.Join(", ", matches) +
+                ". Rename one or scope the lookup; the prompt_hash column depends on a unique resolution.");
+        return matches[0];
     }
 }

@@ -19,6 +19,18 @@ builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = ExtractEndpo
 builder.Services.AddOpenApi();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+
+// Blob store roots at <content-root>/blob-store by default; ops can override
+// via BLOB_STORE_ROOT to point at a mounted volume in containerized deploys.
+// Relative paths resolve against the ASP.NET Core content root, not CWD —
+// dotnet run from any directory still finds it.
+var blobStoreRoot = builder.Configuration["BLOB_STORE_ROOT"];
+var blobStoreAbsolutePath = string.IsNullOrWhiteSpace(blobStoreRoot)
+    ? Path.Combine(builder.Environment.ContentRootPath, "blob-store")
+    : Path.IsPathRooted(blobStoreRoot)
+        ? blobStoreRoot
+        : Path.Combine(builder.Environment.ContentRootPath, blobStoreRoot);
+builder.Services.AddBlobStorage(blobStoreAbsolutePath);
 builder.Services.AddMediatR(cfg =>
     cfg.RegisterServicesFromAssembly(typeof(PingCommand).Assembly));
 builder.Services.AddHostedService<PromptResourceValidator>();

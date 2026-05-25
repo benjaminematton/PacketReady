@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PacketReady.Domain.Audit;
+using PacketReady.Domain.Documents;
 using PacketReady.Domain.Providers;
 using PacketReady.Domain.Scoring;
 
@@ -22,4 +23,6 @@ public interface IAppDbContext : IUnitOfWork
     DbSet<Provider> Providers { get; }
     DbSet<ReadinessScore> ReadinessScores { get; }
     DbSet<AuditEvent> AuditEvents { get; }
+    DbSet<Document> Documents { get; }
+    DbSet<DocumentExtraction> DocumentExtractions { get; }
 }

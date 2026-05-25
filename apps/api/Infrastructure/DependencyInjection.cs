@@ -5,8 +5,14 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using PacketReady.Application.Abstractions;
 using PacketReady.Application.Audit;
+using PacketReady.Application.Documents;
+using PacketReady.Application.Extraction.Extract;
 using PacketReady.Application.Prompts;
+using PacketReady.Domain.Documents;
 using PacketReady.Infrastructure.Audit;
+using PacketReady.Infrastructure.Blob;
+using PacketReady.Infrastructure.Extraction;
+using PacketReady.Infrastructure.Extraction.SonnetExtractors;
 using PacketReady.Infrastructure.Persistence;
 
 namespace PacketReady.Infrastructure;
@@ -63,6 +69,37 @@ public static class DependencyInjection
         services.AddSingleton(_ => new AnthropicClient(apiKey));
         services.AddSingleton<IChatClient>(sp => sp.GetRequiredService<AnthropicClient>().Messages);
 
+        // PdfPageCounter is stateless after construction; singleton matches the
+        // upstream UglyToad.PdfPig usage pattern (per-call PdfDocument.Open).
+        services.AddSingleton<PdfPageCounter>();
+
+        // Extractors: keyed by DocType, dispatched from ExtractInMemoryCommandHandler
+        // (Path A) and the upload handler (Path B). Singleton because every dep
+        // along the chain is singleton — no per-request state in the extractor.
+        // Slice 5 adds three more registrations on the same shape.
+        services.AddKeyedSingleton<IDocTypeExtractor, LicenseExtractor>(DocType.License);
+
+        return services;
+    }
+
+    /// <summary>
+    /// Local-filesystem blob storage. Caller passes the absolute root path —
+    /// typically <c>Path.Combine(IHostEnvironment.ContentRootPath, "blob-store")</c>
+    /// from <c>Program.cs</c>, with an env-var override
+    /// (<c>BLOB_STORE_ROOT</c>) for ops on a non-default mount.
+    ///
+    /// <para>P6 swaps this registration for an S3-backed implementation; consumers
+    /// take <see cref="IBlobStore"/> and don't care.</para>
+    /// </summary>
+    public static IServiceCollection AddBlobStorage(
+        this IServiceCollection services,
+        string rootPath)
+    {
+        if (string.IsNullOrWhiteSpace(rootPath))
+            throw new ArgumentException("Blob store root path is required.", nameof(rootPath));
+
+        services.AddSingleton(new BlobStoreOptions { RootPath = rootPath });
+        services.AddSingleton<IBlobStore, LocalFileBlobStore>();
         return services;
     }
 }

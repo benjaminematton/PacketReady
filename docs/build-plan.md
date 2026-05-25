@@ -10,6 +10,7 @@
 | **Data** | synthetic only · mocked PSV · no PHI |
 | **Companion doc** | [design.md](./design.md) |
 | **Style** | [style.md](./style.md) — voice, spine, callout vocabulary |
+| **Conventions** | [conventions.md](./conventions.md) — code-side rules the language doesn't pin |
 
 ---
 

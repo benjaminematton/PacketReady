@@ -16,6 +16,11 @@
     <PackageReference Include="Microsoft.Extensions.AI" Version="10.3.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.8" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
+    <!-- UglyToad PdfPig — pure-managed PDF reader, MIT-licensed, no native deps.
+         Used by PdfPageCounter to detect text-layer presence (the "scanned PDF"
+         signal) and to count pages on intake. The NuGet id is `PdfPig`; the
+         GitHub project is UglyToad/PdfPig. -->
+    <PackageReference Include="PdfPig" Version="0.1.14" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -24,5 +29,13 @@
     <Nullable>enable</Nullable>
     <RootNamespace>PacketReady.Infrastructure</RootNamespace>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Internal types in this assembly (e.g. SonnetExtractorBase.SplitLlmResponse,
+         the keyed extractor concrete classes) are pure-code helpers that we want to
+         unit-test directly. Tests live in the sibling Tests project; assembly id
+         is its default (project-filename-based) "Tests". -->
+    <InternalsVisibleTo Include="Tests" />
+  </ItemGroup>
 
 </Project>

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using PacketReady.Application.Prompts;
 using PacketReady.Application.Scoring.Validators;
 
 namespace PacketReady.Application;
@@ -26,6 +27,10 @@ public static class DependencyInjection
         // construct validators directly with FakeTimeProvider, bypassing this
         // registration entirely; the singleton is here for non-test consumers.
         services.AddSingleton(TimeProvider.System);
+
+        // PromptHasher caches per-prompt SHA-256s; singleton matches that.
+        // It depends only on IPromptLoader (already singleton in Infrastructure).
+        services.AddSingleton<PromptHasher>();
 
         return services;
     }

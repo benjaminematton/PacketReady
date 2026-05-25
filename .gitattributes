@@ -1,0 +1,6 @@
+# Embedded prompts are hashed (SHA-256) and the hash lands on every
+# document_extractions row. Cross-platform line-ending normalization would
+# change the hash silently on Windows commits — pin LF on these files so
+# the same source file produces the same embedded bytes everywhere.
+apps/api/Application/Extraction/Prompts/**/*.md text eol=lf
+apps/api/Application/Prompts/**/*.md          text eol=lf

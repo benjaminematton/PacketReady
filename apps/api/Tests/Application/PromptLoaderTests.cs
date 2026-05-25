@@ -1,6 +1,5 @@
-using System.Reflection;
-using System.Resources;
 using PacketReady.Application.Prompts;
+using PacketReady.Tests.Application.Prompts;
 using Xunit;
 
 namespace PacketReady.Tests.Application;
@@ -19,10 +18,8 @@ public class PromptLoaderTests
     [Fact]
     public async Task LoadAsync_SubstitutesVariables()
     {
-        // Use an in-memory test assembly with a fake embedded resource.
-        var assembly = BuildAssemblyWithResource("FakePrompt.md", "Hello, {{name}}!");
+        var loader = StubPromptLoaderFactory.Create("FakePrompt.md", "Hello, {{name}}!");
 
-        var loader = new TestablePromptLoader(assembly);
         var rendered = await loader.LoadAsync(
             "FakePrompt.md",
             new Dictionary<string, string> { ["name"] = "world" },
@@ -34,8 +31,7 @@ public class PromptLoaderTests
     [Fact]
     public async Task LoadAsync_CachesRawText()
     {
-        var assembly = BuildAssemblyWithResource("Cached.md", "raw text");
-        var loader = new TestablePromptLoader(assembly);
+        var loader = StubPromptLoaderFactory.Create("Cached.md", "raw text");
 
         var a = await loader.LoadAsync("Cached.md", CancellationToken.None);
         var b = await loader.LoadAsync("Cached.md", CancellationToken.None);
@@ -43,52 +39,57 @@ public class PromptLoaderTests
         Assert.Same(a, b);
     }
 
-    /// <summary>
-    /// <see cref="PromptLoader"/> exposes an internal ctor; this subclass forwards
-    /// without requiring InternalsVisibleTo on the production assembly.
-    /// </summary>
-    private sealed class TestablePromptLoader : IPromptLoader
+    [Fact]
+    public async Task LoadBytesAsync_ReturnsExactEmbeddedBytes()
     {
-        private readonly PromptLoader _inner;
+        // Round-trip must NOT pass through StreamReader — that would normalize
+        // line endings and break the PromptHasher contract on Windows.
+        var raw = "alpha\r\nbeta\r\n";
+        var loader = StubPromptLoaderFactory.Create("Crlf.md", raw);
 
-        public TestablePromptLoader(Assembly assembly)
-        {
-            // Reflection over the internal ctor — avoids leaking InternalsVisibleTo
-            // just for tests. Constructor signature is stable enough to make this safe.
-            var ctor = typeof(PromptLoader).GetConstructor(
-                BindingFlags.Instance | BindingFlags.NonPublic,
-                [typeof(Assembly)])!;
-            _inner = (PromptLoader)ctor.Invoke([assembly]);
-        }
+        var bytes = await loader.LoadBytesAsync("Crlf.md", CancellationToken.None);
 
-        public Task<string> LoadAsync(string p, CancellationToken ct) => _inner.LoadAsync(p, ct);
-        public Task<string> LoadAsync(string p, IReadOnlyDictionary<string, string> v, CancellationToken ct)
-            => _inner.LoadAsync(p, v, ct);
+        Assert.Equal(System.Text.Encoding.UTF8.GetBytes(raw), bytes);
     }
 
-    private static Assembly BuildAssemblyWithResource(string name, string content)
+    [Fact]
+    public async Task LoadBytesAsync_CachesAcrossCalls()
     {
-        // Reflection.Emit can't add manifest resources at run time; instead we use a
-        // memory-backed StubAssembly that overrides GetManifestResourceStream.
-        return new StubAssembly(name, content);
+        var loader = StubPromptLoaderFactory.Create("CachedBytes.md", "stable");
+
+        var a = await loader.LoadBytesAsync("CachedBytes.md", CancellationToken.None);
+        var b = await loader.LoadBytesAsync("CachedBytes.md", CancellationToken.None);
+
+        Assert.Same(a, b);
     }
 
-    private sealed class StubAssembly : Assembly
+    [Fact]
+    public async Task LoadBytesAsync_ThrowsForUnknownPrompt()
     {
-        private readonly string _name;
-        private readonly byte[] _bytes;
+        var loader = new PromptLoader();
 
-        public StubAssembly(string name, string content)
-        {
-            _name = "PacketReady.Tests.Stub." + name;
-            _bytes = System.Text.Encoding.UTF8.GetBytes(content);
-        }
+        await Assert.ThrowsAsync<PromptNotFoundException>(
+            () => loader.LoadBytesAsync("definitely-not-a-real-prompt.md", CancellationToken.None));
+    }
 
-        public override string[] GetManifestResourceNames() => [_name];
+    [Fact]
+    public async Task LoadAsync_ThrowsWhenLeafNameMatchesMultipleResources()
+    {
+        // Two embedded resources end with the same leaf — simulates the .csproj
+        // accidentally globbing the same filename out of both Prompts/** and
+        // Extraction/Prompts/**. Without the multi-match guard, FirstOrDefault would
+        // silently pick whichever the enumerator returned first and the prompt_hash
+        // column would correspond to the wrong file.
+        var assembly = new MultiStubPromptAssembly(
+            ("PacketReady.Stub.Prompts.Duplicate.md", "from /Prompts"),
+            ("PacketReady.Stub.Extraction.Prompts.Duplicate.md", "from /Extraction/Prompts"));
+        var loader = StubPromptLoaderFactory.Create(assembly);
 
-        public override Stream? GetManifestResourceStream(string name)
-            => name == _name ? new MemoryStream(_bytes, writable: false) : null;
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => loader.LoadAsync("Duplicate.md", CancellationToken.None));
 
-        public override ManifestResourceInfo? GetManifestResourceInfo(string resourceName) => null;
+        Assert.Contains("ambiguous", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Prompts.Duplicate.md", ex.Message);
+        Assert.Contains("Extraction.Prompts.Duplicate.md", ex.Message);
     }
 }

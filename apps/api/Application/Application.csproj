@@ -19,4 +19,14 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <!-- Embedded prompts. `Prompts/**` covers P4+ validator prompts; `Extraction/Prompts/**`
+       covers the P3 classifier + extractor prompts. The leading-dot suffix-match in
+       PromptLoader's ResolveResourceName plus PromptResourceValidator's startup
+       check together ensure mis-globbed prompts surface at boot, not at first
+       inbound request. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Prompts\**\*.md" />
+    <EmbeddedResource Include="Extraction\Prompts\**\*.md" />
+  </ItemGroup>
+
 </Project>
