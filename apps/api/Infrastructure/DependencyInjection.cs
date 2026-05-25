@@ -76,8 +76,12 @@ public static class DependencyInjection
         // Extractors: keyed by DocType, dispatched from ExtractInMemoryCommandHandler
         // (Path A) and the upload handler (Path B). Singleton because every dep
         // along the chain is singleton — no per-request state in the extractor.
-        // Slice 5 adds three more registrations on the same shape.
+        // CV (DocType.Cv) is P4; the endpoint's GetKeyedService probe returns
+        // 400 for unregistered types, so leaving it absent here is the gate.
         services.AddKeyedSingleton<IDocTypeExtractor, LicenseExtractor>(DocType.License);
+        services.AddKeyedSingleton<IDocTypeExtractor, DeaExtractor>(DocType.Dea);
+        services.AddKeyedSingleton<IDocTypeExtractor, BoardCertExtractor>(DocType.BoardCert);
+        services.AddKeyedSingleton<IDocTypeExtractor, MalpracticeExtractor>(DocType.Malpractice);
 
         return services;
     }
