@@ -1,4 +1,5 @@
 using MediatR;
+using PacketReady.Application.Providers.Exceptions;
 using PacketReady.Application.Scoring.Commands.ComputeReadinessScore;
 
 namespace PacketReady.Api.Endpoints;

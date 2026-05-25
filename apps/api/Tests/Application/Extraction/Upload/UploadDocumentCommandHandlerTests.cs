@@ -10,7 +10,7 @@ using PacketReady.Application.Extraction.Classify;
 using PacketReady.Application.Extraction.Extract;
 using PacketReady.Application.Extraction.Persist;
 using PacketReady.Application.Extraction.Upload;
-using PacketReady.Application.Scoring.Commands.ComputeReadinessScore;
+using PacketReady.Application.Providers.Exceptions;
 using PacketReady.Domain.Audit;
 using PacketReady.Domain.Documents;
 using PacketReady.Domain.Providers;

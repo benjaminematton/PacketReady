@@ -9,12 +9,13 @@ namespace PacketReady.Application.Scoring.Validators;
 /// the specialty-vs-NPI-taxonomy cross-check is the LLM-augmented
 /// <c>npi_taxonomy_match</c> validator in Phase 4.
 /// <list type="bullet">
-///   <item>Critical — no board cert on file. (Some specialties don't require board
-///         cert; for P1 we treat it as required and revisit per-payer in P4.)</item>
 ///   <item>Critical — status is not Active.</item>
 ///   <item>Critical — expiry strictly before today.</item>
 ///   <item>Minor — still valid but expires within 30 days.</item>
 /// </list>
+///
+/// <para>Missing-board-cert is owned by the aggregator (see <c>LicenseStatusValidator</c>);
+/// this validator short-circuits when <see cref="ProviderProfile.BoardCert"/> is null.</para>
 /// </summary>
 public sealed class BoardCertificationValidator(TimeProvider clock) : IValidator
 {
@@ -25,20 +26,11 @@ public sealed class BoardCertificationValidator(TimeProvider clock) : IValidator
         IReadOnlyDictionary<string, FieldProvenance> provenance,
         CancellationToken ct)
     {
+        if (profile.BoardCert is null)
+            return Task.FromResult<IReadOnlyList<Issue>>(Array.Empty<Issue>());
+
         var issues = new List<Issue>();
         var today = clock.Today();
-
-        if (profile.BoardCert is null)
-        {
-            issues.Add(new Issue(
-                Validator: Name,
-                Severity: Severity.Critical,
-                Message: "No board certification on file.",
-                Remediation: "Provider must upload a current board certification.",
-                Citations: Array.Empty<Citation>()));
-            return Task.FromResult<IReadOnlyList<Issue>>(issues);
-        }
-
         var bc = profile.BoardCert;
         IReadOnlyList<Citation> cite = [provenance.Cite(
             Name,

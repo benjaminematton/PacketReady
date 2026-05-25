@@ -20,13 +20,13 @@ public sealed class BoardCertificationValidatorTests
     }
 
     [Fact]
-    public async Task NoBoardCert_EmitsCritical()
+    public async Task NoBoardCert_ShortCircuits()
     {
+        // Missing-board-cert is owned by the aggregator; this validator stays
+        // silent to avoid double-counting Criticals.
         var profile = MakeProfile() with { BoardCert = null };
         var issues = await Build().RunAsync(profile, default);
-        var only = Assert.Single(issues);
-        Assert.Equal(Severity.Critical, only.Severity);
-        Assert.Contains("No board certification", only.Message);
+        Assert.Empty(issues);
     }
 
     [Fact]

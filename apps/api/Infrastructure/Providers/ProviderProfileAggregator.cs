@@ -3,7 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using PacketReady.Application.Providers.Aggregation;
-using PacketReady.Application.Scoring.Commands.ComputeReadinessScore;
+using PacketReady.Application.Providers.Exceptions;
 using PacketReady.Domain.Documents;
 using PacketReady.Domain.Providers;
 using PacketReady.Domain.Scoring;
@@ -83,20 +83,19 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
                 g => g.Key,
                 g => g.OrderByDescending(d => d.UploadedAt).First());
 
-        // For each latest document, pull its latest succeeded (or Failed)
-        // extraction by ExtractedAt. One round-trip per doc keeps the query
-        // simple; we expect ≤ 4 docs per provider in P3.
-        var extractionsByDocId = new Dictionary<Guid, DocumentExtraction>();
-        foreach (var doc in latestByDocType.Values)
-        {
-            var ext = await _db.DocumentExtractions
-                .AsNoTracking()
-                .Where(e => e.DocumentId == doc.Id)
-                .OrderByDescending(e => e.ExtractedAt)
-                .FirstOrDefaultAsync(ct);
-            if (ext is not null)
-                extractionsByDocId[doc.Id] = ext;
-        }
+        // Single round-trip for the latest extraction per document. Pulling
+        // every extraction and grouping in memory keeps the query simple and
+        // O(1) round-trips as the doc-type set grows in P4+.
+        var docIds = latestByDocType.Values.Select(d => d.Id).ToList();
+        var extractionsByDocId = await _db.DocumentExtractions
+            .AsNoTracking()
+            .Where(e => docIds.Contains(e.DocumentId))
+            .ToListAsync(ct);
+        var latestExtractionByDocId = extractionsByDocId
+            .GroupBy(e => e.DocumentId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderByDescending(e => e.ExtractedAt).First());
 
         var provenance = new Dictionary<string, FieldProvenance>(StringComparer.Ordinal);
         var issues = new List<Issue>();
@@ -123,7 +122,7 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
                 issues.Add(LowConfidenceClassificationIssue(doc, conf));
             }
 
-            if (!extractionsByDocId.TryGetValue(doc.Id, out var ext))
+            if (!latestExtractionByDocId.TryGetValue(doc.Id, out var ext))
             {
                 // Document exists but no extraction row ever landed. Treat as
                 // an extraction failure — Path B always writes an extraction
@@ -140,7 +139,11 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
                 continue;
             }
 
-            // Succeeded → deserialize + populate.
+            // Succeeded → deserialize + populate. When parsing yields null
+            // (extraction landed but a required field is absent), emit a
+            // Partial-Extraction Critical so validators don't have to fall back
+            // to their own "no X on file" Critical — the aggregator owns the
+            // entire "why is profile.X null?" lane.
             try
             {
                 var (fields, locs, confs) = LoadJsonbTriple(ext);
@@ -151,16 +154,22 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
                         license = ParseLicense(fields);
                         PopulateProvenance(provenance, "license", fields, locs, confs, doc.Id);
                         TryAddName(nameCandidates, DocType.License, fields);
+                        if (license is null)
+                            issues.Add(PartialExtractionIssue(doc));
                         break;
                     case DocType.Dea:
                         dea = ParseDea(fields);
                         PopulateProvenance(provenance, "dea", fields, locs, confs, doc.Id);
                         TryAddName(nameCandidates, DocType.Dea, fields);
+                        if (dea is null)
+                            issues.Add(PartialExtractionIssue(doc));
                         break;
                     case DocType.BoardCert:
                         boardCert = ParseBoardCert(fields);
                         PopulateProvenance(provenance, "boardCert", fields, locs, confs, doc.Id);
                         TryAddName(nameCandidates, DocType.BoardCert, fields);
+                        if (boardCert is null)
+                            issues.Add(PartialExtractionIssue(doc));
                         break;
                     case DocType.Malpractice:
                         // No MalpracticeInfo on ProviderProfile yet — store
@@ -221,6 +230,21 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
                 Bbox: null),
         });
 
+    private static Issue PartialExtractionIssue(Document doc) => new(
+        Validator: "DocumentStore",
+        Severity: Severity.Critical,
+        Message: $"Extraction for {doc.DocType} document succeeded but required fields are missing.",
+        Remediation: "Re-upload a clearer scan, or correct the document manually if fields are illegible.",
+        Citations: new[]
+        {
+            new Citation(
+                SourceValidator: "DocumentStore",
+                ExtractedValue: "missing required fields",
+                DocumentId: doc.Id,
+                Page: 1,
+                Bbox: null),
+        });
+
     private static Issue LowConfidenceClassificationIssue(Document doc, double conf) => new(
         Validator: "DocumentStore",
         Severity: Severity.Minor,
@@ -241,11 +265,8 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
     private static (JsonElement Fields, JsonElement Locations, JsonElement Confidences) LoadJsonbTriple(
         DocumentExtraction ext)
     {
-        // JsonDocument is IDisposable but we return JsonElements; the elements
-        // are valid while the documents are alive. Park the documents in a
-        // static buffer to keep them alive for the duration of the aggregation
-        // — alternatively we could materialize into Dictionaries here. Going
-        // with the latter for safety.
+        // .Clone() detaches the elements from their JsonDocument so they
+        // survive the using-disposal below.
         using var fieldsDoc = JsonDocument.Parse(ext.FieldsJson);
         using var locsDoc = JsonDocument.Parse(ext.FieldLocationsJson);
         using var confDoc = JsonDocument.Parse(ext.ConfidenceJson);
@@ -414,25 +435,30 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
     }
 
     // Strip the credential suffixes the dataset sees in practice (", MD",
-    // ", DO", ", MBBS", ", PhD"), case-fold, collapse interior whitespace.
-    // List is intentionally small + alphabet-pinned; broader title handling
-    // (Nurse Practitioner, PA-C) waits until the dataset shows the need.
+    // ", DO", ", MBBS", ", PhD"), case-fold, trim. Iterates to a fixpoint so
+    // stacked credentials like "Henry Anderson, MD, PhD" reduce all the way
+    // down — a single pass would leave the inner suffix behind once the
+    // outer match strips ahead of it in iteration order.
     internal static string NormalizeForNameCompare(string name)
     {
         if (string.IsNullOrWhiteSpace(name)) return string.Empty;
 
-        var s = name;
-        foreach (var suffix in CredentialSuffixes)
+        var s = name.TrimEnd(' ', ',', '.');
+        bool stripped;
+        do
         {
-            // Case-insensitive contains-trim. Picks up ", MD" but also bare
-            // " MD" at the end (rare; a stray space-separated suffix).
-            var idx = s.LastIndexOf(suffix, StringComparison.OrdinalIgnoreCase);
-            if (idx > 0 && idx >= s.Length - suffix.Length - 2)
+            stripped = false;
+            foreach (var suffix in CredentialSuffixes)
             {
-                s = s[..idx].TrimEnd(' ', ',').Trim();
+                if (s.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                {
+                    s = s[..^suffix.Length].TrimEnd(' ', ',', '.');
+                    stripped = true;
+                }
             }
-        }
-        return s.ToLowerInvariant().Trim();
+        } while (stripped);
+
+        return s.ToLowerInvariant();
     }
 
     private static readonly string[] CredentialSuffixes =

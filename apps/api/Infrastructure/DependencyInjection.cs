@@ -94,8 +94,6 @@ public static class DependencyInjection
 
         // ExtractionPersister depends on the scoped DbContext, so itself scoped.
         services.AddScoped<IExtractionPersister, ExtractionPersister>();
-
-        // ProviderProfileAggregator depends on the scoped DbContext as well.
         services.AddScoped<IProviderProfileAggregator, ProviderProfileAggregator>();
 
         return services;

@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using PacketReady.Application.Extraction;
 using PacketReady.Application.Extraction.Reextract;
 using PacketReady.Application.Extraction.Upload;
-using PacketReady.Application.Scoring.Commands.ComputeReadinessScore;
+using PacketReady.Application.Providers.Exceptions;
 using PacketReady.Domain.Documents;
 using PacketReady.Infrastructure.Extraction;
 

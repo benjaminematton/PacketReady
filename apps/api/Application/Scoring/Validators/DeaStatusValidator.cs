@@ -8,12 +8,13 @@ namespace PacketReady.Application.Scoring.Validators;
 /// Checks the provider's DEA registration. DEA is federal, so there's no state-match
 /// concern; otherwise mirrors the license validator's ladder.
 /// <list type="bullet">
-///   <item>Critical — no DEA on file (treated as required for now; revisit when we
-///         segment providers who don't prescribe controlled substances).</item>
 ///   <item>Critical — status is not Active.</item>
 ///   <item>Critical — expiry strictly before today.</item>
 ///   <item>Minor — still valid but expires within 30 days.</item>
 /// </list>
+///
+/// <para>Missing-DEA is owned by the aggregator (see <c>LicenseStatusValidator</c>);
+/// this validator short-circuits when <see cref="ProviderProfile.Dea"/> is null.</para>
 /// </summary>
 public sealed class DeaStatusValidator(TimeProvider clock) : IValidator
 {
@@ -24,20 +25,11 @@ public sealed class DeaStatusValidator(TimeProvider clock) : IValidator
         IReadOnlyDictionary<string, FieldProvenance> provenance,
         CancellationToken ct)
     {
+        if (profile.Dea is null)
+            return Task.FromResult<IReadOnlyList<Issue>>(Array.Empty<Issue>());
+
         var issues = new List<Issue>();
         var today = clock.Today();
-
-        if (profile.Dea is null)
-        {
-            issues.Add(new Issue(
-                Validator: Name,
-                Severity: Severity.Critical,
-                Message: "No DEA registration on file.",
-                Remediation: "Provider must upload a current DEA registration certificate.",
-                Citations: Array.Empty<Citation>()));
-            return Task.FromResult<IReadOnlyList<Issue>>(issues);
-        }
-
         var dea = profile.Dea;
         IReadOnlyList<Citation> cite = [provenance.Cite(
             Name,

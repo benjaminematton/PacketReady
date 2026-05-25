@@ -54,14 +54,3 @@ public sealed record ReadinessScoreDto(
             ComputedAt: score.ComputedAt);
     }
 }
-
-/// <summary>
-/// Thrown when <see cref="ComputeReadinessScoreCommand.ProviderId"/> does not match
-/// any provider row. The API layer catches this and maps to a 404 — handlers stay
-/// HTTP-agnostic.
-/// </summary>
-public sealed class ProviderNotFoundException(Guid providerId)
-    : Exception($"Provider {providerId} not found.")
-{
-    public Guid ProviderId { get; } = providerId;
-}

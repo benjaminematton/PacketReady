@@ -7,7 +7,6 @@ namespace PacketReady.Application.Scoring.Validators;
 /// <summary>
 /// Checks the provider's state medical license:
 /// <list type="bullet">
-///   <item>Critical — no license on file.</item>
 ///   <item>Critical — license <see cref="LicenseStatus.Active">status</see> is not Active.</item>
 ///   <item>Critical — expiry date is strictly before today (industry convention:
 ///         "expires today" is still valid; expired means <c>expiry &lt; today</c>).</item>
@@ -18,6 +17,11 @@ namespace PacketReady.Application.Scoring.Validators;
 /// <para>Multi-emit: an expired-and-wrong-state license produces two Issues
 /// (Critical + Major). The renewal-window Minor is suppressed when the license is
 /// already expired — pointless to nag about a 12-day window if we've flagged it expired.</para>
+///
+/// <para><b>Missing-license</b> is owned by <c>IProviderProfileAggregator</c> —
+/// it emits a Missing-Document / Extraction-Failed / Partial-Extraction Critical
+/// when <see cref="ProviderProfile.License"/> is null. This validator silently
+/// short-circuits in that case to avoid double-counting Criticals.</para>
 /// </summary>
 public sealed class LicenseStatusValidator(TimeProvider clock) : IValidator
 {
@@ -28,23 +32,11 @@ public sealed class LicenseStatusValidator(TimeProvider clock) : IValidator
         IReadOnlyDictionary<string, FieldProvenance> provenance,
         CancellationToken ct)
     {
+        if (profile.License is null)
+            return Task.FromResult<IReadOnlyList<Issue>>(Array.Empty<Issue>());
+
         var issues = new List<Issue>();
         var today = clock.Today();
-
-        if (profile.License is null)
-        {
-            // Missing-document case is owned by the aggregator's
-            // DocumentStore-Critical Issue; emit ours too so removing the
-            // aggregator doesn't silently drop coverage during a refactor.
-            issues.Add(new Issue(
-                Validator: Name,
-                Severity: Severity.Critical,
-                Message: "No license on file — required for credentialing.",
-                Remediation: "Provider must upload an active state medical license.",
-                Citations: Array.Empty<Citation>()));
-            return Task.FromResult<IReadOnlyList<Issue>>(issues);
-        }
-
         var lic = profile.License;
         // One citation per emission, anchored on the expiry-date field — that's
         // the most frequent trigger across the validator's branches; the

@@ -28,8 +28,10 @@ public sealed record Citation(
 }
 
 /// <summary>
-/// Axis-aligned bounding box in normalized PDF page coordinates (top-left origin,
-/// 0..1 on each axis). Explicit field names avoid the xywh/x1y1x2y2 ambiguity a
-/// raw <c>double[]</c> would carry, and the record gives us real value equality.
+/// Axis-aligned bounding box in raw PDF point coordinates (top-left origin) as
+/// emitted by the extractor. The dashboard's overlay code consumes the same
+/// units the PDF renderer reports, so no normalization happens server-side.
+/// Explicit field names avoid the xywh/x1y1x2y2 ambiguity a raw <c>double[]</c>
+/// would carry, and the record gives us value equality.
 /// </summary>
 public sealed record BoundingBox(double X1, double Y1, double X2, double Y2);

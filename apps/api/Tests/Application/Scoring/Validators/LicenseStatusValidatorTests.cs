@@ -24,17 +24,17 @@ public sealed class LicenseStatusValidatorTests
     }
 
     [Fact]
-    public async Task NoLicense_EmitsOneCritical()
+    public async Task NoLicense_ShortCircuits()
     {
+        // Missing-license is owned by the aggregator (Missing-Document /
+        // Extraction-Failed / Partial-Extraction Critical). This validator
+        // short-circuits to avoid double-counting Criticals at the dashboard.
         var (v, _) = Build();
         var profile = MakeProfile() with { License = null };
 
         var issues = await v.RunAsync(profile, default);
 
-        var only = Assert.Single(issues);
-        Assert.Equal("license_status", only.Validator);
-        Assert.Equal(Severity.Critical, only.Severity);
-        Assert.Contains("No license", only.Message);
+        Assert.Empty(issues);
     }
 
     [Fact]

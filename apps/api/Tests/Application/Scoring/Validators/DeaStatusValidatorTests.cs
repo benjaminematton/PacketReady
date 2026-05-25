@@ -20,13 +20,13 @@ public sealed class DeaStatusValidatorTests
     }
 
     [Fact]
-    public async Task NoDea_EmitsCritical()
+    public async Task NoDea_ShortCircuits()
     {
+        // Missing-DEA is owned by the aggregator; this validator stays silent
+        // to avoid double-counting Criticals.
         var profile = MakeProfile() with { Dea = null };
         var issues = await Build().RunAsync(profile, default);
-        var only = Assert.Single(issues);
-        Assert.Equal(Severity.Critical, only.Severity);
-        Assert.Contains("No DEA", only.Message);
+        Assert.Empty(issues);
     }
 
     [Fact]

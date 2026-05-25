@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
-using PacketReady.Application.Scoring.Commands.ComputeReadinessScore;
+using PacketReady.Application.Providers.Exceptions;
 using PacketReady.Domain.Documents;
 using PacketReady.Domain.Providers;
 using PacketReady.Domain.Scoring;
@@ -55,8 +55,36 @@ public class ProviderProfileAggregatorTests
         Assert.True(result.Provenance.ContainsKey("license.expiryDate"));
         Assert.True(result.Provenance.ContainsKey("dea.deaNumber"));
 
+        // Bbox conversion: Sonnet emits [x, y, w, h]; aggregator stores
+        // X1Y1X2Y2 in raw PDF points. LicenseLocations expiryDate is
+        // [120, 400, 140, 22] → expect (120, 400, 260, 422).
+        var expiryProv = result.Provenance["license.expiryDate"];
+        Assert.Equal(new BoundingBox(120, 400, 260, 422), expiryProv.Bbox);
+        Assert.Equal(1, expiryProv.Page);
+        Assert.Equal(0.95, expiryProv.Confidence);
+
         // No aggregator-level issues on the happy path.
         Assert.Empty(result.Issues);
+    }
+
+    [Fact]
+    public async Task AggregateAsync_MultipleExtractionsPerDoc_PicksLatestByExtractedAt()
+    {
+        // Two extractions on the same License document: the older one carries
+        // an outdated licenseNumber, the newer one is the source of truth.
+        // The aggregator must surface the newer extraction's fields.
+        var fx = await new Fixture()
+            .WithProvider()
+            .WithDocumentAndTwoExtractions(DocType.License,
+                olderFields: """{"fullName":"Henry Anderson, MD","licenseNumber":"OLD-NUMBER","state":"NY","issueDate":"2020-04-15","expiryDate":"2027-04-14","status":"Active"}""",
+                newerFields: LicenseFields,
+                olderAt: Now.AddMinutes(-30),
+                newerAt: Now)
+            .BuildAsync();
+
+        var result = await fx.Aggregator.AggregateAsync(fx.ProviderId, default);
+
+        Assert.Equal("MD-NY-99001", result.Profile.License!.Number);
     }
 
     [Fact]
@@ -163,6 +191,55 @@ public class ProviderProfileAggregatorTests
             i.Validator == "DocumentStore"
             && i.Severity == Severity.Minor
             && i.Message.Contains("fullName disagrees"));
+    }
+
+    [Fact]
+    public async Task AggregateAsync_StackedCredentials_NormalizeStripsToFixpoint()
+    {
+        // "Henry Anderson, MD, PhD" vs "Henry Anderson" — single-pass stripping
+        // would leave ", MD" behind once ", PhD" stripped; the fixpoint loop
+        // must reduce both. Levenshtein on the normalized forms is 0 → no Minor.
+        var fx = await new Fixture()
+            .WithProvider()
+            .WithDocument(DocType.License,
+                fields: """{"fullName":"Henry Anderson, MD, PhD","licenseNumber":"X","state":"NY","issueDate":"2020-01-01","expiryDate":"2027-01-01","status":"Active"}""",
+                locations: LicenseLocations,
+                confidences: LicenseConfidences)
+            .WithDocument(DocType.Dea,
+                fields: """{"fullName":"Henry Anderson","deaNumber":"BA1234567","expiryDate":"2027-08-31","status":"Active","schedules":[]}""",
+                locations: DeaLocations,
+                confidences: DeaConfidences)
+            .BuildAsync();
+
+        var result = await fx.Aggregator.AggregateAsync(fx.ProviderId, default);
+
+        Assert.DoesNotContain(result.Issues, i =>
+            i.Message.Contains("fullName disagrees"));
+    }
+
+    [Fact]
+    public async Task AggregateAsync_PartialExtraction_EmitsCriticalAndProfileFieldStaysNull()
+    {
+        // Extraction succeeded but the parsed-required `expiryDate` is absent —
+        // ParseLicense returns null, the aggregator emits a Partial-Extraction
+        // Critical, and the validator (running downstream) stays silent for
+        // the missing license. This is the lane that justifies the validator
+        // short-circuit on profile.License is null.
+        var fx = await new Fixture()
+            .WithProvider()
+            .WithDocument(DocType.License,
+                fields: """{"fullName":"Henry Anderson, MD","licenseNumber":"X","state":"NY","issueDate":"2020-01-01","status":"Active"}""",
+                locations: LicenseLocations,
+                confidences: LicenseConfidences)
+            .BuildAsync();
+
+        var result = await fx.Aggregator.AggregateAsync(fx.ProviderId, default);
+
+        Assert.Null(result.Profile.License);
+        Assert.Contains(result.Issues, i =>
+            i.Validator == "DocumentStore"
+            && i.Severity == Severity.Critical
+            && i.Message.Contains("required fields are missing"));
     }
 
     [Fact]
@@ -288,6 +365,50 @@ public class ProviderProfileAggregatorTests
 
             Db.Documents.Add(doc);
             Db.DocumentExtractions.Add(ext);
+            return this;
+        }
+
+        public Fixture WithDocumentAndTwoExtractions(
+            DocType docType,
+            string olderFields, string newerFields,
+            DateTimeOffset olderAt, DateTimeOffset newerAt)
+        {
+            var doc = Document.Create(
+                providerId: ProviderId,
+                docType: docType,
+                docTypeConfidence: 0.95,
+                classifierModel: "claude-haiku-4-5",
+                classifierPromptHash: new string('a', 64),
+                storageUri: "file:///tmp/x.pdf",
+                originalName: $"{docType}.pdf",
+                mimeType: "application/pdf",
+                pageCount: 1,
+                uploadedBy: Uploader.Provider,
+                now: Now);
+            Db.Documents.Add(doc);
+
+            // extractionId increments per document; both rows distinct under
+            // the (document_id, extraction_id) UNIQUE.
+            Db.DocumentExtractions.Add(DocumentExtraction.CreateLlmSucceeded(
+                documentId: doc.Id, extractionId: 1,
+                schemaVersion: $"{docType.ToString().ToLowerInvariant()}.v1",
+                fieldsJson: olderFields,
+                fieldLocationsJson: LicenseLocations,
+                confidenceJson: LicenseConfidences,
+                model: "claude-sonnet-4-6",
+                promptHash: new string('b', 64),
+                inputTokens: 5000, outputTokens: 400,
+                now: olderAt));
+            Db.DocumentExtractions.Add(DocumentExtraction.CreateLlmSucceeded(
+                documentId: doc.Id, extractionId: 2,
+                schemaVersion: $"{docType.ToString().ToLowerInvariant()}.v1",
+                fieldsJson: newerFields,
+                fieldLocationsJson: LicenseLocations,
+                confidenceJson: LicenseConfidences,
+                model: "claude-sonnet-4-6",
+                promptHash: new string('b', 64),
+                inputTokens: 5000, outputTokens: 400,
+                now: newerAt));
             return this;
         }
 
