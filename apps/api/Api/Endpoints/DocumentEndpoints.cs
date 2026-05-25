@@ -1,5 +1,8 @@
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using PacketReady.Application.Abstractions;
+using PacketReady.Application.Documents;
 using PacketReady.Application.Extraction;
 using PacketReady.Application.Extraction.Reextract;
 using PacketReady.Application.Extraction.Upload;
@@ -134,6 +137,57 @@ public static class DocumentEndpoints
             .Produces(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound);
+
+        // Citation drill-in — dashboard fetches the source PDF for an Issue's
+        // Citation.DocumentId. Streams the bytes from blob storage; the
+        // documents row's MIME type goes on the Content-Type header. No
+        // auth in P3 — same posture as the rest of the API; P5's intake
+        // portal will need its own session story.
+        app.MapGet("/api/documents/{documentId:guid}/blob", async (
+                Guid documentId,
+                IAppDbContext db,
+                IBlobStore blobs,
+                CancellationToken ct) =>
+            {
+                if (documentId == Guid.Empty)
+                    return ProblemResults.EmptyDocumentId();
+
+                var doc = await db.Documents
+                    .AsNoTracking()
+                    .Where(d => d.Id == documentId)
+                    .Select(d => new { d.StorageUri, d.MimeType, d.OriginalName })
+                    .FirstOrDefaultAsync(ct);
+                if (doc is null)
+                    return ProblemResults.DocumentNotFound(documentId);
+
+                try
+                {
+                    var stream = await blobs.GetAsync(doc.StorageUri, ct);
+                    // inline so the browser's PDF viewer renders the response
+                    // rather than triggering a download dialog. The dashboard's
+                    // react-pdf component fetches with credentials and renders
+                    // the stream directly.
+                    return Results.File(
+                        fileStream: stream,
+                        contentType: doc.MimeType,
+                        fileDownloadName: doc.OriginalName,
+                        enableRangeProcessing: true);
+                }
+                catch (FileNotFoundException)
+                {
+                    // Document row points at a blob that doesn't exist on disk
+                    // — the documents row and the blob got out of sync (blob
+                    // store wiped, restored from backup, etc.). 410 Gone is
+                    // honest: the resource WAS here, isn't now.
+                    return ProblemResults.DocumentBlobMissing(documentId, doc.StorageUri);
+                }
+            })
+            .WithName("DownloadDocumentBlob")
+            .WithTags("Documents")
+            .Produces(StatusCodes.Status200OK, contentType: "application/pdf")
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status410Gone);
 
         return app;
     }

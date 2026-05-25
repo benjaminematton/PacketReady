@@ -17,6 +17,7 @@ internal static class ProblemResults
     private const string ExtractInvalidDocTypeType    = "urn:packetready:error:extract_invalid_doc_type";
     private const string ExtractDocTypeUnimplementedType  = "urn:packetready:error:extract_doc_type_unimplemented";
     private const string DocumentNotFoundType         = "urn:packetready:error:document_not_found";
+    private const string DocumentBlobMissingType      = "urn:packetready:error:document_blob_missing";
     private const string UploadInvalidPdfType         = "urn:packetready:error:upload_invalid_pdf";
 
     public static IResult ProviderNotFound(Guid providerId) =>
@@ -83,4 +84,22 @@ internal static class ProblemResults
             title: "Uploaded file could not be parsed as a PDF.",
             detail: parserMessage,
             statusCode: StatusCodes.Status400BadRequest);
+
+    /// <summary>
+    /// Document row exists but its storage URI doesn't resolve to a readable
+    /// blob — documents and blob store drifted out of sync (blob store wiped,
+    /// restored from older backup, etc.). 410 Gone signals "this resource
+    /// existed but is no longer available", distinct from 404 "never existed".
+    /// </summary>
+    public static IResult DocumentBlobMissing(Guid documentId, string storageUri) =>
+        Results.Problem(
+            type: DocumentBlobMissingType,
+            title: "Document blob is missing from storage.",
+            detail: $"Document {documentId} references {storageUri}, but the blob is not present.",
+            statusCode: StatusCodes.Status410Gone,
+            extensions: new Dictionary<string, object?>
+            {
+                ["documentId"] = documentId,
+                ["storageUri"] = storageUri,
+            });
 }
