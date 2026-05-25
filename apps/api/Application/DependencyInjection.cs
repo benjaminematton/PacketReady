@@ -32,6 +32,13 @@ public static class DependencyInjection
         // It depends only on IPromptLoader (already singleton in Infrastructure).
         services.AddSingleton<PromptHasher>();
 
+        // Re-publish the built-in ServiceProvider as IKeyedServiceProvider so
+        // handlers can inject the tighter type for keyed-extractor lookups.
+        // The default ServiceProvider implements the interface; .NET's
+        // validate-on-build step refuses to construct it without a descriptor,
+        // so we add one that just returns the provider itself.
+        services.AddScoped<IKeyedServiceProvider>(sp => (IKeyedServiceProvider)sp);
+
         return services;
     }
 }

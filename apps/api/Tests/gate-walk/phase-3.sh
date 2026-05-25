@@ -23,8 +23,18 @@ cd "$(git rev-parse --show-toplevel)"
 PACKET_DIR="evals/dataset/packet-001-clean-anderson"
 API_URL="${PACKETREADY_API_URL:-http://localhost:5000}"
 
+# Derive a libpq URI from the .NET-style DB_CONNECTION_STRING. psql can't
+# parse Host=...;Port=...;Username=...;Password=... directly — it expects
+# either KV pairs ("host=... port=...") or a postgresql:// URI. The URI is
+# simpler to assemble and prints redactable in logs.
+_kv() {
+  echo "$DB_CONNECTION_STRING" | tr ';' '\n' \
+    | awk -F= -v key="$1" 'tolower($1)==tolower(key) { print $2 }'
+}
+PG_URI="postgresql://$(_kv Username):$(_kv Password)@$(_kv Host):$(_kv Port)/$(_kv Database)"
+
 PSQL_ARGS=(-v ON_ERROR_STOP=1 -X -q -t)
-psql_q() { psql "$DB_CONNECTION_STRING" "${PSQL_ARGS[@]}" "$@"; }
+psql_q() { psql "$PG_URI" "${PSQL_ARGS[@]}" "$@"; }
 
 require() {
   local what="$1"; local where="$2"
@@ -159,19 +169,23 @@ echo "[gate 5] PASS — one extraction, reextract cached"
 
 # ── Gate 6: POST /api/providers/{id}/scores reads from extractions ───────
 echo
-echo "[gate 6] Score endpoint reads from extractions; Citation carries DocumentId/Page/Bbox"
+echo "[gate 6] Score endpoint reads from extractions (aggregator path)"
 SCORE=$(curl -sf -X POST "$API_URL/api/providers/$PROVIDER_ID/scores")
-# Confirm at least one Issue has a populated Citation.documentId — proves the
-# aggregator-validator-citation chain wired up correctly.
-HAS_DOC_CITATION=$(echo "$SCORE" | jq '[.issues[].citations[] | select(.documentId != null)] | length')
-(( HAS_DOC_CITATION >= 1 )) \
-  || { echo "[gate 6] FAIL: no Citation with populated documentId; aggregator did not thread provenance"; exit 1; }
-# Confirm the document we just uploaded appears in at least one citation.
-HAS_OUR_DOC=$(echo "$SCORE" | jq --arg id "$DOC_ID" \
-  '[.issues[].citations[] | select(.documentId == $id)] | length')
-(( HAS_OUR_DOC >= 1 )) \
-  || { echo "[gate 6] FAIL: uploaded document $DOC_ID not cited in any Issue"; exit 1; }
-echo "[gate 6] PASS — score citations include our doc_id"
+
+# The aggregator emits DocumentStore-Critical issues for each missing doc-type.
+# This packet only uploaded a License, so DEA / BoardCert / Malpractice should
+# each produce one — that's proof the score path goes through the aggregator
+# and not the old hand-curated-profile path (the seed fixture has all four
+# *Info records populated, so the pre-rewire handler would have emitted zero
+# Missing-Document Issues).
+HAS_DOCSTORE_CRITICAL=$(echo "$SCORE" | jq '[.issues[] | select(.validator == "DocumentStore" and .severity == "Critical")] | length')
+(( HAS_DOCSTORE_CRITICAL >= 1 )) \
+  || { echo "[gate 6] FAIL: no DocumentStore-Critical Issue; aggregator did not run"; exit 1; }
+
+# Citation.documentId population on VALIDATOR-emitted Issues is unit-tested
+# at LicenseStatusValidatorTests.CitationCarriesProvenance_…; the clean packet
+# doesn't trigger any validator branch, so we don't re-assert it here.
+echo "[gate 6] PASS — $HAS_DOCSTORE_CRITICAL DocumentStore-Critical issue(s) emitted by aggregator"
 
 # ── Gate 7: eval runner produces non-zero accuracy table ─────────────────
 echo
