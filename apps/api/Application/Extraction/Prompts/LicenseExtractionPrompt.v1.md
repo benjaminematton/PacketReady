@@ -37,4 +37,4 @@ Return one JSON object matching this schema exactly. No prose, no markdown fence
 }
 ```
 
-Every field in the schema must be present. If a field is genuinely absent from the document, set its `value` to null, leave `page` and `bbox` at the best location of the missing-field area (or page 1 / full page), and report its confidence as 0.00.
+Every field in the schema must be present. If a field is genuinely absent from the document, set its `value` to null, leave `page` and `bbox` at the best location of the missing-field area (or page 1 / full page), and report its confidence as the literal number `0.00` (not `null`).

@@ -320,6 +320,8 @@ The `rationale` is for Langfuse debugging only — not persisted to `documents`.
 
 **Persistence (Path B):** the intake endpoint persists the full structured output — `fields` (flattened to value-only for the JSONB column), `field_locations`, and `confidence` — to `document_extractions`. The response body is `{ documentId, docType, docTypeConfidence, extractionId }`; no fields in the response (the dashboard reads them back through the score endpoint).
 
+**Anthropic structured-output schema subset (load-bearing).** The schema fed to `ChatResponseFormat.ForJsonSchema` is validated twice — once by `Anthropic.SDK`'s `EnsureAdditionalPropertiesFalse` preprocessor, and once by Anthropic's server-side validator. The intersection of what both accept is narrower than draft-2020-12 JSON Schema. Use only the structural keywords: `type`, `properties`, `required`, `additionalProperties`, `items`, `enum`, `anyOf`. Numeric ranges (`minimum`, `maximum`), array cardinality (`minItems`, `maxItems`), and type-array unions (`"type": ["string", "null"]`) are rejected — express nullability via `{ "anyOf": [ { "type": "string" }, { "type": "null" } ] }` and enforce ranges + cardinality post-parse in `SonnetExtractorBase.ValidateEnvelope` (page ≥ 1, bbox is exactly 4 finite numbers, confidence ∈ [0, 1]). The validator runs on every extraction; failures throw `ExtractorResponseException`, which the intake handler converts to a 5xx.
+
 **Prompt-file shape (locked):**
 
 ```md

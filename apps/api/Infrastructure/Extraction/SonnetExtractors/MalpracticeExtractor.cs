@@ -7,8 +7,8 @@ namespace PacketReady.Infrastructure.Extraction.SonnetExtractors;
 
 /// <summary>
 /// Malpractice insurance certificate-of-coverage extractor. Five string fields;
-/// expects two-page documents in the wild (carrier letterhead + the actual
-/// certificate), so per-field <c>page</c> matters more here than for the
+/// the certificates are routinely two pages (carrier letterhead + the actual
+/// coverage page), so per-field <c>page</c> matters more here than for the
 /// single-page License/DEA/BoardCert extractors.
 /// </summary>
 internal sealed class MalpracticeExtractor : SonnetExtractorBase
@@ -27,82 +27,12 @@ internal sealed class MalpracticeExtractor : SonnetExtractorBase
     public override string PromptResourceName => PromptKeys.MalpracticeExtraction;
     protected override string SchemaName => "malpractice_extraction";
 
-    protected override string JsonSchema => """
+    protected override IReadOnlyList<FieldSpec> Fields { get; } = new FieldSpec[]
     {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["fields", "confidence"],
-      "properties": {
-        "fields": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["fullName", "carrier", "policyNumber", "expiryDate", "status"],
-          "properties": {
-            "fullName": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["value", "page", "bbox"],
-              "properties": {
-                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
-                "page":  { "type": "integer" },
-                "bbox":  { "type": "array", "items": { "type": "number" } }
-              }
-            },
-            "carrier": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["value", "page", "bbox"],
-              "properties": {
-                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
-                "page":  { "type": "integer" },
-                "bbox":  { "type": "array", "items": { "type": "number" } }
-              }
-            },
-            "policyNumber": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["value", "page", "bbox"],
-              "properties": {
-                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
-                "page":  { "type": "integer" },
-                "bbox":  { "type": "array", "items": { "type": "number" } }
-              }
-            },
-            "expiryDate": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["value", "page", "bbox"],
-              "properties": {
-                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
-                "page":  { "type": "integer" },
-                "bbox":  { "type": "array", "items": { "type": "number" } }
-              }
-            },
-            "status": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["value", "page", "bbox"],
-              "properties": {
-                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
-                "page":  { "type": "integer" },
-                "bbox":  { "type": "array", "items": { "type": "number" } }
-              }
-            }
-          }
-        },
-        "confidence": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["fullName", "carrier", "policyNumber", "expiryDate", "status"],
-          "properties": {
-            "fullName":     { "type": "number" },
-            "carrier":      { "type": "number" },
-            "policyNumber": { "type": "number" },
-            "expiryDate":   { "type": "number" },
-            "status":       { "type": "number" }
-          }
-        }
-      }
-    }
-    """;
+        new("fullName",     FieldValueSchemas.NullableString),
+        new("carrier",      FieldValueSchemas.NullableString),
+        new("policyNumber", FieldValueSchemas.NullableString),
+        new("expiryDate",   FieldValueSchemas.NullableString),
+        new("status",       FieldValueSchemas.NullableString),
+    };
 }

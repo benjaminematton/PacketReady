@@ -38,4 +38,4 @@ Return one JSON object matching this schema exactly. No prose, no markdown fence
 }
 ```
 
-Every field in the schema must be present. If a field is genuinely absent, set `value` to null and report confidence as 0.00.
+Every field in the schema must be present. If a field is genuinely absent, set `value` to null and report confidence as the literal number `0.00` (not `null`).

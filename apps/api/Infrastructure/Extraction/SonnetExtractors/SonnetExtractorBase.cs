@@ -11,13 +11,21 @@ namespace PacketReady.Infrastructure.Extraction.SonnetExtractors;
 /// <summary>
 /// Shared body of the four Sonnet-backed extractors. Each subclass supplies
 /// <see cref="DocType"/>, <see cref="SchemaVersion"/>, <see cref="PromptResourceName"/>,
-/// and the JSON-schema-constrained output shape — everything else (PDF-to-message,
-/// structured-output call, response splitting, token accounting) lives here.
+/// <see cref="SchemaName"/>, and a <see cref="Fields"/> list — the base class
+/// assembles the JSON schema, drives the structured-output call, validates the
+/// per-field envelope, and splits the response into the three storage-shape JSONBs.
 ///
 /// <para>The Anthropic SDK is reached through Microsoft.Extensions.AI's
 /// <see cref="IChatClient"/>: <c>DataContent</c> with the <c>application/pdf</c>
 /// media type maps to Anthropic's document block; <c>ChatOptions.ResponseFormat</c>
 /// = <c>ChatResponseFormat.ForJsonSchema</c> forces structured output.</para>
+///
+/// <para>The schema is built from <see cref="Fields"/> using the Anthropic-accepted
+/// subset only: <c>type</c>, <c>properties</c>, <c>required</c>,
+/// <c>additionalProperties</c>, <c>items</c>, <c>enum</c>, <c>anyOf</c>. Numeric
+/// ranges (<c>minimum</c>/<c>maximum</c>) and array cardinality
+/// (<c>minItems</c>/<c>maxItems</c>) are rejected by the server-side validator;
+/// those bounds are enforced post-parse in <see cref="ValidateEnvelope"/>.</para>
 /// </summary>
 internal abstract class SonnetExtractorBase : IDocTypeExtractor
 {
@@ -28,26 +36,27 @@ internal abstract class SonnetExtractorBase : IDocTypeExtractor
     /// </summary>
     public const string ModelId = "claude-sonnet-4-6";
 
-    // Temperature = 0 for deterministic extraction. The LLM still varies under
-    // load (provider-side caching, batching), but t=0 is the only honest knob.
     private const float Temperature = 0f;
 
-    // Conservative ceiling on the LLM output: 6-field extractions land
-    // ~400 tokens; 2 KB output covers the full quartet of doc types with
-    // headroom for verbose status strings. Cuts off runaway completions.
+    // 6-field extractions land ~400 tokens; 2 KB covers the four doc types with
+    // headroom. Outputs at or above NearCapOutputTokens are likely truncated —
+    // SplitLlmResponse attaches that context to JsonException re-throws.
     private const int MaxOutputTokens = 2048;
+    private const int NearCapOutputTokens = (int)(MaxOutputTokens * 0.9);
 
     private readonly IChatClient _chat;
     private readonly IPromptLoader _prompts;
     private readonly PromptHasher _hasher;
     private readonly ILogger _logger;
 
+    // Schema is composed from the constant `Fields` list once per extractor
+    // instance; reused across every ExtractAsync call. JsonDocument is thread-
+    // safe for read after parse, so a single doc per extractor is sufficient.
+    private readonly Lazy<JsonDocument> _schemaDoc;
+
     public abstract DocType DocType { get; }
     public abstract string SchemaVersion { get; }
     public abstract string PromptResourceName { get; }
-
-    /// <summary>JSON-schema text the LLM response must conform to.</summary>
-    protected abstract string JsonSchema { get; }
 
     /// <summary>
     /// Human-friendly schema name passed to the Anthropic adapter. Used as a
@@ -55,6 +64,12 @@ internal abstract class SonnetExtractorBase : IDocTypeExtractor
     /// enforce structured output.
     /// </summary>
     protected abstract string SchemaName { get; }
+
+    /// <summary>
+    /// Ordered list of fields the extractor produces. The base class generates
+    /// the JSON schema and the <c>required</c> arrays from this list.
+    /// </summary>
+    protected abstract IReadOnlyList<FieldSpec> Fields { get; }
 
     protected SonnetExtractorBase(
         IChatClient chat,
@@ -66,6 +81,7 @@ internal abstract class SonnetExtractorBase : IDocTypeExtractor
         _prompts = prompts;
         _hasher = hasher;
         _logger = logger;
+        _schemaDoc = new Lazy<JsonDocument>(() => JsonDocument.Parse(BuildSchemaJson()));
     }
 
     public async Task<ExtractionResult> ExtractAsync(ReadOnlyMemory<byte> pdf, CancellationToken ct)
@@ -76,9 +92,6 @@ internal abstract class SonnetExtractorBase : IDocTypeExtractor
         var systemPrompt = await _prompts.LoadAsync(PromptResourceName, ct);
         var promptHash = await _hasher.HashOfAsync(PromptResourceName, ct);
 
-        // System message: the loaded prompt verbatim.
-        // User message: the PDF bytes as a document content block + a thin
-        // instruction. Sonnet reads the PDF; the schema enforces the shape.
         var messages = new List<ChatMessage>
         {
             new(ChatRole.System, systemPrompt),
@@ -89,14 +102,13 @@ internal abstract class SonnetExtractorBase : IDocTypeExtractor
             }),
         };
 
-        using var schemaDoc = JsonDocument.Parse(JsonSchema);
         var options = new ChatOptions
         {
             ModelId = ModelId,
             Temperature = Temperature,
             MaxOutputTokens = MaxOutputTokens,
             ResponseFormat = ChatResponseFormat.ForJsonSchema(
-                schemaDoc.RootElement,
+                _schemaDoc.Value.RootElement,
                 schemaName: SchemaName,
                 schemaDescription: $"Structured output for {DocType} extraction ({SchemaVersion})."),
         };
@@ -106,23 +118,12 @@ internal abstract class SonnetExtractorBase : IDocTypeExtractor
         var rawJson = ExtractStructuredJson(response);
         if (string.IsNullOrWhiteSpace(rawJson))
             throw new ExtractorResponseException(
-                $"Extractor {DocType} returned no usable JSON in response (neither Text nor FunctionCallContent).");
+                $"Extractor {DocType} returned no usable JSON in response (neither FunctionCallContent nor Text).");
 
-        var (fieldsJson, locationsJson, confidenceJson) = SplitLlmResponse(rawJson);
-
-        // Token counts are best-effort: M.E.AI populates UsageDetails when the
-        // provider returns it. Anthropic returns it on the final message; we
-        // clamp to 0 if missing rather than throw — input tokens being absent
-        // shouldn't fail the call, just lose the cost-accounting fidelity.
         var inputTokens = (int)(response.Usage?.InputTokenCount ?? 0);
         var outputTokens = (int)(response.Usage?.OutputTokenCount ?? 0);
 
-        if (outputTokens >= (int)(MaxOutputTokens * 0.9))
-        {
-            _logger.LogWarning(
-                "Sonnet extraction near MaxOutputTokens ceiling: docType={DocType}, out={OutTokens}/{Cap} — risk of truncated JSON",
-                DocType, outputTokens, MaxOutputTokens);
-        }
+        var (fieldsJson, locationsJson, confidenceJson) = SplitLlmResponse(rawJson, outputTokens);
 
         _logger.LogInformation(
             "Sonnet extraction completed: docType={DocType}, schema={SchemaVersion}, in={InTokens}, out={OutTokens}",
@@ -139,19 +140,16 @@ internal abstract class SonnetExtractorBase : IDocTypeExtractor
     }
 
     /// <summary>
-    /// Pulls the structured JSON out of a M.E.AI <see cref="ChatResponse"/>. The
-    /// Anthropic adapter for <c>ChatResponseFormat.ForJsonSchema</c> synthesizes
-    /// a forced tool call; depending on adapter version the JSON surfaces either
-    /// as the assistant text (<c>response.Text</c>) or as the <c>Arguments</c>
-    /// of a <see cref="FunctionCallContent"/> on the message contents. We try
-    /// both so a minor M.E.AI bump doesn't silently start returning empty.
+    /// Pulls the structured JSON out of a M.E.AI <see cref="ChatResponse"/>.
+    /// <c>ChatResponseFormat.ForJsonSchema</c> is implemented as a forced tool
+    /// call on the Anthropic adapter, so <see cref="FunctionCallContent"/> is
+    /// the load-bearing path. <see cref="ChatResponse.Text"/> is a fallback
+    /// for adapter versions that surfaced the JSON as plain text — and for
+    /// versions that emit both (text wrapper + tool call), the function call
+    /// wins so we never feed the wrapper into <c>JsonDocument.Parse</c>.
     /// </summary>
     internal static string ExtractStructuredJson(ChatResponse response)
     {
-        var text = response.Text;
-        if (!string.IsNullOrWhiteSpace(text))
-            return text;
-
         foreach (var msg in response.Messages)
         {
             foreach (var content in msg.Contents)
@@ -161,15 +159,23 @@ internal abstract class SonnetExtractorBase : IDocTypeExtractor
             }
         }
 
-        return string.Empty;
+        return response.Text ?? string.Empty;
     }
 
     /// <summary>
-    /// Splits Sonnet's combined response into the three storage-shape JSONBs.
-    /// Sonnet returns <c>{ fields: { k: { value, page, bbox } }, confidence: { k: x } }</c>;
+    /// Splits Sonnet's combined response into the three storage-shape JSONBs
+    /// and validates the per-field envelope. Sonnet returns
+    /// <c>{ fields: { k: { value, page, bbox } }, confidence: { k: x } }</c>;
     /// the DB has separate columns for values, locations, and confidences.
+    ///
+    /// <para><paramref name="outputTokens"/> is used only to enrich the error
+    /// when the response is unparseable JSON — counts at or above
+    /// <c>NearCapOutputTokens</c> indicate likely truncation, which the
+    /// operator should resolve by raising the cap, not by retrying the
+    /// prompt.</para>
     /// </summary>
-    internal static (string Fields, string Locations, string Confidence) SplitLlmResponse(string rawJson)
+    internal static (string Fields, string Locations, string Confidence) SplitLlmResponse(
+        string rawJson, int outputTokens = 0)
     {
         JsonDocument doc;
         try
@@ -178,8 +184,11 @@ internal abstract class SonnetExtractorBase : IDocTypeExtractor
         }
         catch (JsonException ex)
         {
+            var hint = outputTokens >= NearCapOutputTokens
+                ? $" (output tokens {outputTokens} ≥ {NearCapOutputTokens}/{MaxOutputTokens} — likely truncated)"
+                : "";
             throw new ExtractorResponseException(
-                $"Extractor response was not valid JSON: {Truncate(rawJson)}", ex);
+                $"Extractor response was not valid JSON{hint}: {Truncate(rawJson)}", ex);
         }
 
         using (doc)
@@ -194,23 +203,16 @@ internal abstract class SonnetExtractorBase : IDocTypeExtractor
             if (!root.TryGetProperty("confidence", out var confidence) || confidence.ValueKind != JsonValueKind.Object)
                 throw new ExtractorResponseException("Extractor response missing object 'confidence'.");
 
-            // Build the value-only map + the location map by walking the fields
-            // object. Each per-field envelope is { value, page, bbox } — we
-            // pluck `value` into one map, `(page, bbox)` into another. Missing
-            // sub-properties on any field is a hard failure: the schema-forced
-            // output should never omit them, so reaching here without them is
-            // an LLM contract break, not a recoverable input.
+            ValidateEnvelope(fields, confidence);
+
             return (
                 WriteToString(w =>
                 {
                     w.WriteStartObject();
                     foreach (var prop in fields.EnumerateObject())
                     {
-                        if (!prop.Value.TryGetProperty("value", out var v))
-                            throw new ExtractorResponseException(
-                                $"Field '{prop.Name}' missing 'value' in extractor response.");
                         w.WritePropertyName(prop.Name);
-                        v.WriteTo(w);
+                        prop.Value.GetProperty("value").WriteTo(w);
                     }
                     w.WriteEndObject();
                 }),
@@ -219,19 +221,12 @@ internal abstract class SonnetExtractorBase : IDocTypeExtractor
                     w.WriteStartObject();
                     foreach (var prop in fields.EnumerateObject())
                     {
-                        if (!prop.Value.TryGetProperty("page", out var pageProp))
-                            throw new ExtractorResponseException(
-                                $"Field '{prop.Name}' missing 'page' in extractor response.");
-                        if (!prop.Value.TryGetProperty("bbox", out var bboxProp))
-                            throw new ExtractorResponseException(
-                                $"Field '{prop.Name}' missing 'bbox' in extractor response.");
-
                         w.WritePropertyName(prop.Name);
                         w.WriteStartObject();
                         w.WritePropertyName("page");
-                        pageProp.WriteTo(w);
+                        prop.Value.GetProperty("page").WriteTo(w);
                         w.WritePropertyName("bbox");
-                        bboxProp.WriteTo(w);
+                        prop.Value.GetProperty("bbox").WriteTo(w);
                         w.WriteEndObject();
                     }
                     w.WriteEndObject();
@@ -241,10 +236,122 @@ internal abstract class SonnetExtractorBase : IDocTypeExtractor
         }
     }
 
+    /// <summary>
+    /// Post-parse bounds check for the constraints the Anthropic schema subset
+    /// can't express: <c>page ≥ 1</c>, <c>bbox</c> is exactly 4 finite numbers,
+    /// and each confidence value sits in <c>[0, 1]</c>. The prompts ask for
+    /// these — Sonnet honors them at t=0 — but a silent drift would otherwise
+    /// land in the <c>field_locations</c> / <c>confidence</c> JSONB columns
+    /// and corrupt downstream consumers (highlight overlay, score gating).
+    /// </summary>
+    private static void ValidateEnvelope(JsonElement fields, JsonElement confidence)
+    {
+        foreach (var prop in fields.EnumerateObject())
+        {
+            var envelope = prop.Value;
+            if (envelope.ValueKind != JsonValueKind.Object)
+                throw new ExtractorResponseException(
+                    $"Field '{prop.Name}' envelope is not an object (kind={envelope.ValueKind}).");
+
+            if (!envelope.TryGetProperty("value", out _))
+                throw new ExtractorResponseException(
+                    $"Field '{prop.Name}' missing 'value' in extractor response.");
+
+            if (!envelope.TryGetProperty("page", out var pageEl))
+                throw new ExtractorResponseException(
+                    $"Field '{prop.Name}' missing 'page' in extractor response.");
+            if (pageEl.ValueKind != JsonValueKind.Number || !pageEl.TryGetInt32(out var page) || page < 1)
+                throw new ExtractorResponseException(
+                    $"Field '{prop.Name}' has invalid 'page' (must be integer ≥ 1, got {pageEl.GetRawText()}).");
+
+            if (!envelope.TryGetProperty("bbox", out var bboxEl))
+                throw new ExtractorResponseException(
+                    $"Field '{prop.Name}' missing 'bbox' in extractor response.");
+            if (bboxEl.ValueKind != JsonValueKind.Array || bboxEl.GetArrayLength() != 4)
+                throw new ExtractorResponseException(
+                    $"Field '{prop.Name}' has invalid 'bbox' (must be array of 4 numbers, got {bboxEl.GetRawText()}).");
+            foreach (var coord in bboxEl.EnumerateArray())
+            {
+                if (coord.ValueKind != JsonValueKind.Number ||
+                    !coord.TryGetDouble(out var n) ||
+                    double.IsNaN(n) || double.IsInfinity(n))
+                    throw new ExtractorResponseException(
+                        $"Field '{prop.Name}' has non-finite 'bbox' coordinate (got {coord.GetRawText()}).");
+            }
+        }
+
+        foreach (var prop in confidence.EnumerateObject())
+        {
+            var c = prop.Value;
+            if (c.ValueKind != JsonValueKind.Number ||
+                !c.TryGetDouble(out var score) ||
+                double.IsNaN(score) || double.IsInfinity(score) ||
+                score < 0.0 || score > 1.0)
+                throw new ExtractorResponseException(
+                    $"Field '{prop.Name}' has invalid 'confidence' (must be number in [0, 1], got {c.GetRawText()}).");
+        }
+    }
+
+    /// <summary>
+    /// Renders the wrapping object + value-envelope + confidence schemas from
+    /// the subclass's <see cref="Fields"/> list. The wrapping object is
+    /// constant across extractors; only the field set varies.
+    /// <para><c>internal</c> so the Tests project can snapshot the generated
+    /// schema and confirm it stays in the Anthropic-accepted subset.</para>
+    /// </summary>
+    internal string BuildSchemaJson()
+    {
+        if (Fields.Count == 0)
+            throw new InvalidOperationException(
+                $"Extractor {GetType().Name} declared no fields.");
+
+        var requiredList = string.Join(", ", Fields.Select(f => $"\"{f.Name}\""));
+
+        var fieldEntries = string.Join(",\n", Fields.Select(f => $$"""
+                "{{f.Name}}": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["value", "page", "bbox"],
+                  "properties": {
+                    "value": {{f.ValueSchemaJson}},
+                    "page":  { "type": "integer" },
+                    "bbox":  { "type": "array", "items": { "type": "number" } }
+                  }
+                }
+        """));
+
+        var confidenceEntries = string.Join(",\n", Fields.Select(f =>
+            $$"""            "{{f.Name}}": { "type": "number" }"""));
+
+        return $$"""
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["fields", "confidence"],
+          "properties": {
+            "fields": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [{{requiredList}}],
+              "properties": {
+        {{fieldEntries}}
+              }
+            },
+            "confidence": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [{{requiredList}}],
+              "properties": {
+        {{confidenceEntries}}
+              }
+            }
+          }
+        }
+        """;
+    }
+
     private static string WriteToString(Action<Utf8JsonWriter> body)
     {
-        // ArrayBufferWriter + GetSpan avoids the MemoryStream.ToArray() copy
-        // (writer.WrittenSpan is the already-flushed buffer).
         var buf = new System.Buffers.ArrayBufferWriter<byte>();
         using (var w = new Utf8JsonWriter(buf))
         {
@@ -255,6 +362,42 @@ internal abstract class SonnetExtractorBase : IDocTypeExtractor
 
     private static string Truncate(string s) =>
         s.Length <= 200 ? s : s[..200] + "…";
+}
+
+/// <summary>
+/// One field in an extractor's output: the field's name as the LLM returns it,
+/// plus the JSON-schema fragment for its <c>value</c> slot. The wrapping
+/// envelope (<c>value</c>/<c>page</c>/<c>bbox</c>) and the confidence schema
+/// are added by <see cref="SonnetExtractorBase"/>.
+/// </summary>
+internal sealed record FieldSpec(string Name, string ValueSchemaJson);
+
+/// <summary>
+/// Pre-built value-schema fragments for the kinds of fields the P3 extractors
+/// produce. All variants accept <c>null</c> for the missing-field case.
+/// </summary>
+internal static class FieldValueSchemas
+{
+    /// <summary>String value, or <c>null</c> when the field is absent.</summary>
+    public const string NullableString =
+        """{ "anyOf": [ { "type": "string" }, { "type": "null" } ] }""";
+
+    /// <summary>
+    /// Array of strings drawn from a fixed enum, or <c>null</c> when absent.
+    /// Used for DEA's <c>schedules</c> field.
+    /// </summary>
+    public static string NullableStringEnumArray(params string[] enumValues)
+    {
+        var enumList = string.Join(", ", enumValues.Select(v => $"\"{v}\""));
+        return $$"""
+        {
+          "anyOf": [
+            { "type": "array", "items": { "type": "string", "enum": [{{enumList}}] } },
+            { "type": "null" }
+          ]
+        }
+        """;
+    }
 }
 
 public sealed class ExtractorResponseException : Exception

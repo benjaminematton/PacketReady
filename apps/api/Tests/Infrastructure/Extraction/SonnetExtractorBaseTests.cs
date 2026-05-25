@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.AI;
 using PacketReady.Infrastructure.Extraction.SonnetExtractors;
 using Xunit;
 
@@ -149,5 +150,137 @@ public class SonnetExtractorBaseTests
         var ex = Assert.Throws<ExtractorResponseException>(
             () => SonnetExtractorBase.SplitLlmResponse("{unterminated"));
         Assert.Contains("not valid JSON", ex.Message);
+    }
+
+    [Fact]
+    public void Split_AttachesTruncationHintWhenOutputNearCap()
+    {
+        // Unparseable response + outputTokens near the 2048 cap → the error
+        // message should call out likely truncation so operators don't chase
+        // a prompt bug. 1900 > 0.9 * 2048 = 1843.
+        var ex = Assert.Throws<ExtractorResponseException>(
+            () => SonnetExtractorBase.SplitLlmResponse("{unterminated", outputTokens: 1900));
+        Assert.Contains("likely truncated", ex.Message);
+        Assert.Contains("1900", ex.Message);
+    }
+
+    [Fact]
+    public void Split_ThrowsWhenPageBelowOne()
+    {
+        var raw = """
+        {
+          "fields":     { "fullName": { "value": "x", "page": 0, "bbox": [0, 0, 1, 1] } },
+          "confidence": { "fullName": 0.9 }
+        }
+        """;
+
+        var ex = Assert.Throws<ExtractorResponseException>(
+            () => SonnetExtractorBase.SplitLlmResponse(raw));
+        Assert.Contains("'page'", ex.Message);
+        Assert.Contains("≥ 1", ex.Message);
+    }
+
+    [Fact]
+    public void Split_ThrowsWhenBboxIsWrongLength()
+    {
+        var raw = """
+        {
+          "fields":     { "fullName": { "value": "x", "page": 1, "bbox": [0, 0, 1] } },
+          "confidence": { "fullName": 0.9 }
+        }
+        """;
+
+        var ex = Assert.Throws<ExtractorResponseException>(
+            () => SonnetExtractorBase.SplitLlmResponse(raw));
+        Assert.Contains("'bbox'", ex.Message);
+        Assert.Contains("4 numbers", ex.Message);
+    }
+
+    [Fact]
+    public void Split_ThrowsWhenBboxCoordinateIsNonFinite()
+    {
+        // System.Text.Json rejects bare NaN, but a string masquerading as a
+        // number gets caught here too — the validator must reject anything
+        // that isn't a real, finite number.
+        var raw = """
+        {
+          "fields":     { "fullName": { "value": "x", "page": 1, "bbox": [0, 0, 1, "oops"] } },
+          "confidence": { "fullName": 0.9 }
+        }
+        """;
+
+        var ex = Assert.Throws<ExtractorResponseException>(
+            () => SonnetExtractorBase.SplitLlmResponse(raw));
+        Assert.Contains("non-finite 'bbox'", ex.Message);
+    }
+
+    [Fact]
+    public void Split_ThrowsWhenConfidenceOutOfRange()
+    {
+        var raw = """
+        {
+          "fields":     { "fullName": { "value": "x", "page": 1, "bbox": [0, 0, 1, 1] } },
+          "confidence": { "fullName": 1.5 }
+        }
+        """;
+
+        var ex = Assert.Throws<ExtractorResponseException>(
+            () => SonnetExtractorBase.SplitLlmResponse(raw));
+        Assert.Contains("'confidence'", ex.Message);
+        Assert.Contains("[0, 1]", ex.Message);
+    }
+
+    [Fact]
+    public void Split_ThrowsWhenConfidenceIsNullInsteadOfZero()
+    {
+        // The prompts pin "use 0.00, not null" for absent fields — if Sonnet
+        // ever drifts and emits null, the validator must catch it rather than
+        // let a null land in the confidence JSONB.
+        var raw = """
+        {
+          "fields":     { "fullName": { "value": null, "page": 1, "bbox": [0, 0, 0, 0] } },
+          "confidence": { "fullName": null }
+        }
+        """;
+
+        var ex = Assert.Throws<ExtractorResponseException>(
+            () => SonnetExtractorBase.SplitLlmResponse(raw));
+        Assert.Contains("'confidence'", ex.Message);
+    }
+
+    [Fact]
+    public void ExtractStructuredJson_PrefersFunctionCallOverPlainText()
+    {
+        // M.E.AI's Anthropic adapter for ChatResponseFormat.ForJsonSchema is
+        // implemented as a forced tool call; if a future build also surfaces
+        // wrapper text, the function-call arguments must win — otherwise we
+        // feed the wrapper into JsonDocument.Parse and get an opaque error.
+        var args = new Dictionary<string, object?>
+        {
+            ["fields"] = new Dictionary<string, object?>(),
+            ["confidence"] = new Dictionary<string, object?>(),
+        };
+        var message = new ChatMessage(ChatRole.Assistant, new List<AIContent>
+        {
+            new TextContent("Here's the data:"),
+            new FunctionCallContent("call_1", "license_extraction", args),
+        });
+        var response = new ChatResponse(message);
+
+        var raw = SonnetExtractorBase.ExtractStructuredJson(response);
+
+        using var doc = JsonDocument.Parse(raw);
+        Assert.Equal(JsonValueKind.Object, doc.RootElement.GetProperty("fields").ValueKind);
+        Assert.Equal(JsonValueKind.Object, doc.RootElement.GetProperty("confidence").ValueKind);
+    }
+
+    [Fact]
+    public void ExtractStructuredJson_FallsBackToTextWhenNoFunctionCall()
+    {
+        var response = new ChatResponse(new ChatMessage(ChatRole.Assistant, """{"fields":{},"confidence":{}}"""));
+
+        var raw = SonnetExtractorBase.ExtractStructuredJson(response);
+
+        Assert.Equal("""{"fields":{},"confidence":{}}""", raw);
     }
 }

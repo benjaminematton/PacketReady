@@ -27,13 +27,13 @@ public class PinnedShippedPromptHashesTests
     private const string ClassifierHash =
         "cee7814eab693d8fe6cc3b546ecf7bb53ce5781c5821688aa0dfa6e83c2daf91";
     private const string LicenseExtractionHash =
-        "62b8dd7331e38cb4fde7c78a92a1472c9ee3ca12240ab747aa9947cf54f1b0e1";
+        "f80beae271a3c58eaec89b945b47062ce36fb06212c159d92f30d6afeb18cca3";
     private const string DeaExtractionHash =
-        "f873ced7b1baece2c05e9aa51b6fafa9cbb5fd9bad33293b2c02cce7cdd95e4e";
+        "e4323093b5eb57ea2d31c811d061ee594d4b27673474b52fdf32b14cc999ba59";
     private const string BoardCertExtractionHash =
-        "ad9c0db03b4c9b2226ba096c02a68f08a34f42286cfd46ce754514ecd28f19d5";
+        "683828d87da17ffb3b227339ca2126ca55da9e658d1510d7459aa332b9398bc4";
     private const string MalpracticeExtractionHash =
-        "f34a452849da64ed047bd0e06926a7aeb9f4fb4582f563e7b5ab1631da232355";
+        "45b8b2a202ea0cf894bcdec44f36b7059d0e794cb57477f45db4a2b239cbe19f";
 
     private static readonly IReadOnlyDictionary<string, string> Pinned =
         new Dictionary<string, string>

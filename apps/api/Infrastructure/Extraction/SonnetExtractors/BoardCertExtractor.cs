@@ -6,9 +6,9 @@ using PacketReady.Domain.Documents;
 namespace PacketReady.Infrastructure.Extraction.SonnetExtractors;
 
 /// <summary>
-/// ABMS member-board certification extractor. Six string fields, identical
-/// envelope shape to <see cref="LicenseExtractor"/>; the doc-specific contract
-/// lives in the prompt (board acronym normalization, subspecialty handling).
+/// ABMS member-board certification extractor. Six string fields; the doc-specific
+/// contract (board acronym normalization, subspecialty handling) lives in
+/// <c>BoardCertExtractionPrompt.v1.md</c>.
 /// </summary>
 internal sealed class BoardCertExtractor : SonnetExtractorBase
 {
@@ -26,93 +26,13 @@ internal sealed class BoardCertExtractor : SonnetExtractorBase
     public override string PromptResourceName => PromptKeys.BoardCertExtraction;
     protected override string SchemaName => "board_cert_extraction";
 
-    protected override string JsonSchema => """
+    protected override IReadOnlyList<FieldSpec> Fields { get; } = new FieldSpec[]
     {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["fields", "confidence"],
-      "properties": {
-        "fields": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["fullName", "board", "specialty", "issueDate", "expiryDate", "status"],
-          "properties": {
-            "fullName": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["value", "page", "bbox"],
-              "properties": {
-                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
-                "page":  { "type": "integer" },
-                "bbox":  { "type": "array", "items": { "type": "number" } }
-              }
-            },
-            "board": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["value", "page", "bbox"],
-              "properties": {
-                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
-                "page":  { "type": "integer" },
-                "bbox":  { "type": "array", "items": { "type": "number" } }
-              }
-            },
-            "specialty": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["value", "page", "bbox"],
-              "properties": {
-                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
-                "page":  { "type": "integer" },
-                "bbox":  { "type": "array", "items": { "type": "number" } }
-              }
-            },
-            "issueDate": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["value", "page", "bbox"],
-              "properties": {
-                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
-                "page":  { "type": "integer" },
-                "bbox":  { "type": "array", "items": { "type": "number" } }
-              }
-            },
-            "expiryDate": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["value", "page", "bbox"],
-              "properties": {
-                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
-                "page":  { "type": "integer" },
-                "bbox":  { "type": "array", "items": { "type": "number" } }
-              }
-            },
-            "status": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["value", "page", "bbox"],
-              "properties": {
-                "value": { "anyOf": [ { "type": "string" }, { "type": "null" } ] },
-                "page":  { "type": "integer" },
-                "bbox":  { "type": "array", "items": { "type": "number" } }
-              }
-            }
-          }
-        },
-        "confidence": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["fullName", "board", "specialty", "issueDate", "expiryDate", "status"],
-          "properties": {
-            "fullName":   { "type": "number" },
-            "board":      { "type": "number" },
-            "specialty":  { "type": "number" },
-            "issueDate":  { "type": "number" },
-            "expiryDate": { "type": "number" },
-            "status":     { "type": "number" }
-          }
-        }
-      }
-    }
-    """;
+        new("fullName",   FieldValueSchemas.NullableString),
+        new("board",      FieldValueSchemas.NullableString),
+        new("specialty",  FieldValueSchemas.NullableString),
+        new("issueDate",  FieldValueSchemas.NullableString),
+        new("expiryDate", FieldValueSchemas.NullableString),
+        new("status",     FieldValueSchemas.NullableString),
+    };
 }
