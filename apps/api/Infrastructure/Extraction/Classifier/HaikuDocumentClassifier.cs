@@ -62,12 +62,14 @@ internal sealed class HaikuDocumentClassifier : IDocumentClassifier
     }
     """;
 
+    // Singleton lifetime → parse the schema once at type load. Lazy<> would be
+    // pure noise on a never-recycled instance field.
+    private static readonly JsonDocument SchemaDoc = JsonDocument.Parse(SchemaJson);
+
     private readonly IChatClient _chat;
     private readonly IPromptLoader _prompts;
     private readonly PromptHasher _hasher;
     private readonly ILogger<HaikuDocumentClassifier> _logger;
-    private readonly Lazy<JsonDocument> _schemaDoc =
-        new(() => JsonDocument.Parse(SchemaJson), isThreadSafe: true);
 
     public HaikuDocumentClassifier(
         IChatClient chat,
@@ -107,7 +109,7 @@ internal sealed class HaikuDocumentClassifier : IDocumentClassifier
             Temperature = Temperature,
             MaxOutputTokens = MaxOutputTokens,
             ResponseFormat = ChatResponseFormat.ForJsonSchema(
-                _schemaDoc.Value.RootElement,
+                SchemaDoc.RootElement,
                 schemaName: SchemaName,
                 schemaDescription: "Single-label classification of an uploaded credentialing document."),
         };
@@ -182,9 +184,7 @@ internal sealed class HaikuDocumentClassifier : IDocumentClassifier
             // fires so prompt drift is visible in telemetry instead of being
             // silently masked.
             var raw = confEl.GetDouble();
-            var confidence = raw;
-            if (confidence < 0.0) confidence = 0.0;
-            if (confidence > 1.0) confidence = 1.0;
+            var confidence = Math.Clamp(raw, 0.0, 1.0);
             if (confidence != raw)
                 logger?.LogWarning(
                     "Classifier confidence {Raw} out of [0, 1]; clamped to {Clamped}. Investigate prompt drift.",

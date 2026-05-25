@@ -6,7 +6,6 @@ using PacketReady.Application.Abstractions;
 using PacketReady.Application.Documents;
 using PacketReady.Application.Extraction.Extract;
 using PacketReady.Application.Extraction.Persist;
-using PacketReady.Application.Extraction.Upload;
 using PacketReady.Domain.Documents;
 
 namespace PacketReady.Application.Extraction.Reextract;
@@ -23,10 +22,10 @@ namespace PacketReady.Application.Extraction.Reextract;
 /// model/prompt bump (P4+ when Sonnet 4.6 → 4.7 invalidates the cache).</para>
 /// </summary>
 public sealed record ReextractDocumentCommand(Guid DocumentId)
-    : IRequest<UploadDocumentResult>;
+    : IRequest<DocumentExtractionResult>;
 
 public sealed class ReextractDocumentCommandHandler
-    : IRequestHandler<ReextractDocumentCommand, UploadDocumentResult>
+    : IRequestHandler<ReextractDocumentCommand, DocumentExtractionResult>
 {
     private readonly IAppDbContext _db;
     private readonly IBlobStore _blobs;
@@ -49,7 +48,7 @@ public sealed class ReextractDocumentCommandHandler
         _logger = logger;
     }
 
-    public async Task<UploadDocumentResult> Handle(
+    public async Task<DocumentExtractionResult> Handle(
         ReextractDocumentCommand request,
         CancellationToken ct)
     {
@@ -71,7 +70,7 @@ public sealed class ReextractDocumentCommandHandler
             _logger.LogInformation(
                 "Reextract no-op: documentId={DocumentId}, docType={DocType} has no registered extractor",
                 document.Id, document.DocType);
-            return new UploadDocumentResult(
+            return new DocumentExtractionResult(
                 DocumentId: document.Id,
                 DocType: document.DocType ?? DocType.Other,
                 DocTypeConfidence: document.DocTypeConfidence ?? 0,
@@ -91,7 +90,7 @@ public sealed class ReextractDocumentCommandHandler
         var persistResult = await _persister.PersistAsync(
             document, pdfBytes, extractor, ct);
 
-        return new UploadDocumentResult(
+        return new DocumentExtractionResult(
             DocumentId: document.Id,
             DocType: document.DocType.Value,
             DocTypeConfidence: document.DocTypeConfidence ?? 0,

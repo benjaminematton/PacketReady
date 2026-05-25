@@ -28,32 +28,19 @@ public sealed record UploadDocumentCommand(
     string MimeType,
     int PageCount,
     Uploader UploadedBy
-) : IRequest<UploadDocumentResult>;
-
-/// <summary>
-/// <see cref="ExtractionId"/> is null when the classifier produced <c>Other</c>
-/// (no extractor is registered for it; aggregator skips Other docs). The
-/// endpoint chooses 200 vs 201 on <see cref="WasCacheHit"/> — always false on
-/// first upload (each call mints a fresh <see cref="DocumentId"/>), but the
-/// reextract handler shares the same shape.
-/// </summary>
-public sealed record UploadDocumentResult(
-    Guid DocumentId,
-    DocType DocType,
-    double DocTypeConfidence,
-    int? ExtractionId,
-    bool WasCacheHit);
+) : IRequest<DocumentExtractionResult>;
 
 public sealed class UploadDocumentCommandHandler
-    : IRequestHandler<UploadDocumentCommand, UploadDocumentResult>
+    : IRequestHandler<UploadDocumentCommand, DocumentExtractionResult>
 {
     // Confidence-band thresholds per spec §"Classifier runtime fallback":
-    //   ≥ 0.85           → trust the predicted doc_type
-    //   0.50 ≤ x < 0.85  → store predicted; aggregator emits a Minor "low-
-    //                      confidence classification" Issue in slice 8
-    //   < 0.50           → store as Other; no extractor dispatch
+    //   ≥ TrustConfidenceFloor                        → trust the predicted doc_type
+    //   OtherFallbackThreshold ≤ x < TrustConfidenceFloor → store predicted; aggregator
+    //                                                  emits a Minor "low-confidence
+    //                                                  classification" Issue in slice 8
+    //   < OtherFallbackThreshold                      → store as Other; no extractor dispatch
     private const double TrustConfidenceFloor = 0.85;
-    private const double OtherFallbackCeiling = 0.50;
+    private const double OtherFallbackThreshold = 0.50;
 
     private readonly IAppDbContext _db;
     private readonly IBlobStore _blobs;
@@ -87,7 +74,7 @@ public sealed class UploadDocumentCommandHandler
         _logger = logger;
     }
 
-    public async Task<UploadDocumentResult> Handle(
+    public async Task<DocumentExtractionResult> Handle(
         UploadDocumentCommand request,
         CancellationToken ct)
     {
@@ -111,8 +98,12 @@ public sealed class UploadDocumentCommandHandler
 
         // 3. Upload bytes to blob store first. If classification or DB write
         //    fails, the blob is orphaned — acceptable (P5 may add cleanup).
+        //    Alternative considered: classify first to avoid orphan blobs on
+        //    classifier failure. Rejected — paying LLM tokens before we know
+        //    the durable store is healthy means a blob outage burns budget on
+        //    work we can't persist. Cheap orphan beats wasted tokens.
         var pdfMemory = new ReadOnlyMemory<byte>(request.PdfBytes);
-        await using var pdfStreamForBlob = new MemoryStream(request.PdfBytes, writable: false);
+        using var pdfStreamForBlob = new MemoryStream(request.PdfBytes, writable: false);
         var storageUri = await _blobs.PutAsync(
             pdfStreamForBlob,
             request.OriginalName,
@@ -123,6 +114,7 @@ public sealed class UploadDocumentCommandHandler
         //    classifier verdict + its provenance.
         var classification = await _classifier.ClassifyAsync(pdfMemory, ct);
         var (persistedDocType, persistedConfidence) = ApplyConfidenceBand(classification);
+        LogConfidenceBand(classification, persistedDocType);
 
         // 5. Persist Document row. Uses the precomputed page count from the
         //    command; Document.Create rejects values < 1 if the endpoint
@@ -166,7 +158,7 @@ public sealed class UploadDocumentCommandHandler
         //    extractionId. Aggregator skips both doc types entirely (slice 8).
         if (persistedDocType is DocType.Other or DocType.Cv)
         {
-            return new UploadDocumentResult(
+            return new DocumentExtractionResult(
                 DocumentId: document.Id,
                 DocType: persistedDocType,
                 DocTypeConfidence: persistedConfidence,
@@ -181,7 +173,7 @@ public sealed class UploadDocumentCommandHandler
         var extractor = _services.GetRequiredKeyedService<IDocTypeExtractor>(persistedDocType);
         var persistResult = await _persister.PersistAsync(document, pdfMemory, extractor, ct);
 
-        return new UploadDocumentResult(
+        return new DocumentExtractionResult(
             DocumentId: document.Id,
             DocType: persistedDocType,
             DocTypeConfidence: persistedConfidence,
@@ -191,15 +183,34 @@ public sealed class UploadDocumentCommandHandler
 
     // Per-band mapping. Confidence is always reported as the classifier said
     // (so the dashboard can show "what the model thought"); doc_type is what
-    // we PERSIST, which differs from the prediction only in the < 0.50 band.
+    // we PERSIST, which differs from the prediction only in the Other band.
     private static (DocType PersistedDocType, double PersistedConfidence) ApplyConfidenceBand(
         ClassificationResult c)
     {
-        if (c.Confidence < OtherFallbackCeiling)
+        if (c.Confidence < OtherFallbackThreshold)
             return (DocType.Other, c.Confidence);
 
-        // 0.50 ≤ x < 0.85 — store predicted; aggregator emits Minor in slice 8.
-        // ≥ 0.85 — trust.
+        // Mid + trust bands both persist the predicted type. The mid-band Minor
+        // Issue is emitted by the aggregator (slice 8), not here.
         return (c.DocType, c.Confidence);
+    }
+
+    // Real-time operator signal for classifier drift: log which band the
+    // confidence landed in. Keeps the band thresholds load-bearing in this
+    // file (otherwise TrustConfidenceFloor would be documentation-only).
+    private void LogConfidenceBand(ClassificationResult c, DocType persistedDocType)
+    {
+        if (c.Confidence < OtherFallbackThreshold)
+        {
+            _logger.LogInformation(
+                "Classifier confidence {Conf:F2} below {Floor:F2} — persisted as Other (predicted was {Predicted}).",
+                c.Confidence, OtherFallbackThreshold, c.DocType);
+        }
+        else if (c.Confidence < TrustConfidenceFloor)
+        {
+            _logger.LogInformation(
+                "Classifier confidence {Conf:F2} in mid band [{Lo:F2}, {Hi:F2}); persisted predicted {DocType}, aggregator will flag Minor.",
+                c.Confidence, OtherFallbackThreshold, TrustConfidenceFloor, persistedDocType);
+        }
     }
 }

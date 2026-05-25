@@ -114,7 +114,10 @@ public class ReextractDocumentCommandHandlerTests
 
     private sealed class Fixture
     {
-        public Guid DocumentId { get; } = Guid.NewGuid();
+        // Populated by WithDocument() from the persisted entity's real Id;
+        // stays Guid.Empty for tests that never seed a document (not-found,
+        // empty-id).
+        public Guid DocumentId { get; private set; }
         public Mock<IBlobStore> Blobs { get; } = new(MockBehavior.Strict);
         public Mock<IExtractionPersister> Persister { get; } = new(MockBehavior.Strict);
         public PacketReadyDbContext Db { get; }
@@ -173,10 +176,13 @@ public class ReextractDocumentCommandHandlerTests
                 pageCount: 1,
                 uploadedBy: Uploader.Provider,
                 now: FixedNow);
-            typeof(Document).GetProperty("Id")!.SetValue(doc, DocumentId);
 
             Db.Documents.Add(doc);
             await Db.SaveChangesAsync();
+            // Capture the real Id — Document.Create assigns Guid.NewGuid and
+            // there's no test-only override. Avoids reflection-based private-
+            // setter hacks that break silently on field rename.
+            DocumentId = doc.Id;
             return this;
         }
 

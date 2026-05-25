@@ -12,6 +12,7 @@ internal static class ProblemResults
 {
     private const string ProviderNotFoundType         = "urn:packetready:error:provider_not_found";
     private const string EmptyProviderIdType          = "urn:packetready:error:empty_provider_id";
+    private const string EmptyDocumentIdType          = "urn:packetready:error:empty_document_id";
     private const string ExtractMissingFileType       = "urn:packetready:error:extract_missing_file";
     private const string ExtractInvalidDocTypeType    = "urn:packetready:error:extract_invalid_doc_type";
     private const string ExtractDocTypeUnimplementedType  = "urn:packetready:error:extract_doc_type_unimplemented";
@@ -30,6 +31,12 @@ internal static class ProblemResults
         Results.Problem(
             type: EmptyProviderIdType,
             title: "providerId must be a non-empty Guid.",
+            statusCode: StatusCodes.Status400BadRequest);
+
+    public static IResult EmptyDocumentId() =>
+        Results.Problem(
+            type: EmptyDocumentIdType,
+            title: "documentId must be a non-empty Guid.",
             statusCode: StatusCodes.Status400BadRequest);
 
     public static IResult ExtractMissingFile() =>

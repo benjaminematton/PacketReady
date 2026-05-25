@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using PacketReady.Application.Extraction;
 using PacketReady.Application.Extraction.Reextract;
 using PacketReady.Application.Extraction.Upload;
 using PacketReady.Application.Scoring.Commands.ComputeReadinessScore;
@@ -107,9 +108,7 @@ public static class DocumentEndpoints
                 CancellationToken ct) =>
             {
                 if (documentId == Guid.Empty)
-                    return Results.Problem(
-                        title: "documentId must be a non-empty Guid.",
-                        statusCode: StatusCodes.Status400BadRequest);
+                    return ProblemResults.EmptyDocumentId();
 
                 try
                 {
@@ -137,7 +136,7 @@ public static class DocumentEndpoints
 
     // camelCase wire payload — anonymous type so System.Text.Json honors the
     // property names verbatim regardless of any future PropertyNamingPolicy.
-    private static object ToResponse(UploadDocumentResult r) => new
+    private static object ToResponse(DocumentExtractionResult r) => new
     {
         documentId = r.DocumentId,
         docType = r.DocType.ToWireString(),

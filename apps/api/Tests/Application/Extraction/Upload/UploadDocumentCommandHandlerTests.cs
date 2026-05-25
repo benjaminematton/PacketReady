@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -35,6 +36,7 @@ public class UploadDocumentCommandHandlerTests
     public async Task Handle_HappyPath_PersistsDocumentAndExtractionRow()
     {
         var fixture = await new Fixture().WithExistingProvider();
+        var stagedAudit = fixture.CaptureStagedAuditEvent();
 
         var result = await fixture.Handler.Handle(
             new UploadDocumentCommand(
@@ -62,12 +64,22 @@ public class UploadDocumentCommandHandlerTests
         Assert.Equal(3, doc.PageCount);
         Assert.Equal(Uploader.Provider, doc.UploadedBy);
 
-        // DocumentUploaded audit event staged through IAuditWriter.Stage — the
-        // mock receives the call rather than the row hitting the DB (the mock
-        // doesn't persist), so verify by interaction.
-        fixture.Audit.Verify(a => a.Stage(It.Is<AuditEvent>(e =>
-            e.EventType == AuditEventType.DocumentUploaded
-            && e.ProviderId == fixture.ProviderId)), Times.Once);
+        // DocumentUploaded audit event staged with the full payload shape the
+        // dashboard will read. Asserting on the JSON contents (not just the
+        // call interaction) catches payload-field renames silently.
+        Assert.NotNull(stagedAudit.Value);
+        var evt = stagedAudit.Value!;
+        Assert.Equal(AuditEventType.DocumentUploaded, evt.EventType);
+        Assert.Equal(fixture.ProviderId, evt.ProviderId);
+
+        using var payload = JsonDocument.Parse(evt.Payload);
+        var root = payload.RootElement;
+        Assert.Equal(result.DocumentId, root.GetProperty("documentId").GetGuid());
+        Assert.Equal("license", root.GetProperty("docType").GetString());
+        Assert.Equal(0.95, root.GetProperty("classifierConfidence").GetDouble());
+        Assert.Equal("license title + state seal", root.GetProperty("classifierRationale").GetString());
+        Assert.Equal(doc.StorageUri, root.GetProperty("storageUri").GetString());
+        Assert.Equal(3, root.GetProperty("pageCount").GetInt32());
 
         fixture.Persister.Verify(
             p => p.PersistAsync(It.IsAny<Document>(), It.IsAny<ReadOnlyMemory<byte>>(),
@@ -213,7 +225,10 @@ public class UploadDocumentCommandHandlerTests
 
     private sealed class Fixture
     {
-        public Guid ProviderId { get; } = Guid.NewGuid();
+        // Populated by WithExistingProvider() from the persisted entity's real
+        // Id. Stays Guid.Empty when no provider is seeded (e.g. the not-found
+        // test, which passes its own Guid directly).
+        public Guid ProviderId { get; private set; }
         public Mock<IBlobStore> Blobs { get; } = new(MockBehavior.Strict);
         public Mock<IDocumentClassifier> Classifier { get; } = new(MockBehavior.Strict);
         public Mock<IExtractionPersister> Persister { get; } = new(MockBehavior.Strict);
@@ -286,12 +301,12 @@ public class UploadDocumentCommandHandlerTests
                 credentialingState: "NY",
                 nowUtc: FixedNow);
             var provider = Provider.Create(profile, FixedNow);
-            // Inject the seeded provider with our well-known ProviderId so the
-            // handler's existence check finds it.
-            typeof(Provider).GetProperty("Id")!.SetValue(provider, ProviderId);
-
             Db.Providers.Add(provider);
             await Db.SaveChangesAsync();
+            // Capture the entity's real Id — Provider.Create assigns Guid.NewGuid
+            // and there's no test-only override factory. Avoids reflection-based
+            // private-setter hacks that break silently on field rename.
+            ProviderId = provider.Id;
             return this;
         }
 
@@ -314,7 +329,19 @@ public class UploadDocumentCommandHandlerTests
         // catches cases where the handler held tracked entities back from
         // commit.
         public IQueryable<Document> ReadDocuments() => _factory.CreateDbContext().Documents;
-        public IQueryable<AuditEvent> ReadAuditEvents() => _factory.CreateDbContext().AuditEvents;
+
+        // Hook for tests that need to assert on the staged AuditEvent's payload
+        // shape. Returns a holder whose .Value is populated by the handler call.
+        // (Setup + Callback because the audit mock is Loose; Invocations would
+        // also work but is more fiddly to read.)
+        public StagedAuditHolder CaptureStagedAuditEvent()
+        {
+            var holder = new StagedAuditHolder();
+            Audit.Setup(a => a.Stage(It.IsAny<AuditEvent>()))
+                .Callback<AuditEvent>(e => holder.Value = e)
+                .Returns(Guid.NewGuid());
+            return holder;
+        }
 
         private static IDocTypeExtractor BuildExtractorMock(DocType docType)
         {
@@ -324,6 +351,11 @@ public class UploadDocumentCommandHandlerTests
             m.SetupGet(x => x.PromptResourceName).Returns($"{docType}Prompt.v1.md");
             m.SetupGet(x => x.Model).Returns("claude-sonnet-4-6");
             return m.Object;
+        }
+
+        public sealed class StagedAuditHolder
+        {
+            public AuditEvent? Value { get; set; }
         }
     }
 }

@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -21,6 +22,12 @@ internal sealed class ExtractionPersister : IExtractionPersister
     // than by .NET exception type because Npgsql wraps the constraint name +
     // detail into PostgresException.SqlState — that's the load-bearing signal.
     private const string UniqueViolationSqlState = "23505";
+
+    // The composite UNIQUE that backs the (documentId, schemaVersion, model,
+    // promptHash) idempotency contract. Set in DocumentExtractionConfiguration
+    // via HasDatabaseName(...). Pinning by name here means a future unrelated
+    // UNIQUE on this table doesn't get silently swallowed as "race lost".
+    private const string IdempotencyConstraintName = "ux_document_extractions_idempotency";
 
     // Takes the concrete PacketReadyDbContext (not IAppDbContext) because
     // advisory locks + BeginTransactionAsync need the DatabaseFacade, which
@@ -48,6 +55,16 @@ internal sealed class ExtractionPersister : IExtractionPersister
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(extractor);
+
+        // Defense against a future caller wiring the wrong keyed extractor to
+        // a document. The dispatcher (upload/reextract handlers) already keys
+        // off document.DocType; this catches the case where someone resolves
+        // the extractor differently and lands the wrong fields_json under the
+        // wrong schema_version.
+        if (document.DocType != extractor.DocType)
+            throw new ArgumentException(
+                $"Extractor doc type {extractor.DocType} does not match document doc type {document.DocType}.",
+                nameof(extractor));
 
         var promptHash = await _hasher.HashOfAsync(extractor.PromptResourceName, ct);
         var model = extractor.Model;
@@ -105,7 +122,7 @@ internal sealed class ExtractionPersister : IExtractionPersister
                 document, extractor, model, promptHash, success, failureError,
                 inputTokens, outputTokens, ct);
         }
-        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        catch (DbUpdateException ex) when (IsIdempotencyRaceLost(ex))
         {
             // Step 4 — race lost. Someone else's insert won the idempotency
             // UNIQUE; re-read and return their row as a cache hit. The cost
@@ -136,18 +153,24 @@ internal sealed class ExtractionPersister : IExtractionPersister
         int outputTokens,
         CancellationToken ct)
     {
-        using var tx = await _db.Database.BeginTransactionAsync(ct);
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
         // Advisory lock — transaction-scoped, released on commit/rollback.
-        // hashtext is int4, implicitly widened to int8 for pg_advisory_xact_lock.
         // Two concurrent transactions on the same documentId block here until
-        // the first commits. Distinct documentIds whose hashtext collides will
-        // also serialize on the same lock — a perf footnote, not a correctness
-        // break; the (document_id, extraction_id) UNIQUE constraint is the
-        // identity backstop.
-        var docIdText = document.Id.ToString();
+        // the first commits.
+        //
+        // Lock key is the first 8 bytes of the document GUID read as an int64.
+        // Deterministic, parameter-binds cleanly as bigint, and avoids the
+        // hashtext(text) route — which depended on Npgsql binding strings to
+        // text and Postgres resolving hashtext(text) correctly; both true in
+        // practice but neither contractually guaranteed. Distinct documentIds
+        // whose first 8 bytes collide will serialize on the same lock — a
+        // perf footnote (~2^32 docs to expect a collision), not a correctness
+        // break; the (document_id, extraction_id) UNIQUE is the identity
+        // backstop.
+        var lockKey = BinaryPrimitives.ReadInt64LittleEndian(document.Id.ToByteArray());
         await _db.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT pg_advisory_xact_lock(hashtext({docIdText}))",
+            $"SELECT pg_advisory_xact_lock({lockKey})",
             ct);
 
         var nextExtractionId = (await _db.DocumentExtractions
@@ -187,12 +210,18 @@ internal sealed class ExtractionPersister : IExtractionPersister
         return new ExtractionPersistResult(nextExtractionId, WasCacheHit: false, row.Status);
     }
 
-    private static bool IsUniqueViolation(DbUpdateException ex)
+    // Pinned to the idempotency UNIQUE by constraint name — a future UNIQUE
+    // added to this table (e.g. a derived dedup column) will NOT be treated
+    // as "race lost". That keeps the cache-hit re-read honest: it only fires
+    // when the row we're about to insert is the one we'd read back.
+    private static bool IsIdempotencyRaceLost(DbUpdateException ex)
     {
         var inner = ex.InnerException;
         while (inner is not null)
         {
-            if (inner is PostgresException pg && pg.SqlState == UniqueViolationSqlState)
+            if (inner is PostgresException pg
+                && pg.SqlState == UniqueViolationSqlState
+                && pg.ConstraintName == IdempotencyConstraintName)
                 return true;
             inner = inner.InnerException;
         }
