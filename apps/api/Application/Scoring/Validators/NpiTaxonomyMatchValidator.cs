@@ -176,8 +176,9 @@ public sealed class NpiTaxonomyMatchValidator : IValidator
             {
                 // Field discriminator for the conflict-metrics runner. Pins
                 // this Issue as the taxonomy_specialty_mismatch catch, not a
-                // tangential identity-side finding.
-                Field = "boardCert.specialty",
+                // tangential identity-side finding. IssueFieldSpec.Format
+                // pins the separator cross-language with the Python runner.
+                Field = IssueFieldSpec.Format("boardCert", "specialty"),
             },
         };
     }
@@ -188,12 +189,19 @@ public sealed class NpiTaxonomyMatchValidator : IValidator
     /// JSON schema for the forced-tool output. Same Anthropic subset as
     /// IdentityCoherence's schema; no banned keywords.
     /// </summary>
+    // anyOf instead of the JSON-Schema-canonical `"type": ["string", "null"]`
+    // array form — the Anthropic SDK's schema preprocessor calls
+    // JsonNode.GetValue<T>() on the `type` node and throws
+    // "The node must be of type 'JsonValue'" when it's an array. The
+    // smoke test (P4 slice 5) surfaced this on the first live call.
+    // anyOf produces the same forced-tool shape Anthropic accepts and
+    // mirrors what IdentityCoherence already does for its enum fields.
     private const string SchemaJson = """
         {
           "type": "object",
           "properties": {
             "matches":      { "type": "boolean" },
-            "suggestedFix": { "type": ["string", "null"] }
+            "suggestedFix": { "anyOf": [ { "type": "string" }, { "type": "null" } ] }
           },
           "required": ["matches", "suggestedFix"],
           "additionalProperties": false
