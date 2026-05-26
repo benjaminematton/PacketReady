@@ -35,8 +35,10 @@ public class PinnedShippedPromptHashesTests
     private const string MalpracticeExtractionHash =
         "45b8b2a202ea0cf894bcdec44f36b7059d0e794cb57477f45db4a2b239cbe19f";
     // P4 task 8 — IdentityCoherenceValidator. Editing the prompt bumps to v2.md.
+    // Re-pinned in task 9 prep: malpractice source added before any extraction
+    // row referenced the v1 hash, so no audit migration needed.
     private const string IdentityCoherenceHash =
-        "d23dd984218bd73070153063067c982de2c589485fe3f6a2857abbb729b1c468";
+        "aeb3e6a30cfd2051a7bc6cc2165a80413238b620407bf3e5ac6e3fb95738d8ce";
 
     private static readonly IReadOnlyDictionary<string, string> Pinned =
         new Dictionary<string, string>

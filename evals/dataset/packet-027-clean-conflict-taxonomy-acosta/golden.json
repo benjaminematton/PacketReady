@@ -68,5 +68,8 @@
       "expected_to_flag": true
     }
   ],
-  "notes": "P4 programmatic (clean-conflict-taxonomy, clean_pattern=MIDDLE_INITIAL). NPPES taxonomy 207K00000X / Allergy & Immunology."
+  "notes": "P4 programmatic (clean-conflict-taxonomy). NPPES taxonomy 207K00000X / Allergy & Immunology.",
+  "metadata": {
+    "cleanPattern": "MIDDLE_INITIAL"
+  }
 }

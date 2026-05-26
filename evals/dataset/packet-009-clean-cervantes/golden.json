@@ -19,7 +19,7 @@
       "type": "dea",
       "filename": "dea.pdf",
       "fields": {
-        "fullName": "Tristan Cervantes",
+        "fullName": "TRISTAN CERVANTES",
         "deaNumber": "YF9112806",
         "expiryDate": "2026-05-25",
         "status": "Active",
@@ -35,7 +35,7 @@
       "type": "boardCert",
       "filename": "board-cert.pdf",
       "fields": {
-        "fullName": "Tristan  Cervantes, MD",
+        "fullName": "Tristan Cervantes, MD",
         "board": "ABFM",
         "specialty": "Family Medicine",
         "issueDate": "2021-05-26",
@@ -56,5 +56,8 @@
     }
   ],
   "plantedConflicts": [],
-  "notes": "P4 programmatic (clean, clean_pattern=WHITESPACE_VARIANT). NPPES taxonomy 207Q00000X / Family Medicine."
+  "notes": "P4 programmatic (clean). NPPES taxonomy 207Q00000X / Family Medicine.",
+  "metadata": {
+    "cleanPattern": "CASE_VARIANT"
+  }
 }

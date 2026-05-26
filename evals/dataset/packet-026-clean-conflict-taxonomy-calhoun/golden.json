@@ -68,5 +68,8 @@
       "expected_to_flag": true
     }
   ],
-  "notes": "P4 programmatic (clean-conflict-taxonomy, clean_pattern=CREDENTIAL_PERIODS). NPPES taxonomy 207X00000X / Orthopaedic Surgery."
+  "notes": "P4 programmatic (clean-conflict-taxonomy). NPPES taxonomy 207X00000X / Orthopaedic Surgery.",
+  "metadata": {
+    "cleanPattern": "CREDENTIAL_PERIODS"
+  }
 }

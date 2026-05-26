@@ -19,7 +19,7 @@
       "type": "dea",
       "filename": "dea.pdf",
       "fields": {
-        "fullName": "Michael Foster",
+        "fullName": "MICHAEL FOSTER",
         "deaNumber": "GF1699141",
         "expiryDate": "2028-05-24",
         "status": "Active",
@@ -35,7 +35,7 @@
       "type": "boardCert",
       "filename": "board-cert.pdf",
       "fields": {
-        "fullName": "Michael  Foster, MD",
+        "fullName": "Michael Foster, MD",
         "board": "ABOG",
         "specialty": "Obstetrics & Gynecology",
         "issueDate": "2021-05-26",
@@ -69,5 +69,8 @@
       "expected_to_flag": true
     }
   ],
-  "notes": "P4 programmatic (clean-conflict-name, clean_pattern=WHITESPACE_VARIANT). NPPES taxonomy 207V00000X / Obstetrics & Gynecology."
+  "notes": "P4 programmatic (clean-conflict-name). NPPES taxonomy 207V00000X / Obstetrics & Gynecology.",
+  "metadata": {
+    "cleanPattern": "CASE_VARIANT"
+  }
 }

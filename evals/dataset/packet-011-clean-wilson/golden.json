@@ -56,5 +56,8 @@
     }
   ],
   "plantedConflicts": [],
-  "notes": "P4 programmatic (clean, clean_pattern=CREDENTIAL_PERIODS). NPPES taxonomy 207P00000X / Emergency Medicine."
+  "notes": "P4 programmatic (clean). NPPES taxonomy 207P00000X / Emergency Medicine.",
+  "metadata": {
+    "cleanPattern": "CREDENTIAL_PERIODS"
+  }
 }

@@ -39,6 +39,7 @@ public static class PacketGoldenLoader
         LicenseInfo? license = null;
         DeaInfo? dea = null;
         BoardCertInfo? board = null;
+        MalpracticeInfo? malpractice = null;
 
         foreach (var d in documents.EnumerateArray())
         {
@@ -46,16 +47,10 @@ public static class PacketGoldenLoader
             var fields = d.GetProperty("fields");
             switch (type)
             {
-                case "license":     license = BuildLicense(fields); break;
-                case "dea":         dea     = BuildDea(fields);     break;
-                case "boardCert":   board   = BuildBoardCert(fields); break;
-                // malpractice: ProviderProfile doesn't carry a sub-record for
-                // it yet (lands with the malpractice currency validator in
-                // task 11). The fullName on malpractice.fields is the
-                // load-bearing value for malpractice-side identity coherence,
-                // but until the sub-record exists, IdentityCoherence reads
-                // only the three present sources.
-                case "malpractice": break;
+                case "license":     license     = BuildLicense(fields);     break;
+                case "dea":         dea         = BuildDea(fields);         break;
+                case "boardCert":   board       = BuildBoardCert(fields);   break;
+                case "malpractice": malpractice = BuildMalpractice(fields); break;
             }
         }
 
@@ -73,7 +68,8 @@ public static class PacketGoldenLoader
             nowUtc: Anchor,
             license: license,
             dea: dea,
-            boardCert: board);
+            boardCert: board,
+            malpractice: malpractice);
     }
 
     private static LicenseInfo? BuildLicense(JsonElement fields)
@@ -119,6 +115,17 @@ public static class PacketGoldenLoader
         var fullName = StringOrNull(fields, "fullName") ?? "";
         if (board is null || specialty is null || issue is null || expiry is null) return null;
         return new BoardCertInfo(board, specialty, issue.Value, expiry.Value, status, fullName);
+    }
+
+    private static MalpracticeInfo? BuildMalpractice(JsonElement fields)
+    {
+        var carrier = StringOrNull(fields, "carrier");
+        var policy = StringOrNull(fields, "policyNumber");
+        var expiry = DateOnlyOrNull(fields, "expiryDate");
+        var status = ParseEnum<MalpracticeStatus>(StringOrNull(fields, "status"));
+        var fullName = StringOrNull(fields, "fullName") ?? "";
+        if (carrier is null || policy is null || expiry is null) return null;
+        return new MalpracticeInfo(carrier, policy, expiry.Value, status, fullName);
     }
 
     private static string? StringOrNull(JsonElement obj, string key) =>

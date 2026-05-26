@@ -109,6 +109,7 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
         LicenseInfo? license = basics.License;
         DeaInfo? dea = basics.Dea;
         BoardCertInfo? boardCert = basics.BoardCert;
+        MalpracticeInfo? malpractice = basics.Malpractice;
         var nameCandidates = new List<(DocType Source, string FullName)>();
 
         foreach (var docType in ExpectedDocTypes)
@@ -178,11 +179,11 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
                             issues.Add(PartialExtractionIssue(doc));
                         break;
                     case DocType.Malpractice:
-                        // No MalpracticeInfo on ProviderProfile yet — store
-                        // provenance so a future validator can read it without
-                        // re-aggregating, but don't overlay onto the profile.
+                        malpractice = ParseMalpractice(fields);
                         PopulateProvenance(provenance, "malpractice", fields, locs, confs, doc.Id);
                         TryAddName(nameCandidates, DocType.Malpractice, fields);
+                        if (malpractice is null)
+                            issues.Add(PartialExtractionIssue(doc));
                         break;
                 }
             }
@@ -206,6 +207,7 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
             License = license,
             Dea = dea,
             BoardCert = boardCert,
+            Malpractice = malpractice,
             // Sanctions stays as the basics value (PSV is P5).
         };
 
@@ -332,6 +334,19 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
         if (board is null || specialty is null || issueDate is null || expiryDate is null)
             return null;
         return new BoardCertInfo(board, specialty, issueDate.Value, expiryDate.Value, status, fullName);
+    }
+
+    private static MalpracticeInfo? ParseMalpractice(JsonElement fields)
+    {
+        var carrier = StringOrNull(fields, "carrier");
+        var policyNumber = StringOrNull(fields, "policyNumber");
+        var expiryDate = DateOnlyOrNull(fields, "expiryDate");
+        var status = ParseEnum<MalpracticeStatus>(StringOrNull(fields, "status"));
+        var fullName = StringOrNull(fields, "fullName") ?? "";
+
+        if (carrier is null || policyNumber is null || expiryDate is null)
+            return null;
+        return new MalpracticeInfo(carrier, policyNumber, expiryDate.Value, status, fullName);
     }
 
     // === Provenance map ================================================

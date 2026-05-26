@@ -38,6 +38,7 @@ public sealed record ProviderProfile
     public LicenseInfo? License { get; init; }
     public DeaInfo? Dea { get; init; }
     public BoardCertInfo? BoardCert { get; init; }
+    public MalpracticeInfo? Malpractice { get; init; }
     public SanctionsResult? Sanctions { get; init; }
 
     private static readonly Regex NpiRegex = new(@"^\d{10}$", RegexOptions.Compiled);
@@ -66,6 +67,7 @@ public sealed record ProviderProfile
         LicenseInfo? license,
         DeaInfo? dea,
         BoardCertInfo? boardCert,
+        MalpracticeInfo? malpractice,
         SanctionsResult? sanctions)
     {
         FullName = fullName;
@@ -75,6 +77,7 @@ public sealed record ProviderProfile
         License = license;
         Dea = dea;
         BoardCert = boardCert;
+        Malpractice = malpractice;
         Sanctions = sanctions;
     }
 
@@ -104,11 +107,12 @@ public sealed record ProviderProfile
         LicenseInfo? license = null,
         DeaInfo? dea = null,
         BoardCertInfo? boardCert = null,
+        MalpracticeInfo? malpractice = null,
         SanctionsResult? sanctions = null)
     {
         var profile = new ProviderProfile(
             fullName, dateOfBirth, npi, credentialingState,
-            license, dea, boardCert, sanctions);
+            license, dea, boardCert, malpractice, sanctions);
         Validate(profile, nowUtc);
         return profile;
     }
@@ -173,6 +177,15 @@ public sealed record ProviderProfile
                 throw new ArgumentException(
                     $"BoardCert.IssueDate ({bc.IssueDate}) after ExpiryDate ({bc.ExpiryDate}).",
                     nameof(profile));
+        }
+
+        if (profile.Malpractice is { } mp)
+        {
+            if (string.IsNullOrWhiteSpace(mp.Carrier))
+                throw new ArgumentException("Malpractice.Carrier is required.", nameof(profile));
+            if (string.IsNullOrWhiteSpace(mp.PolicyNumber))
+                throw new ArgumentException("Malpractice.PolicyNumber is required.", nameof(profile));
+            RequireExpiryDate(mp.ExpiryDate, maxExpiry, "Malpractice.ExpiryDate", nameof(profile));
         }
 
         if (profile.Sanctions is { } s)

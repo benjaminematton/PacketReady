@@ -10,16 +10,22 @@ A JSON object:
 {
   "field": "fullName",
   "sources": [
-    { "docType": "license",   "extractedValue": "..." },
-    { "docType": "dea",       "extractedValue": "..." },
-    { "docType": "boardCert", "extractedValue": "..." }
+    { "docType": "license",     "extractedValue": "..." },
+    { "docType": "dea",         "extractedValue": "..." },
+    { "docType": "boardCert",   "extractedValue": "..." },
+    { "docType": "malpractice", "extractedValue": "..." }
   ]
 }
 ```
 
 The `docType` values are drawn from a closed set: `license`, `dea`,
-`boardCert`. Some sources may be absent (the document wasn't uploaded or
-extraction failed) — only the populated ones are sent.
+`boardCert`, `malpractice`. Some sources may be absent (the document wasn't
+uploaded or extraction failed) — only the populated ones are sent.
+
+`malpractice` is a frequent source of legitimate-but-divergent names: married
+or hyphenated surnames often appear on the insurance certificate before the
+state license catches up. Apply the SAME rules below — the source label
+doesn't change whether a divergence is real.
 
 ## What you return
 

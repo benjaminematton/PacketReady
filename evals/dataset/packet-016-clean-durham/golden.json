@@ -56,5 +56,8 @@
     }
   ],
   "plantedConflicts": [],
-  "notes": "P4 programmatic (clean, clean_pattern=CREDENTIAL_PERIODS). NPPES taxonomy 2085B0100X / Radiology."
+  "notes": "P4 programmatic (clean). NPPES taxonomy 2085B0100X / Radiology.",
+  "metadata": {
+    "cleanPattern": "CREDENTIAL_PERIODS"
+  }
 }

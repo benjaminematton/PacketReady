@@ -56,5 +56,8 @@
     }
   ],
   "plantedConflicts": [],
-  "notes": "P4 programmatic (clean, clean_pattern=CREDENTIAL_MD). NPPES taxonomy 2084A0401X / Psychiatry & Neurology."
+  "notes": "P4 programmatic (clean). NPPES taxonomy 2084A0401X / Psychiatry & Neurology.",
+  "metadata": {
+    "cleanPattern": "CREDENTIAL_MD"
+  }
 }

@@ -19,7 +19,7 @@
       "type": "dea",
       "filename": "dea.pdf",
       "fields": {
-        "fullName": "Heather Atkins",
+        "fullName": "HEATHER ATKINS",
         "deaNumber": "BH4753548",
         "expiryDate": "2027-05-25",
         "status": "Active",
@@ -35,7 +35,7 @@
       "type": "boardCert",
       "filename": "board-cert.pdf",
       "fields": {
-        "fullName": "Heather  Atkins, MD",
+        "fullName": "Heather Atkins, MD",
         "board": "ABFM",
         "specialty": "Family Medicine",
         "issueDate": "2021-05-26",
@@ -68,5 +68,8 @@
       "expected_to_flag": true
     }
   ],
-  "notes": "P4 programmatic (scanned-conflict-taxonomy, clean_pattern=WHITESPACE_VARIANT). NPPES taxonomy 208600000X / Surgery."
+  "notes": "P4 programmatic (scanned-conflict-taxonomy). NPPES taxonomy 208600000X / Surgery.",
+  "metadata": {
+    "cleanPattern": "CASE_VARIANT"
+  }
 }

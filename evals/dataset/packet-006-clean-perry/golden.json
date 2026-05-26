@@ -56,5 +56,8 @@
     }
   ],
   "plantedConflicts": [],
-  "notes": "P4 programmatic (clean, clean_pattern=CREDENTIAL_PERIODS). NPPES taxonomy 208000000X / Pediatrics."
+  "notes": "P4 programmatic (clean). NPPES taxonomy 208000000X / Pediatrics.",
+  "metadata": {
+    "cleanPattern": "CREDENTIAL_PERIODS"
+  }
 }

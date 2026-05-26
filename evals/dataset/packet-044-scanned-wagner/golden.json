@@ -19,7 +19,7 @@
       "type": "dea",
       "filename": "dea.pdf",
       "fields": {
-        "fullName": "Tricia Wagner",
+        "fullName": "TRICIA WAGNER",
         "deaNumber": "FB0826905",
         "expiryDate": "2026-05-25",
         "status": "Active",
@@ -35,7 +35,7 @@
       "type": "boardCert",
       "filename": "board-cert.pdf",
       "fields": {
-        "fullName": "Tricia  Wagner, MD",
+        "fullName": "Tricia Wagner, MD",
         "board": "ABOG",
         "specialty": "Obstetrics & Gynecology",
         "issueDate": "2023-05-26",
@@ -56,5 +56,8 @@
     }
   ],
   "plantedConflicts": [],
-  "notes": "P4 programmatic (scanned, clean_pattern=WHITESPACE_VARIANT). NPPES taxonomy 207V00000X / Obstetrics & Gynecology."
+  "notes": "P4 programmatic (scanned). NPPES taxonomy 207V00000X / Obstetrics & Gynecology.",
+  "metadata": {
+    "cleanPattern": "CASE_VARIANT"
+  }
 }

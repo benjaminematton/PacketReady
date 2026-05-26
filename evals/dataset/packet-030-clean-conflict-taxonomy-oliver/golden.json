@@ -68,5 +68,8 @@
       "expected_to_flag": true
     }
   ],
-  "notes": "P4 programmatic (clean-conflict-taxonomy, clean_pattern=CREDENTIAL_MD). NPPES taxonomy 208000000X / Pediatrics."
+  "notes": "P4 programmatic (clean-conflict-taxonomy). NPPES taxonomy 208000000X / Pediatrics.",
+  "metadata": {
+    "cleanPattern": "CREDENTIAL_MD"
+  }
 }

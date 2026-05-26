@@ -56,5 +56,8 @@
     }
   ],
   "plantedConflicts": [],
-  "notes": "P4 programmatic (scanned, clean_pattern=HYPHENATED_ALREADY). NPPES taxonomy 207Q00000X / Family Medicine."
+  "notes": "P4 programmatic (scanned). NPPES taxonomy 207Q00000X / Family Medicine.",
+  "metadata": {
+    "cleanPattern": "HYPHENATED_ALREADY"
+  }
 }

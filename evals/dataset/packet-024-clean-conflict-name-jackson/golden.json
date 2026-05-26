@@ -19,7 +19,7 @@
       "type": "dea",
       "filename": "dea.pdf",
       "fields": {
-        "fullName": "Timothy Jackson",
+        "fullName": "TIMOTHY JACKSON",
         "deaNumber": "TM1580360",
         "expiryDate": "2026-05-25",
         "status": "Active",
@@ -35,7 +35,7 @@
       "type": "boardCert",
       "filename": "board-cert.pdf",
       "fields": {
-        "fullName": "Timothy  Jackson, MD",
+        "fullName": "Timothy Jackson, MD",
         "board": "ABPN",
         "specialty": "Psychiatry & Neurology",
         "issueDate": "2022-05-26",
@@ -69,5 +69,8 @@
       "expected_to_flag": true
     }
   ],
-  "notes": "P4 programmatic (clean-conflict-name, clean_pattern=WHITESPACE_VARIANT). NPPES taxonomy 2084A0401X / Psychiatry & Neurology."
+  "notes": "P4 programmatic (clean-conflict-name). NPPES taxonomy 2084A0401X / Psychiatry & Neurology.",
+  "metadata": {
+    "cleanPattern": "CASE_VARIANT"
+  }
 }

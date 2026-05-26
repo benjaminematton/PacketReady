@@ -68,5 +68,8 @@
       "expected_to_flag": true
     }
   ],
-  "notes": "P4 programmatic (clean-conflict-taxonomy, clean_pattern=HYPHENATED_ALREADY). NPPES taxonomy 2084A0401X / Psychiatry & Neurology."
+  "notes": "P4 programmatic (clean-conflict-taxonomy). NPPES taxonomy 2084A0401X / Psychiatry & Neurology.",
+  "metadata": {
+    "cleanPattern": "HYPHENATED_ALREADY"
+  }
 }

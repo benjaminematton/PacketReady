@@ -56,5 +56,8 @@
     }
   ],
   "plantedConflicts": [],
-  "notes": "P4 programmatic (clean, clean_pattern=HYPHENATED_ALREADY). NPPES taxonomy 208600000X / Surgery."
+  "notes": "P4 programmatic (clean). NPPES taxonomy 208600000X / Surgery.",
+  "metadata": {
+    "cleanPattern": "HYPHENATED_ALREADY"
+  }
 }

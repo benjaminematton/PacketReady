@@ -69,5 +69,8 @@
       "expected_to_flag": true
     }
   ],
-  "notes": "P4 programmatic (scanned-conflict-name, clean_pattern=CREDENTIAL_PERIODS). NPPES taxonomy 207R00000X / Internal Medicine."
+  "notes": "P4 programmatic (scanned-conflict-name). NPPES taxonomy 207R00000X / Internal Medicine.",
+  "metadata": {
+    "cleanPattern": "CREDENTIAL_PERIODS"
+  }
 }

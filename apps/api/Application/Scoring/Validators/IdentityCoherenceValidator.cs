@@ -23,14 +23,12 @@ namespace PacketReady.Application.Scoring.Validators;
 /// validator-shape change.</para>
 ///
 /// <para><b>Per-doc data, not aggregated.</b> The validator reads
-/// <see cref="LicenseInfo.FullName"/>, <see cref="DeaInfo.FullName"/>, and
-/// <see cref="BoardCertInfo.FullName"/> directly off the profile's sub-records
-/// (each one is what the extractor pulled off that specific PDF).
-/// <c>MalpracticeInfo</c> is intentionally absent — ProviderProfile doesn't
-/// carry that sub-record yet (lands with task 11). Null sub-records are
-/// skipped — the aggregator owns the Missing-Document Critical for those, and
-/// double-emission would be noise. Fewer than two present names → no possible
-/// conflict → no API call.</para>
+/// <see cref="LicenseInfo.FullName"/>, <see cref="DeaInfo.FullName"/>,
+/// <see cref="BoardCertInfo.FullName"/>, and <see cref="MalpracticeInfo.FullName"/>
+/// directly off the profile's sub-records (each one is what the extractor
+/// pulled off that specific PDF). Null sub-records are skipped — the aggregator
+/// owns the Missing-Document Critical for those, and double-emission would be
+/// noise. Fewer than two present names → no possible conflict → no API call.</para>
 ///
 /// <para><b>FP discipline.</b> P4 task 9's tuning gate is FP &lt; 5% on the
 /// 30 conflict-free packets across the dataset. The prompt instructs Sonnet to
@@ -184,15 +182,11 @@ public sealed class IdentityCoherenceValidator : IValidator
 
     private static List<NameSource> CollectFullNameSources(ProviderProfile profile)
     {
-        // Malpractice is intentionally absent — ProviderProfile doesn't carry
-        // a MalpracticeInfo sub-record yet (lands with the malpractice
-        // currency validator in task 11). Extending this list to include
-        // it is a 3-line change once that record arrives, plus an enum entry
-        // in the response schema and a sources entry in the prompt.
-        var sources = new List<NameSource>(3);
-        if (profile.License is { FullName: { Length: > 0 } ln })   sources.Add(new("license", ln));
-        if (profile.Dea is { FullName: { Length: > 0 } dn })       sources.Add(new("dea", dn));
-        if (profile.BoardCert is { FullName: { Length: > 0 } bn }) sources.Add(new("boardCert", bn));
+        var sources = new List<NameSource>(4);
+        if (profile.License is { FullName: { Length: > 0 } ln })     sources.Add(new("license", ln));
+        if (profile.Dea is { FullName: { Length: > 0 } dn })         sources.Add(new("dea", dn));
+        if (profile.BoardCert is { FullName: { Length: > 0 } bn })   sources.Add(new("boardCert", bn));
+        if (profile.Malpractice is { FullName: { Length: > 0 } mn }) sources.Add(new("malpractice", mn));
         return sources;
     }
 
@@ -227,7 +221,7 @@ public sealed class IdentityCoherenceValidator : IValidator
                   "severity":    { "type": "string", "enum": ["Critical", "Minor"] },
                   "message":     { "type": "string" },
                   "remediation": { "type": "string" },
-                  "sources":     { "type": "array", "items": { "type": "string", "enum": ["license", "dea", "boardCert"] } }
+                  "sources":     { "type": "array", "items": { "type": "string", "enum": ["license", "dea", "boardCert", "malpractice"] } }
                 },
                 "required": ["field", "severity", "message", "remediation", "sources"],
                 "additionalProperties": false

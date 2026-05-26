@@ -19,7 +19,7 @@
       "type": "dea",
       "filename": "dea.pdf",
       "fields": {
-        "fullName": "John Barker",
+        "fullName": "JOHN BARKER",
         "deaNumber": "HX0493105",
         "expiryDate": "2027-05-25",
         "status": "Active",
@@ -35,7 +35,7 @@
       "type": "boardCert",
       "filename": "board-cert.pdf",
       "fields": {
-        "fullName": "John  Barker, MD",
+        "fullName": "John Barker, MD",
         "board": "ABP",
         "specialty": "Pediatrics",
         "issueDate": "2021-05-26",
@@ -56,5 +56,8 @@
     }
   ],
   "plantedConflicts": [],
-  "notes": "P4 programmatic (clean, clean_pattern=WHITESPACE_VARIANT). NPPES taxonomy 208000000X / Pediatrics."
+  "notes": "P4 programmatic (clean). NPPES taxonomy 208000000X / Pediatrics.",
+  "metadata": {
+    "cleanPattern": "CASE_VARIANT"
+  }
 }

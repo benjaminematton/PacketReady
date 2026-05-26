@@ -56,5 +56,8 @@
     }
   ],
   "plantedConflicts": [],
-  "notes": "P4 programmatic (scanned, clean_pattern=MIDDLE_INITIAL). NPPES taxonomy 207L00000X / Anesthesiology."
+  "notes": "P4 programmatic (scanned). NPPES taxonomy 207L00000X / Anesthesiology.",
+  "metadata": {
+    "cleanPattern": "MIDDLE_INITIAL"
+  }
 }
