@@ -22,6 +22,16 @@ public class Provider
     /// </summary>
     public const string DefaultPayerId = "payer-a-national-hmo";
 
+    /// <summary>
+    /// Per-provider cap on agent turns inside an intake session. Default
+    /// from phase-5-intake-agent.md (decision table: "8 turns total
+    /// before forced escalation"). Tunable on a per-provider basis when
+    /// (e.g.) a particularly complex specialty needs more rounds; the
+    /// default catches "agent never decides it's done" runaway after the
+    /// 8th turn.
+    /// </summary>
+    public const int DefaultIntakeBudgetTurns = 8;
+
     public Guid Id { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
 
@@ -35,6 +45,15 @@ public class Provider
     /// id isn't backed by a YAML file.
     /// </summary>
     public string PayerId { get; private set; } = DefaultPayerId;
+
+    /// <summary>
+    /// Per-provider cap on total agent turns in this intake. Snapshotted
+    /// onto <c>IntakeSession.TurnBudget</c> at session start, so a
+    /// mid-intake bump here doesn't extend an already-running session.
+    /// Defaults to <see cref="DefaultIntakeBudgetTurns"/>; admin override
+    /// at provider-create time only.
+    /// </summary>
+    public int IntakeBudgetTurns { get; private set; } = DefaultIntakeBudgetTurns;
 
     private string _profileJson = "{}";
 
@@ -65,7 +84,8 @@ public class Provider
     public static Provider Create(
         ProviderProfile profile,
         DateTimeOffset? now = null,
-        string? payerId = null)
+        string? payerId = null,
+        int? intakeBudgetTurns = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
 
@@ -86,11 +106,21 @@ public class Provider
 
         var resolvedPayerId = payerId ?? DefaultPayerId;
 
+        // null = use the default; anything <= 0 is a caller bug. The
+        // aggregate refuses 0 / negative anyway (IntakeSession.Start's
+        // turnBudget invariant), but failing here points at the
+        // create-provider call site instead of at SaveChanges.
+        if (intakeBudgetTurns is { } budget && budget < 1)
+            throw new ArgumentOutOfRangeException(
+                nameof(intakeBudgetTurns), budget,
+                "intakeBudgetTurns must be null (to use the default) or >= 1.");
+
         return new Provider
         {
             Id = Guid.NewGuid(),
             CreatedAt = createdAt,
             PayerId = resolvedPayerId,
+            IntakeBudgetTurns = intakeBudgetTurns ?? DefaultIntakeBudgetTurns,
             ProfileJson = JsonSerializer.Serialize(profile, DomainJson.Options),
         };
     }
@@ -111,9 +141,10 @@ public class Provider
         Guid id,
         ProviderProfile profile,
         DateTimeOffset? now = null,
-        string? payerId = null)
+        string? payerId = null,
+        int? intakeBudgetTurns = null)
     {
-        var p = Create(profile, now, payerId);
+        var p = Create(profile, now, payerId, intakeBudgetTurns);
         p.Id = id;
         return p;
     }

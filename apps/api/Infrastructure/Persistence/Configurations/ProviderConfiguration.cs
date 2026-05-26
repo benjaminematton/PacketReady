@@ -8,7 +8,17 @@ public sealed class ProviderConfiguration : IEntityTypeConfiguration<Provider>
 {
     public void Configure(EntityTypeBuilder<Provider> b)
     {
-        b.ToTable("providers");
+        b.ToTable("providers", t =>
+        {
+            // Floor matches the aggregate's invariant
+            // (IntakeSession.Start refuses turnBudget < 1). The CHECK is
+            // belt-and-braces against raw SQL inserts; the .NET caller
+            // already throws ArgumentOutOfRangeException on the same
+            // boundary.
+            t.HasCheckConstraint(
+                "ck_providers_intake_budget_turns_positive",
+                "intake_budget_turns >= 1");
+        });
         b.HasKey(x => x.Id);
 
         b.Property(x => x.Id).HasColumnName("id");
@@ -24,6 +34,15 @@ public sealed class ProviderConfiguration : IEntityTypeConfiguration<Provider>
             .HasColumnName("payer_id")
             .HasMaxLength(64)
             .HasDefaultValue(Provider.DefaultPayerId)
+            .IsRequired();
+
+        // P5 per-provider agent-turn cap. DefaultValue backfills the
+        // column on existing providers (pre-P5 dev rows) and protects
+        // raw-SQL inserts. The aggregate refuses < 1 at the boundary,
+        // and the CHECK constraint pins it at the schema level.
+        b.Property(x => x.IntakeBudgetTurns)
+            .HasColumnName("intake_budget_turns")
+            .HasDefaultValue(Provider.DefaultIntakeBudgetTurns)
             .IsRequired();
 
         // Profile is the load-bearing column; everything else is metadata. JSONB,

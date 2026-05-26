@@ -89,7 +89,9 @@ public class StartIntakeCommandHandlerTests : IDisposable
         var session = await _db.IntakeSessions.FindAsync(result.IntakeSessionId);
         Assert.NotNull(session);
         Assert.Equal(IntakeState.Pending, session!.State);
-        Assert.Equal(IntakeSession.DefaultTurnBudget, session.TurnBudget);
+        // Seeded provider uses the default IntakeBudgetTurns (8). The
+        // session's TurnBudget snapshot matches.
+        Assert.Equal(Provider.DefaultIntakeBudgetTurns, session.TurnBudget);
         Assert.Equal(0, session.TurnsConsumed);
 
         var link = await _db.MagicLinks.FindAsync(result.MagicLinkId);
@@ -97,6 +99,33 @@ public class StartIntakeCommandHandlerTests : IDisposable
         Assert.Equal(provider.Id, link!.ProviderId);
         Assert.Equal(T0, link.IssuedAt);
         Assert.Null(link.ConsumedAt);
+    }
+
+    [Fact]
+    public async Task Handle_SnapshotsProviderIntakeBudgetTurnsOntoSession()
+    {
+        // Provider with a non-default cap (12 turns). The session's
+        // TurnBudget must reflect the snapshot, not Provider's literal
+        // value — the snapshot insulates a running intake from a
+        // mid-flight bump on the source row.
+        var profile = ProviderProfile.Create(
+            fullName: "Henry Anderson",
+            dateOfBirth: new DateOnly(1980, 1, 15),
+            npi: "1234567890",
+            credentialingState: "CA",
+            nowUtc: T0);
+        var provider = Provider.Create(profile, T0, payerId: null, intakeBudgetTurns: 12);
+        _db.Providers.Add(provider);
+        await _db.SaveChangesAsync();
+
+        var handler = Build();
+        var result = await handler.Handle(
+            new StartIntakeCommand(provider.Id, "provider@example.com"),
+            CancellationToken.None);
+
+        var session = await _db.IntakeSessions.FindAsync(result.IntakeSessionId);
+        Assert.NotNull(session);
+        Assert.Equal(12, session!.TurnBudget);
     }
 
     [Fact]

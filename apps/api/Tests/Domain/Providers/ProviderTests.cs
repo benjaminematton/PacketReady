@@ -140,4 +140,32 @@ public class ProviderTests
         var ex = Assert.Throws<JsonException>(() => provider.GetProfile());
         Assert.NotNull(ex);
     }
+
+    // ──────────────────────────────────────── IntakeBudgetTurns ──────────
+
+    [Fact]
+    public void Create_DefaultsIntakeBudgetTurnsTo8()
+    {
+        var provider = Provider.Create(MakeProfile(), Now);
+        Assert.Equal(8, provider.IntakeBudgetTurns);
+        Assert.Equal(8, Provider.DefaultIntakeBudgetTurns);
+    }
+
+    [Fact]
+    public void Create_HonorsExplicitIntakeBudgetTurns()
+    {
+        var provider = Provider.Create(
+            MakeProfile(), Now, payerId: null, intakeBudgetTurns: 12);
+        Assert.Equal(12, provider.IntakeBudgetTurns);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Create_RejectsNonPositiveIntakeBudgetTurns(int budget)
+    {
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
+            Provider.Create(MakeProfile(), Now, payerId: null, intakeBudgetTurns: budget));
+        Assert.Equal("intakeBudgetTurns", ex.ParamName);
+    }
 }

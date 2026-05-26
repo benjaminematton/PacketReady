@@ -53,14 +53,23 @@ public sealed class StartIntakeCommandHandler : IRequestHandler<StartIntakeComma
 
         var nowUtc = _clock.GetUtcNow();
 
-        // Existence check + double-start pre-check in two cheap queries. The
-        // UNIQUE (provider_id) on intake_sessions is the floor for a race
-        // between two concurrent admin POSTs; this pre-check surfaces the
-        // typed exception instead of letting Npgsql's 23505 bubble as 500.
-        var providerExists = await _db.Providers
+        // Existence check + double-start pre-check + budget snapshot in
+        // two cheap queries. The UNIQUE (provider_id) on intake_sessions
+        // is the floor for a race between two concurrent admin POSTs;
+        // this pre-check surfaces the typed exception instead of letting
+        // Npgsql's 23505 bubble as 500.
+        //
+        // IntakeBudgetTurns is snapshotted onto the IntakeSession at
+        // start time, so a mid-intake bump on the Provider row doesn't
+        // extend an already-running session. New providers get whatever
+        // the admin set at create time (default 8 per
+        // Provider.DefaultIntakeBudgetTurns).
+        var providerSnapshot = await _db.Providers
             .AsNoTracking()
-            .AnyAsync(p => p.Id == request.ProviderId, ct);
-        if (!providerExists)
+            .Where(p => p.Id == request.ProviderId)
+            .Select(p => new { p.IntakeBudgetTurns })
+            .SingleOrDefaultAsync(ct);
+        if (providerSnapshot is null)
             throw new ProviderNotFoundException(request.ProviderId);
 
         var alreadyStarted = await _db.IntakeSessions
@@ -71,7 +80,7 @@ public sealed class StartIntakeCommandHandler : IRequestHandler<StartIntakeComma
 
         var session = IntakeSession.Start(
             request.ProviderId,
-            turnBudget: IntakeSession.DefaultTurnBudget,
+            turnBudget: providerSnapshot.IntakeBudgetTurns,
             nowUtc: nowUtc);
 
         var link = MagicLink.Issue(request.ProviderId, issuedAt: nowUtc);
