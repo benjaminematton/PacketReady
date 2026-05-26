@@ -1,9 +1,12 @@
+using System.Text.Json;
+using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using PacketReady.Application.Abstractions;
 using PacketReady.Application.Intake.MagicLinks;
 using PacketReady.Domain.Intake;
 using PacketReady.Domain.MagicLinks;
 using PacketReady.Domain.Providers;
+using PacketReady.Infrastructure.Intake;
 
 namespace PacketReady.Api.Endpoints.Portal;
 
@@ -34,8 +37,14 @@ public static class PortalEndpoints
         // C3 ships an empty submit body. C4 expands this with confirmed /
         // edited extraction fields per design.md §7.9. Keeping the shape
         // here so the API contract is callable end-to-end today; clients
-        // can pass {} and get a 200.
-        Dictionary<string, object?>? ConfirmedFields = null);
+        // can pass {} and get a 200. Typed as JsonElement? (not
+        // Dictionary<string, object?>) so STJ doesn't lower numbers to
+        // JsonElement-inside-object — C4 walks the raw element directly.
+        JsonElement? ConfirmedFields = null);
+
+    // Marker class so the static endpoint helper can resolve a typed
+    // ILogger from DI without a hand-rolled category string.
+    private sealed class PortalLog { }
 
     public static IEndpointRouteBuilder MapPortalEndpoints(this IEndpointRouteBuilder app)
     {
@@ -44,6 +53,7 @@ public static class PortalEndpoints
                 IMagicLinkAuthority authority,
                 IAppDbContext db,
                 TimeProvider clock,
+                ILogger<PortalLog> logger,
                 CancellationToken ct) =>
         {
             MagicLink link;
@@ -60,8 +70,18 @@ public static class PortalEndpoints
                 .AsNoTracking()
                 .SingleOrDefaultAsync(s => s.ProviderId == link.ProviderId, ct);
             if (session is null)
-                return ProblemResults.MagicLinkInvalid(
-                    MagicLinkInvalidReason.NotFound.ToString());
+            {
+                // System invariant violation: StartIntake atomically creates
+                // session + link in one transaction, so a valid link with no
+                // session means data corruption (manual DELETE, bad
+                // backfill). Surface as 500 — masking it as a user-facing
+                // 410 would hide the bug.
+                logger.LogError(
+                    "Portal invariant broken: magic_link {LinkId} for provider {ProviderId} has no intake_sessions row.",
+                    link.Id, link.ProviderId);
+                throw new InvalidOperationException(
+                    $"No intake_sessions row for provider {link.ProviderId} despite a valid magic link.");
+            }
 
             // Provider lookup is best-effort: a missing profile JSON is
             // not a portal error — the page can render "Welcome" without
@@ -72,7 +92,7 @@ public static class PortalEndpoints
 
             return Results.Ok(new PortalStateDto(
                 ProviderId: link.ProviderId,
-                ProviderFullName: TryExtractFullName(provider),
+                ProviderFullName: TryExtractFullName(provider, logger),
                 IntakeSessionId: session.Id,
                 SessionState: session.State,
                 LinkIssuedAt: link.IssuedAt,
@@ -88,7 +108,9 @@ public static class PortalEndpoints
                 PortalSubmitRequest? body,
                 IMagicLinkAuthority authority,
                 IAppDbContext db,
+                IBackgroundJobClient jobs,
                 TimeProvider clock,
+                ILogger<PortalLog> logger,
                 CancellationToken ct) =>
         {
             var now = clock.GetUtcNow();
@@ -103,15 +125,29 @@ public static class PortalEndpoints
                 return ProblemResults.MagicLinkInvalid(ex.Reason.ToString());
             }
 
-            // Single-use consume. The DB-side guarantee against a concurrent
-            // double-click is a SELECT FOR UPDATE inside the same
-            // transaction (deferred hardening — phase-5-intake-agent.md
-            // "Magic-link replay" risk). For C3 we rely on the aggregate's
-            // in-memory refusal plus SaveChanges' write-ordering: a second
-            // submit re-loads from the DB and sees consumed_at already
-            // stamped.
+            // Single-use consume. Two layers guard the replay:
+            //   1. MagicLink.Consume refuses double-consume in-memory.
+            //   2. consumed_at is an EF concurrency token: a concurrent
+            //      submit from a sibling DbContext finds zero rows
+            //      affected on UPDATE and raises DbUpdateConcurrencyException.
+            // The first layer catches sequential same-context replays;
+            // the second catches genuinely concurrent requests.
             link.Consume(now);
-            await db.SaveChangesAsync(ct);
+            try
+            {
+                await db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // The loser of a concurrent consume race. The winner already
+                // stamped consumed_at; presenting this as Consumed (not a
+                // 5xx) matches the user-visible truth.
+                logger.LogInformation(
+                    "Portal submit lost the consume race for magic_link {LinkId}; surfacing as Consumed.",
+                    link.Id);
+                return ProblemResults.MagicLinkInvalid(
+                    MagicLinkInvalidReason.Consumed.ToString());
+            }
 
             // C3 doesn't process the body — the confirmed-fields path lands
             // in C4 alongside the agent runtime. Accepting the body shape
@@ -119,11 +155,20 @@ public static class PortalEndpoints
             // second round-trip when C4 ships.
             _ = body;
 
+            // C5: enqueue the agent turn. The job picks up the session,
+            // runs the agent within its budget, and either composes a
+            // followup (via the transitioner) or transitions to Complete.
+            // Hangfire enqueues immediately; the dispatcher's recurring
+            // 30s tick handles the eventual email send.
+            var turnJobId = jobs.Enqueue<IntakeTurnJob>(j =>
+                j.RunAsync(link.ProviderId, CancellationToken.None));
+
             return Results.Ok(new
             {
                 providerId = link.ProviderId,
                 magicLinkId = link.Id,
                 consumedAt = link.ConsumedAt,
+                turnJobId,
             });
         })
             .WithName("PortalSubmit")
@@ -134,11 +179,12 @@ public static class PortalEndpoints
         return app;
     }
 
-    // Best-effort name pluck. Provider.GetProfile() throws on invalid JSON;
-    // empty "{}" returns a ProviderProfile with all-default fields. We
-    // shield the endpoint from both — a missing name is just absent in the
-    // response, not a 500.
-    private static string? TryExtractFullName(Provider? provider)
+    // Best-effort name pluck. Provider.GetProfile() throws on malformed
+    // JSON; empty "{}" returns a ProviderProfile with all-default fields.
+    // Both fall back to null on the wire (the page can render "Welcome"
+    // without a name) but malformed JSON is genuine data corruption — log
+    // a warning so we notice instead of silently returning null forever.
+    private static string? TryExtractFullName(Provider? provider, ILogger logger)
     {
         if (provider is null) return null;
         try
@@ -146,8 +192,11 @@ public static class PortalEndpoints
             var profile = provider.GetProfile();
             return string.IsNullOrWhiteSpace(profile.FullName) ? null : profile.FullName;
         }
-        catch
+        catch (Exception ex)
         {
+            logger.LogWarning(ex,
+                "Provider {ProviderId} profile JSON did not parse; portal rendering without a name.",
+                provider.Id);
             return null;
         }
     }

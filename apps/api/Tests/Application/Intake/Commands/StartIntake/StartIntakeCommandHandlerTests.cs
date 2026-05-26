@@ -46,6 +46,7 @@ public class StartIntakeCommandHandlerTests : IDisposable
             _db,
             _authority.Object,
             audit,
+            new PostgresExceptionTranslator(),
             _clock,
             NullLogger<StartIntakeCommandHandler>.Instance);
     }
@@ -76,7 +77,7 @@ public class StartIntakeCommandHandlerTests : IDisposable
         var handler = Build();
 
         var result = await handler.Handle(
-            new StartIntakeCommand(provider.Id),
+            new StartIntakeCommand(provider.Id, "provider@example.com"),
             CancellationToken.None);
 
         Assert.Equal(provider.Id, result.ProviderId);
@@ -105,7 +106,7 @@ public class StartIntakeCommandHandlerTests : IDisposable
         var handler = Build();
 
         var result = await handler.Handle(
-            new StartIntakeCommand(provider.Id),
+            new StartIntakeCommand(provider.Id, "provider@example.com"),
             CancellationToken.None);
 
         var audit = Assert.Single(_db.AuditEvents.ToList(),
@@ -135,7 +136,7 @@ public class StartIntakeCommandHandlerTests : IDisposable
         var handler = Build();
 
         var result = await handler.Handle(
-            new StartIntakeCommand(provider.Id),
+            new StartIntakeCommand(provider.Id, "provider@example.com"),
             CancellationToken.None);
 
         Assert.NotNull(observedId);
@@ -149,7 +150,7 @@ public class StartIntakeCommandHandlerTests : IDisposable
     {
         var handler = Build();
         var ex = await Assert.ThrowsAsync<ArgumentException>(
-            () => handler.Handle(new StartIntakeCommand(Guid.Empty), CancellationToken.None));
+            () => handler.Handle(new StartIntakeCommand(Guid.Empty, "provider@example.com"), CancellationToken.None));
         Assert.Equal("request", ex.ParamName);
     }
 
@@ -159,7 +160,7 @@ public class StartIntakeCommandHandlerTests : IDisposable
         var handler = Build();
         await Assert.ThrowsAsync<ProviderNotFoundException>(
             () => handler.Handle(
-                new StartIntakeCommand(Guid.NewGuid()),
+                new StartIntakeCommand(Guid.NewGuid(), "provider@example.com"),
                 CancellationToken.None));
     }
 
@@ -171,13 +172,13 @@ public class StartIntakeCommandHandlerTests : IDisposable
 
         // First start succeeds.
         await handler.Handle(
-            new StartIntakeCommand(provider.Id),
+            new StartIntakeCommand(provider.Id, "provider@example.com"),
             CancellationToken.None);
 
         // Second start refused.
         var ex = await Assert.ThrowsAsync<IntakeAlreadyExistsException>(
             () => handler.Handle(
-                new StartIntakeCommand(provider.Id),
+                new StartIntakeCommand(provider.Id, "provider@example.com"),
                 CancellationToken.None));
         Assert.Equal(provider.Id, ex.ProviderId);
     }

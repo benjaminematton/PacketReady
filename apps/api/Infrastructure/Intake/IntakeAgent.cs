@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -66,10 +65,12 @@ public sealed class IntakeAgent : IIntakeAgent
         if (_tools.Count == 0)
             throw new InvalidOperationException(
                 "IntakeAgent requires at least one tool registered. Did AddIntakeAgent run?");
-        if (_tools.Count(t => t.IsTerminal) != 1)
+
+        var terminalCount = _tools.OfType<ITerminalTool>().Count();
+        if (terminalCount != 1)
             throw new InvalidOperationException(
-                "Exactly one terminal tool must be registered (compute_readiness). " +
-                $"Found {_tools.Count(t => t.IsTerminal)}.");
+                "Exactly one ITerminalTool must be registered (compute_readiness). " +
+                $"Found {terminalCount}.");
     }
 
     public async Task<AgentTurnResult> RunTurnAsync(
@@ -82,7 +83,7 @@ public sealed class IntakeAgent : IIntakeAgent
         if (turnId == Guid.Empty)
             throw new ArgumentException("TurnId is required.", nameof(turnId));
 
-        var stopwatch = Stopwatch.StartNew();
+        var startTimestamp = _clock.GetTimestamp();
         var systemPrompt = await _prompts.LoadAsync(PromptKeys.IntakeAgent, ct);
 
         var messages = new List<ChatMessage>
@@ -95,9 +96,19 @@ public sealed class IntakeAgent : IIntakeAgent
                 "and either compose a single followup with the gap list or call compute_readiness."),
         };
 
+        // Declaration-only: the runtime is the sole dispatcher (model-emitted
+        // FunctionCallContent routes back through InvokeAsync on the
+        // IIntakeTool directly), so we ship MEAI a non-invocable declaration
+        // and reuse the tool's hand-written InputSchema verbatim. Going
+        // through AIFunctionFactory.Create(delegate, ...) would derive the
+        // schema from the lambda's parameters and silently drop the
+        // required/enum constraints — the model would see "args:object" and
+        // the tool would see args under the wrong key.
         var aiTools = _tools
-            .Select(t => CreateAIFunction(t, providerId, turnId))
-            .Cast<AITool>()
+            .Select(t => (AITool)AIFunctionFactory.CreateDeclaration(
+                name: t.Name,
+                description: t.Description,
+                jsonSchema: t.InputSchema))
             .ToList();
 
         var options = new ChatOptions
@@ -118,7 +129,7 @@ public sealed class IntakeAgent : IIntakeAgent
 
         while (true)
         {
-            CheckBudget(steps, inputTokens + outputTokens, stopwatch.Elapsed);
+            CheckBudget(steps, inputTokens + outputTokens, ElapsedSince(startTimestamp));
 
             ChatResponse response;
             try
@@ -165,7 +176,7 @@ public sealed class IntakeAgent : IIntakeAgent
 
             foreach (var call in calls)
             {
-                CheckBudget(steps, inputTokens + outputTokens, stopwatch.Elapsed);
+                CheckBudget(steps, inputTokens + outputTokens, ElapsedSince(startTimestamp));
 
                 JsonElement result;
                 var tool = _tools.FirstOrDefault(t =>
@@ -198,33 +209,37 @@ public sealed class IntakeAgent : IIntakeAgent
                             $"Tool '{call.Name}' failed: {ex.Message}. Pick another path.");
                     }
 
-                    if (tool.IsTerminal)
+                    if (tool is ITerminalTool terminal)
                     {
-                        terminalFired = true;
-                        if (result.TryGetProperty("readiness_score_id", out var scoreEl)
-                            && scoreEl.ValueKind == JsonValueKind.String
-                            && Guid.TryParse(scoreEl.GetString(), out var parsed))
+                        if (!terminal.TryReadTerminalResult(result, out var parsed))
                         {
-                            terminalScoreId = parsed;
+                            // Terminal tool fired but emitted no usable payload.
+                            // Don't silently demote to "empty turn" — a terminal
+                            // with no score id is a tool-contract violation,
+                            // surface it loud so the orchestrator escalates.
+                            _logger.LogError(
+                                "Terminal tool {ToolName} fired without a readable result at step {Step}; result was {Result}",
+                                tool.Name, steps, result.GetRawText());
+                            throw new InvalidOperationException(
+                                $"Terminal tool '{tool.Name}' returned a result without a readable terminal payload.");
                         }
+                        terminalFired = true;
+                        terminalScoreId = parsed;
                     }
-                    else if (tool.Name == "compose_followup")
+                    else if (tool is IProposalTool proposal
+                             && proposal.TryReadProposal(result, out var subject, out var body))
                     {
-                        if (result.TryGetProperty("subject", out var subjEl)
-                            && subjEl.ValueKind == JsonValueKind.String)
-                            proposedSubject = subjEl.GetString();
-                        if (result.TryGetProperty("body", out var bodyEl)
-                            && bodyEl.ValueKind == JsonValueKind.String)
-                            proposedBody = bodyEl.GetString();
+                        proposedSubject = subject;
+                        proposedBody = body;
                     }
                 }
 
-                // Feed the tool_result back. STJ-serialize the JsonElement
-                // to a string the FunctionResultContent will round-trip;
-                // the SDK turns this into Anthropic's tool_result block.
+                // Feed the tool_result back. Pass the JsonElement directly
+                // so MEAI emits structured JSON for Anthropic's tool_result
+                // content (not a quoted JSON-as-string).
                 messages.Add(new ChatMessage(ChatRole.Tool, new List<AIContent>
                 {
-                    new FunctionResultContent(call.CallId, result.GetRawText()),
+                    new FunctionResultContent(call.CallId, result),
                 }));
             }
 
@@ -240,8 +255,11 @@ public sealed class IntakeAgent : IIntakeAgent
             StepsConsumed: steps,
             InputTokensConsumed: inputTokens,
             OutputTokensConsumed: outputTokens,
-            WallClockConsumed: stopwatch.Elapsed);
+            WallClockConsumed: ElapsedSince(startTimestamp));
     }
+
+    private TimeSpan ElapsedSince(long startTimestamp) =>
+        _clock.GetElapsedTime(startTimestamp);
 
     private static void CheckBudget(int steps, int tokens, TimeSpan wall)
     {
@@ -272,21 +290,5 @@ public sealed class IntakeAgent : IIntakeAgent
     {
         var bytes = JsonSerializer.SerializeToUtf8Bytes(call.Arguments ?? new Dictionary<string, object?>());
         return JsonDocument.Parse(bytes).RootElement;
-    }
-
-    // Wrap an IIntakeTool as an AIFunction so MEAI can ship it to the
-    // model in the tools[] array. The delegate captures the ambient
-    // provider/turn ids (the model doesn't know them; the runtime
-    // supplies them on every invocation).
-    private AIFunction CreateAIFunction(IIntakeTool tool, Guid providerId, Guid turnId)
-    {
-        return AIFunctionFactory.Create(
-            method: async (JsonElement args) =>
-            {
-                var result = await tool.InvokeAsync(args, providerId, turnId, CancellationToken.None);
-                return result;
-            },
-            name: tool.Name,
-            description: tool.Description);
     }
 }

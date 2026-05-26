@@ -11,14 +11,14 @@ namespace PacketReady.Api.Endpoints.Intake;
 /// HTTP-agnostic, this layer maps domain exceptions to
 /// <see cref="ProblemResults"/>.
 ///
-/// <para>The signed magic-link token rides in the response body.
-/// The admin is responsible for getting it to the provider — for C3 by
-/// copy-pasting; the email dispatcher (C5) takes over once
-/// <c>OutboundMessage</c> composition is wired into the command.</para>
+/// <para>The signed magic-link token rides in the response body so a
+/// curl-based admin can still grab it directly; C5's
+/// <c>OutboxDispatcherJob</c> also sends it via
+/// <c>MockSmtpSender</c> to <c>email</c>.</para>
 /// </summary>
 public static class StartIntakeEndpoint
 {
-    public sealed record StartIntakeRequest(Guid ProviderId);
+    public sealed record StartIntakeRequest(Guid ProviderId, string Email);
 
     public static IEndpointRouteBuilder MapStartIntakeEndpoint(this IEndpointRouteBuilder app)
     {
@@ -27,11 +27,13 @@ public static class StartIntakeEndpoint
         {
             if (body is null || body.ProviderId == Guid.Empty)
                 return ProblemResults.EmptyProviderId();
+            if (string.IsNullOrWhiteSpace(body.Email))
+                return ProblemResults.InvalidIntakeStart("email is required.");
 
             try
             {
                 var result = await mediator.Send(
-                    new StartIntakeCommand(body.ProviderId), ct);
+                    new StartIntakeCommand(body.ProviderId, body.Email), ct);
                 return Results.Created(
                     $"/api/intakes/{result.IntakeSessionId}",
                     result);
@@ -43,6 +45,10 @@ public static class StartIntakeEndpoint
             catch (IntakeAlreadyExistsException)
             {
                 return ProblemResults.IntakeAlreadyExists(body.ProviderId);
+            }
+            catch (ArgumentException ex) when (ex.ParamName == "request")
+            {
+                return ProblemResults.InvalidIntakeStart(ex.Message);
             }
         })
             .WithName("StartIntake")

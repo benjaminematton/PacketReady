@@ -19,9 +19,11 @@ namespace PacketReady.Application.Intake.Agent.Tools;
 /// send_email tool" — the LLM proposes content, deterministic code
 /// commits and sends.</para>
 /// </summary>
-public sealed class ComposeFollowupTool : IIntakeTool
+public sealed class ComposeFollowupTool : IProposalTool
 {
-    public string Name => "compose_followup";
+    public const string ToolName = "compose_followup";
+
+    public string Name => ToolName;
 
     public string Description =>
         "Compose ONE consolidated followup email for the provider, listing every gap in one message. Do NOT call this per-gap — collect every gap into one call. The runtime will queue the message for dispatch; you do not send email directly.";
@@ -105,13 +107,12 @@ public sealed class ComposeFollowupTool : IIntakeTool
 
         // Best-effort name pluck — same shape as the portal endpoint. A
         // missing profile lands as "there" via the handler's fallback.
-        var providerFullName = await _db.Providers
+        var profileJson = await _db.Providers
             .AsNoTracking()
             .Where(p => p.Id == providerId)
             .Select(p => p.ProfileJson)
-            .SingleOrDefaultAsync(ct) is { } profileJson
-            ? TryExtractFullName(profileJson)
-            : null;
+            .SingleOrDefaultAsync(ct);
+        var providerFullName = profileJson is null ? null : TryExtractFullName(profileJson);
 
         var followup = _handler.Compose(providerFullName ?? "there", gaps);
 
@@ -137,5 +138,19 @@ public sealed class ComposeFollowupTool : IIntakeTool
         {
             return null;
         }
+    }
+
+    public bool TryReadProposal(JsonElement result, out string subject, out string body)
+    {
+        subject = string.Empty;
+        body = string.Empty;
+        if (result.ValueKind != JsonValueKind.Object) return false;
+        if (!result.TryGetProperty("subject", out var subjEl)
+            || subjEl.ValueKind != JsonValueKind.String) return false;
+        if (!result.TryGetProperty("body", out var bodyEl)
+            || bodyEl.ValueKind != JsonValueKind.String) return false;
+        subject = subjEl.GetString() ?? string.Empty;
+        body = bodyEl.GetString() ?? string.Empty;
+        return subject.Length > 0 && body.Length > 0;
     }
 }

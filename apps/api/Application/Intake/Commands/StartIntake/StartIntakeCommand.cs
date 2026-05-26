@@ -16,7 +16,9 @@ namespace PacketReady.Application.Intake.Commands.StartIntake;
 /// <c>ToAddress</c> field or a <c>Provider.Email</c> lookup. The agent +
 /// dispatcher work in C4/C5 will pick those up.</para>
 /// </summary>
-public sealed record StartIntakeCommand(Guid ProviderId) : IRequest<StartIntakeResult>;
+public sealed record StartIntakeCommand(
+    Guid ProviderId,
+    string ProviderEmail) : IRequest<StartIntakeResult>;
 
 /// <summary>
 /// Returned to the admin. <see cref="Token"/> is the signed magic-link

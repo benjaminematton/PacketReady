@@ -68,6 +68,12 @@ public static class DependencyInjection
 
         services.AddScoped<IAuditWriter, AuditWriter>();
 
+        // Postgres-shaped DbUpdateException translator. Lets Application
+        // handlers detect unique-violation races (StartIntake's TOCTOU,
+        // ExtractionPersister's idempotency race) without referencing
+        // Npgsql.PostgresException directly. Stateless; singleton.
+        services.AddSingleton<IDbExceptionTranslator, PostgresExceptionTranslator>();
+
         // Per-payer requirements. Loaded once at startup and held as a
         // singleton dictionary keyed by payer id. PayerRequirementLoader fails
         // loud on schema violation so the app refuses to start with a broken
@@ -142,6 +148,15 @@ public static class DependencyInjection
         services.AddScoped<IIntakeTool, ComposeFollowupTool>();
         services.AddScoped<IIntakeTool, ComputeReadinessTool>();
         services.AddScoped<IIntakeAgent, IntakeAgent>();
+
+        // P5 C5 orchestration: IntakeTurnJob is enqueued on portal submit
+        // (one job per submit), OutboxDispatcherJob runs every 30s
+        // (recurring). The transitioner is the pure-code glue that maps
+        // AgentTurnResult onto the FSM transition + side effects. All
+        // scoped because they take the request's IAppDbContext.
+        services.AddScoped<IntakeStateTransitioner>();
+        services.AddScoped<IntakeTurnJob>();
+        services.AddScoped<OutboxDispatcherJob>();
 
         return services;
     }

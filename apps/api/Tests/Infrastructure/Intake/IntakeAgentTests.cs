@@ -26,7 +26,7 @@ public class IntakeAgentTests
     public async Task RunTurn_TerminalToolFires_ReturnsIsTerminalWithScoreId()
     {
         var scoreId = Guid.NewGuid();
-        var stubTerminal = new StubTool("compute_readiness", isTerminal: true,
+        var stubTerminal = MakeStub("compute_readiness", isTerminal: true,
             result: $$"""{ "readiness_score_id": "{{scoreId:D}}", "score": 87 }""");
 
         var agent = BuildAgent(
@@ -44,7 +44,7 @@ public class IntakeAgentTests
     [Fact]
     public async Task RunTurn_ComposeFollowup_CapturesSubjectAndBody()
     {
-        var stubCompose = new StubTool("compose_followup", isTerminal: false,
+        var stubCompose = MakeStub("compose_followup", isTerminal: false,
             result: """{ "subject": "PacketReady — one more item", "body": "Hi there, ..." }""");
 
         // Model invokes compose_followup, then on the next iteration returns
@@ -91,7 +91,7 @@ public class IntakeAgentTests
         // picks compute_readiness from the registered set and the turn
         // terminates.
         var scoreId = Guid.NewGuid();
-        var stubTerminal = new StubTool("compute_readiness", isTerminal: true,
+        var stubTerminal = MakeStub("compute_readiness", isTerminal: true,
             result: $$"""{ "readiness_score_id": "{{scoreId:D}}" }""");
 
         var chat = ChatSequence(
@@ -118,7 +118,7 @@ public class IntakeAgentTests
         // Canned response repeats a non-terminal tool call forever. The
         // runtime trips the step cap (15 per IntakeBudget.Default) and
         // throws.
-        var stubLoop = new StubTool("read_document", isTerminal: false,
+        var stubLoop = MakeStub("read_document", isTerminal: false,
             result: """{ "doc_type": "License" }""");
 
         var chat = ChatThatLoops("read_document", """{ "document_id": "deadbeef-0000-0000-0000-000000000000" }""");
@@ -130,6 +130,141 @@ public class IntakeAgentTests
         var ex = await Assert.ThrowsAsync<BudgetExhaustedException>(
             () => agent.RunTurnAsync(ProviderId, TurnId));
         Assert.Equal("steps", ex.Axis);
+    }
+
+    [Fact]
+    public async Task RunTurn_ExhaustsTokenBudget_ThrowsBudgetExhaustedTokens()
+    {
+        // Each canned response bills 50_000 input + 50_000 output tokens —
+        // a single iteration jumps past IntakeBudget.Default.Tokens
+        // (80_000). The second iteration's pre-call CheckBudget trips.
+        var stubLoop = MakeStub("read_document", isTerminal: false,
+            result: """{ "doc_type": "License" }""");
+
+        var chat = ChatThatLoopsWithUsage(
+            "read_document",
+            """{ "document_id": "deadbeef-0000-0000-0000-000000000000" }""",
+            inputTokens: 50_000,
+            outputTokens: 50_000);
+
+        var agent = BuildAgent(
+            chat: chat,
+            tools: [stubLoop, PlaceholderTerminalTool()]);
+
+        var ex = await Assert.ThrowsAsync<BudgetExhaustedException>(
+            () => agent.RunTurnAsync(ProviderId, TurnId));
+        Assert.Equal("tokens", ex.Axis);
+    }
+
+    [Fact]
+    public async Task RunTurn_ExhaustsWallBudget_ThrowsBudgetExhaustedWall()
+    {
+        // Drive the FakeTimeProvider past IntakeBudget.Default.WallClock
+        // (90s) on every step. The first iteration is admitted; the
+        // second iteration's pre-call CheckBudget trips on "wall."
+        var clock = new FakeTimeProvider(T0);
+
+        var stubLoop = new ClockAdvancingStubTool(
+            "read_document", "{}", clock, TimeSpan.FromSeconds(95));
+
+        var chat = ChatThatLoops("read_document",
+            """{ "document_id": "deadbeef-0000-0000-0000-000000000000" }""");
+
+        var agent = new IntakeAgent(
+            chat,
+            BuildPromptLoader(),
+            new IIntakeTool[] { stubLoop, PlaceholderTerminalTool() },
+            clock,
+            NullLogger<IntakeAgent>.Instance);
+
+        var ex = await Assert.ThrowsAsync<BudgetExhaustedException>(
+            () => agent.RunTurnAsync(ProviderId, TurnId));
+        Assert.Equal("wall", ex.Axis);
+    }
+
+    // ───────────────────────────────────────────── error recovery ───────
+
+    [Fact]
+    public async Task RunTurn_ToolThrows_FeedsErrorResultAndContinues()
+    {
+        // First call hits a tool that throws; the runtime catches, emits
+        // a structured error, and the agent's next iteration calls the
+        // terminal tool — turn completes cleanly with the score id.
+        var scoreId = Guid.NewGuid();
+        var throwingTool = new ThrowingStubTool("read_document",
+            new InvalidOperationException("boom"));
+        var terminal = MakeStub("compute_readiness", isTerminal: true,
+            result: $$"""{ "readiness_score_id": "{{scoreId:D}}" }""");
+
+        var chat = ChatSequence(
+            ToolCallResponse("read_document", """{ "document_id": "00000000-0000-0000-0000-000000000001" }"""),
+            ToolCallResponse("compute_readiness", $$"""{ "provider_id": "{{ProviderId:D}}" }"""));
+
+        var agent = BuildAgent(chat: chat, tools: [throwingTool, terminal]);
+
+        var result = await agent.RunTurnAsync(ProviderId, TurnId);
+
+        Assert.True(result.IsTerminal);
+        Assert.Equal(scoreId, result.CompletedReadinessScoreId);
+        Assert.Equal(2, result.StepsConsumed);
+        Assert.Equal(1, throwingTool.CallCount);
+    }
+
+    // ───────────────────────────────────────────── parallel calls ───────
+
+    [Fact]
+    public async Task RunTurn_ParallelCalls_NonTerminalThenTerminal_TerminalWins()
+    {
+        // One assistant response carries two function_call blocks —
+        // non-terminal first, terminal second. Both invoke; the terminal
+        // breaks the loop after its tool_result is appended.
+        var scoreId = Guid.NewGuid();
+        var nonTerminal = MakeStub("read_document", isTerminal: false,
+            result: """{ "doc_type": "License" }""");
+        var terminal = MakeStub("compute_readiness", isTerminal: true,
+            result: $$"""{ "readiness_score_id": "{{scoreId:D}}" }""");
+
+        var parallelResponse = MultiToolCallResponse(
+            ("read_document", """{ "document_id": "00000000-0000-0000-0000-000000000001" }"""),
+            ("compute_readiness", $$"""{ "provider_id": "{{ProviderId:D}}" }"""));
+
+        var chat = new Mock<IChatClient>();
+        chat.Setup(c => c.GetResponseAsync(
+                It.IsAny<IEnumerable<ChatMessage>>(),
+                It.IsAny<ChatOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(parallelResponse);
+
+        var agent = BuildAgent(chat: chat.Object, tools: [nonTerminal, terminal]);
+
+        var result = await agent.RunTurnAsync(ProviderId, TurnId);
+
+        Assert.True(result.IsTerminal);
+        Assert.Equal(scoreId, result.CompletedReadinessScoreId);
+        // 1 step (single chat response), but both tools fired inside it.
+        Assert.Equal(1, result.StepsConsumed);
+    }
+
+    [Fact]
+    public async Task RunTurn_TerminalWithoutPayload_ThrowsInvalidOperation()
+    {
+        // The terminal tool fired but the JSON result has no
+        // readiness_score_id — that's a tool-contract violation. Loud
+        // throw so the orchestrator escalates rather than silently
+        // demoting to "empty turn."
+        var bustedTerminal = MakeStub("compute_readiness", isTerminal: true,
+            result: """{ "score": 50 }""");
+
+        var chat = ChatThatCalls("compute_readiness",
+            $$"""{ "provider_id": "{{ProviderId:D}}" }""");
+
+        var agent = BuildAgent(
+            chat: chat,
+            tools: [PlaceholderNonTerminalTool(), bustedTerminal]);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => agent.RunTurnAsync(ProviderId, TurnId));
+        Assert.Contains("compute_readiness", ex.Message);
     }
 
     // ───────────────────────────────────────────── construction ────────
@@ -145,43 +280,47 @@ public class IntakeAgentTests
     [Fact]
     public void Ctor_RejectsMultipleTerminals()
     {
-        var t1 = new StubTool("a", isTerminal: true, result: "{}");
-        var t2 = new StubTool("b", isTerminal: true, result: "{}");
+        var t1 = MakeStub("a", isTerminal: true, result: "{}");
+        var t2 = MakeStub("b", isTerminal: true, result: "{}");
         var ex = Assert.Throws<InvalidOperationException>(() =>
             BuildAgent(chat: new Mock<IChatClient>().Object, tools: [t1, t2]));
-        Assert.Contains("Exactly one terminal", ex.Message);
+        Assert.Contains("Exactly one ITerminalTool", ex.Message);
     }
 
     [Fact]
     public void Ctor_RejectsZeroTerminals()
     {
-        var t = new StubTool("a", isTerminal: false, result: "{}");
+        var t = MakeStub("a", isTerminal: false, result: "{}");
         var ex = Assert.Throws<InvalidOperationException>(() =>
             BuildAgent(chat: new Mock<IChatClient>().Object, tools: [t]));
-        Assert.Contains("Exactly one terminal", ex.Message);
+        Assert.Contains("Exactly one ITerminalTool", ex.Message);
     }
 
     // ────────────────────────────────────────────── helpers ─────────────
 
     private static IntakeAgent BuildAgent(IChatClient chat, IReadOnlyList<IIntakeTool> tools)
     {
-        var prompts = new Mock<IPromptLoader>(MockBehavior.Strict);
-        prompts.Setup(p => p.LoadAsync(PromptKeys.IntakeAgent, It.IsAny<CancellationToken>()))
-            .ReturnsAsync("You are the intake agent. (test stub prompt)");
-
         return new IntakeAgent(
             chat,
-            prompts.Object,
+            BuildPromptLoader(),
             tools,
             new FakeTimeProvider(T0),
             NullLogger<IntakeAgent>.Instance);
     }
 
-    private static StubTool PlaceholderTerminalTool() =>
-        new("compute_readiness", isTerminal: true, result: "{}");
+    private static IPromptLoader BuildPromptLoader()
+    {
+        var prompts = new Mock<IPromptLoader>(MockBehavior.Strict);
+        prompts.Setup(p => p.LoadAsync(PromptKeys.IntakeAgent, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("You are the intake agent. (test stub prompt)");
+        return prompts.Object;
+    }
 
-    private static StubTool PlaceholderNonTerminalTool() =>
-        new("read_document", isTerminal: false, result: "{}");
+    private static IIntakeTool PlaceholderTerminalTool() =>
+        MakeStub("compute_readiness", isTerminal: true, "{}");
+
+    private static IIntakeTool PlaceholderNonTerminalTool() =>
+        MakeStub("read_document", isTerminal: false, "{}");
 
     private static IChatClient ChatThatCalls(string toolName, string argsJson)
     {
@@ -228,6 +367,33 @@ public class IntakeAgentTests
         return chat.Object;
     }
 
+    private static IChatClient ChatThatLoopsWithUsage(
+        string toolName, string argsJson, int inputTokens, int outputTokens)
+    {
+        var response = new ChatResponse(new ChatMessage(ChatRole.Assistant, new List<AIContent>
+        {
+            new FunctionCallContent(
+                callId: "call_" + Guid.NewGuid().ToString("N")[..8],
+                name: toolName,
+                arguments: JsonSerializer.Deserialize<Dictionary<string, object?>>(argsJson)
+                    ?? new Dictionary<string, object?>()),
+        }))
+        {
+            Usage = new UsageDetails
+            {
+                InputTokenCount = inputTokens,
+                OutputTokenCount = outputTokens,
+            },
+        };
+        var chat = new Mock<IChatClient>();
+        chat.Setup(c => c.GetResponseAsync(
+                It.IsAny<IEnumerable<ChatMessage>>(),
+                It.IsAny<ChatOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(response);
+        return chat.Object;
+    }
+
     private static IChatClient ChatSequence(params ChatResponse[] responses)
     {
         var chat = new Mock<IChatClient>();
@@ -256,6 +422,25 @@ public class IntakeAgentTests
         };
     }
 
+    private static ChatResponse MultiToolCallResponse(params (string Name, string ArgsJson)[] calls)
+    {
+        var content = new List<AIContent>();
+        foreach (var (name, argsJson) in calls)
+        {
+            var args = JsonSerializer.Deserialize<Dictionary<string, object?>>(argsJson)
+                ?? new Dictionary<string, object?>();
+            content.Add(new FunctionCallContent(
+                callId: "call_" + Guid.NewGuid().ToString("N")[..8],
+                name: name,
+                arguments: args));
+        }
+        var msg = new ChatMessage(ChatRole.Assistant, content);
+        return new ChatResponse(msg)
+        {
+            Usage = new UsageDetails { InputTokenCount = 100, OutputTokenCount = 50 },
+        };
+    }
+
     private static ChatResponse TextResponse(string text)
     {
         var msg = new ChatMessage(ChatRole.Assistant, text);
@@ -266,18 +451,25 @@ public class IntakeAgentTests
     }
 
     /// <summary>
-    /// Minimal IIntakeTool that returns canned JSON. Lets us drive the
-    /// agent loop without spinning up the real tool stack (which needs
-    /// DbContext + MediatR + primary-source mock).
+    /// Minimal IIntakeTool that returns canned JSON. The static factories
+    /// below return tools that also implement <see cref="ITerminalTool"/>
+    /// or <see cref="IProposalTool"/> as appropriate — the agent now
+    /// reads structured payloads via type-test, so a plain
+    /// <c>IIntakeTool</c> with <c>IsTerminal=true</c> isn't enough on its
+    /// own.
     /// </summary>
-    private sealed class StubTool : IIntakeTool
+    private static StubTool MakeStub(string name, bool isTerminal, string result)
+        => isTerminal
+            ? new TerminalStubTool(name, result)
+            : (StubTool)new ProposalCapableStubTool(name, result);
+
+    private abstract class StubTool : IIntakeTool
     {
         private readonly string _resultJson;
 
-        public StubTool(string name, bool isTerminal, string result)
+        protected StubTool(string name, string result)
         {
             Name = name;
-            IsTerminal = isTerminal;
             _resultJson = result;
         }
 
@@ -285,9 +477,94 @@ public class IntakeAgentTests
         public string Description => $"Stub tool: {Name}";
         public JsonElement InputSchema { get; } =
             JsonDocument.Parse("""{ "type": "object", "properties": {} }""").RootElement;
-        public bool IsTerminal { get; }
 
         public Task<JsonElement> InvokeAsync(JsonElement args, Guid providerId, Guid turnId, CancellationToken ct)
             => Task.FromResult(JsonDocument.Parse(_resultJson).RootElement);
+    }
+
+    private sealed class TerminalStubTool : StubTool, ITerminalTool
+    {
+        public TerminalStubTool(string name, string result) : base(name, result) { }
+
+        public bool TryReadTerminalResult(JsonElement result, out Guid completedScoreId)
+        {
+            completedScoreId = Guid.Empty;
+            return result.ValueKind == JsonValueKind.Object
+                && result.TryGetProperty("readiness_score_id", out var el)
+                && el.ValueKind == JsonValueKind.String
+                && Guid.TryParse(el.GetString(), out completedScoreId);
+        }
+    }
+
+    private sealed class ProposalCapableStubTool : StubTool, IProposalTool
+    {
+        public ProposalCapableStubTool(string name, string result) : base(name, result) { }
+
+        public bool TryReadProposal(JsonElement result, out string subject, out string body)
+        {
+            subject = string.Empty;
+            body = string.Empty;
+            if (result.ValueKind != JsonValueKind.Object) return false;
+            if (!result.TryGetProperty("subject", out var s) || s.ValueKind != JsonValueKind.String) return false;
+            if (!result.TryGetProperty("body", out var b) || b.ValueKind != JsonValueKind.String) return false;
+            subject = s.GetString() ?? "";
+            body = b.GetString() ?? "";
+            return subject.Length > 0 && body.Length > 0;
+        }
+    }
+
+    private sealed class ThrowingStubTool : IIntakeTool
+    {
+        private readonly Exception _toThrow;
+        public int CallCount { get; private set; }
+
+        public ThrowingStubTool(string name, Exception toThrow)
+        {
+            Name = name;
+            _toThrow = toThrow;
+        }
+
+        public string Name { get; }
+        public string Description => $"Throwing stub: {Name}";
+        public JsonElement InputSchema { get; } =
+            JsonDocument.Parse("""{ "type": "object", "properties": {} }""").RootElement;
+
+        public Task<JsonElement> InvokeAsync(JsonElement args, Guid providerId, Guid turnId, CancellationToken ct)
+        {
+            CallCount++;
+            throw _toThrow;
+        }
+    }
+
+    private sealed class ClockAdvancingStubTool : IIntakeTool, IProposalTool
+    {
+        private readonly string _resultJson;
+        private readonly FakeTimeProvider _clock;
+        private readonly TimeSpan _advance;
+
+        public ClockAdvancingStubTool(string name, string result, FakeTimeProvider clock, TimeSpan advance)
+        {
+            Name = name;
+            _resultJson = result;
+            _clock = clock;
+            _advance = advance;
+        }
+
+        public string Name { get; }
+        public string Description => $"Clock-advancing stub: {Name}";
+        public JsonElement InputSchema { get; } =
+            JsonDocument.Parse("""{ "type": "object", "properties": {} }""").RootElement;
+
+        public Task<JsonElement> InvokeAsync(JsonElement args, Guid providerId, Guid turnId, CancellationToken ct)
+        {
+            _clock.Advance(_advance);
+            return Task.FromResult(JsonDocument.Parse(_resultJson).RootElement);
+        }
+
+        public bool TryReadProposal(JsonElement result, out string subject, out string body)
+        {
+            subject = body = string.Empty;
+            return false;
+        }
     }
 }

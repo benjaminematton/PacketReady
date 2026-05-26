@@ -10,6 +10,7 @@ public class OutboundMessageTests
 
     private static readonly Guid ProviderId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid TurnId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+    private const string ToAddr = "provider@example.com";
 
     // ─────────────────────────────────────────────────────── Compose ────
 
@@ -18,6 +19,7 @@ public class OutboundMessageTests
     {
         var msg = OutboundMessage.Compose(
             ProviderId, TurnId, MessageKind.Followup,
+            toAddress: ToAddr,
             subject: "we need a few things",
             body: "please upload your DEA",
             composedAt: T0,
@@ -27,6 +29,7 @@ public class OutboundMessageTests
         Assert.Equal(ProviderId, msg.ProviderId);
         Assert.Equal(TurnId, msg.TurnId);
         Assert.Equal(MessageKind.Followup, msg.Kind);
+        Assert.Equal(ToAddr, msg.ToAddress);
         Assert.Equal("we need a few things", msg.Subject);
         Assert.Equal("please upload your DEA", msg.Body);
         Assert.Equal(OutboundMessageStatus.Queued, msg.Status);
@@ -40,7 +43,7 @@ public class OutboundMessageTests
     {
         var msg = OutboundMessage.Compose(
             ProviderId, TurnId, MessageKind.IntakeInvitation,
-            "subj", "body", composedAt: T0);
+            ToAddr, "subj", "body", composedAt: T0);
 
         Assert.Equal(T0 + OutboundMessage.DefaultHoldDuration, msg.HeldUntil);
         Assert.Equal(TimeSpan.FromMinutes(10), OutboundMessage.DefaultHoldDuration);
@@ -50,7 +53,7 @@ public class OutboundMessageTests
     public void Compose_RejectsEmptyProviderId()
     {
         var ex = Assert.Throws<ArgumentException>(() =>
-            OutboundMessage.Compose(Guid.Empty, TurnId, MessageKind.Followup, "s", "b", T0));
+            OutboundMessage.Compose(Guid.Empty, TurnId, MessageKind.Followup, ToAddr, "s", "b", T0));
         Assert.Equal("providerId", ex.ParamName);
     }
 
@@ -58,8 +61,37 @@ public class OutboundMessageTests
     public void Compose_RejectsEmptyTurnId()
     {
         var ex = Assert.Throws<ArgumentException>(() =>
-            OutboundMessage.Compose(ProviderId, Guid.Empty, MessageKind.Followup, "s", "b", T0));
+            OutboundMessage.Compose(ProviderId, Guid.Empty, MessageKind.Followup, ToAddr, "s", "b", T0));
         Assert.Equal("turnId", ex.ParamName);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void Compose_RejectsBlankToAddress(string toAddress)
+    {
+        var ex = Assert.Throws<ArgumentException>(() =>
+            OutboundMessage.Compose(ProviderId, TurnId, MessageKind.Followup, toAddress, "s", "b", T0));
+        Assert.Equal("toAddress", ex.ParamName);
+    }
+
+    [Fact]
+    public void Compose_RejectsToAddressOverColumnCap()
+    {
+        var oversize = new string('x', OutboundMessage.MaxToAddressLength + 1);
+        var ex = Assert.Throws<ArgumentException>(() =>
+            OutboundMessage.Compose(ProviderId, TurnId, MessageKind.Followup, oversize, "s", "b", T0));
+        Assert.Equal("toAddress", ex.ParamName);
+    }
+
+    [Theory]
+    [InlineData("a@b.com\r\nBcc: x@y.com")]
+    [InlineData("a@b.com\nX-Smuggled: 1")]
+    public void Compose_RejectsCrlfInToAddress(string toAddress)
+    {
+        var ex = Assert.Throws<ArgumentException>(() =>
+            OutboundMessage.Compose(ProviderId, TurnId, MessageKind.Followup, toAddress, "s", "b", T0));
+        Assert.Equal("toAddress", ex.ParamName);
     }
 
     [Theory]
@@ -68,8 +100,40 @@ public class OutboundMessageTests
     public void Compose_RejectsBlankSubject(string subject)
     {
         var ex = Assert.Throws<ArgumentException>(() =>
-            OutboundMessage.Compose(ProviderId, TurnId, MessageKind.Followup, subject, "body", T0));
+            OutboundMessage.Compose(ProviderId, TurnId, MessageKind.Followup, ToAddr, subject, "body", T0));
         Assert.Equal("subject", ex.ParamName);
+    }
+
+    [Fact]
+    public void Compose_RejectsSubjectOverColumnCap()
+    {
+        // Fail at the factory rather than letting EF surface a column-cap
+        // violation at SaveChanges, where the stack trace doesn't point at
+        // the caller that composed the over-long subject.
+        var oversize = new string('x', OutboundMessage.MaxSubjectLength + 1);
+        var ex = Assert.Throws<ArgumentException>(() =>
+            OutboundMessage.Compose(ProviderId, TurnId, MessageKind.Followup, ToAddr, oversize, "body", T0));
+        Assert.Equal("subject", ex.ParamName);
+    }
+
+    [Fact]
+    public void Compose_AcceptsSubjectAtColumnCap()
+    {
+        var atCap = new string('x', OutboundMessage.MaxSubjectLength);
+        var msg = OutboundMessage.Compose(
+            ProviderId, TurnId, MessageKind.Followup, ToAddr, atCap, "body", T0);
+        Assert.Equal(atCap, msg.Subject);
+    }
+
+    [Fact]
+    public void Compose_RejectsUndefinedKind()
+    {
+        // Out-of-range cast — DB CHECK would catch it too, but failing at
+        // the factory points at the caller instead of at SaveChanges.
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
+            OutboundMessage.Compose(
+                ProviderId, TurnId, (MessageKind)999, ToAddr, "subject", "body", T0));
+        Assert.Equal("kind", ex.ParamName);
     }
 
     [Theory]
@@ -78,7 +142,7 @@ public class OutboundMessageTests
     public void Compose_RejectsBlankBody(string body)
     {
         var ex = Assert.Throws<ArgumentException>(() =>
-            OutboundMessage.Compose(ProviderId, TurnId, MessageKind.Followup, "subject", body, T0));
+            OutboundMessage.Compose(ProviderId, TurnId, MessageKind.Followup, ToAddr, "subject", body, T0));
         Assert.Equal("body", ex.ParamName);
     }
 
@@ -87,7 +151,7 @@ public class OutboundMessageTests
     {
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
             OutboundMessage.Compose(
-                ProviderId, TurnId, MessageKind.Followup, "s", "b", T0,
+                ProviderId, TurnId, MessageKind.Followup, ToAddr, "s", "b", T0,
                 holdDuration: TimeSpan.FromSeconds(-1)));
         Assert.Equal("holdDuration", ex.ParamName);
     }
@@ -100,7 +164,7 @@ public class OutboundMessageTests
         // advance the clock; we allow it because the aggregate is still in
         // Queued and the dispatcher's filter runs the predicate.
         var msg = OutboundMessage.Compose(
-            ProviderId, TurnId, MessageKind.Followup, "s", "b", T0,
+            ProviderId, TurnId, MessageKind.Followup, ToAddr, "s", "b", T0,
             holdDuration: TimeSpan.Zero);
 
         Assert.Equal(T0, msg.HeldUntil);
@@ -216,6 +280,7 @@ public class OutboundMessageTests
     private static OutboundMessage Queued(TimeSpan? holdDuration = null) =>
         OutboundMessage.Compose(
             ProviderId, TurnId, MessageKind.Followup,
+            toAddress: ToAddr,
             subject: "subj", body: "body",
             composedAt: T0,
             holdDuration: holdDuration);

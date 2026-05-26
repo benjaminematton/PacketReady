@@ -17,7 +17,7 @@ public sealed class OutboundMessageConfiguration : IEntityTypeConfiguration<Outb
 
             t.HasCheckConstraint(
                 "ck_outbound_messages_status_values",
-                "status IN ('Queued', 'Held', 'Sent', 'Cancelled')");
+                "status IN ('Queued', 'Sent', 'Cancelled')");
 
             // Sent rows must carry sent_at; non-Sent rows must not. Catches a
             // mis-updated row that records "Sent" without timestamping the
@@ -39,9 +39,14 @@ public sealed class OutboundMessageConfiguration : IEntityTypeConfiguration<Outb
             .HasMaxLength(32)
             .IsRequired();
 
+        b.Property(x => x.ToAddress)
+            .HasColumnName("to_address")
+            .HasMaxLength(OutboundMessage.MaxToAddressLength)
+            .IsRequired();
+
         b.Property(x => x.Subject)
             .HasColumnName("subject")
-            .HasMaxLength(256)
+            .HasMaxLength(OutboundMessage.MaxSubjectLength)
             .IsRequired();
 
         b.Property(x => x.Body)
@@ -54,7 +59,7 @@ public sealed class OutboundMessageConfiguration : IEntityTypeConfiguration<Outb
             .HasMaxLength(16)
             .IsRequired();
 
-        b.Property(x => x.HeldUntil).HasColumnName("held_until");
+        b.Property(x => x.HeldUntil).HasColumnName("held_until").IsRequired();
         b.Property(x => x.ComposedAt).HasColumnName("composed_at").IsRequired();
         b.Property(x => x.SentAt).HasColumnName("sent_at");
 

@@ -16,6 +16,12 @@ namespace PacketReady.Application.Intake.Agent.Tools;
 /// tool name (the agent occasionally invents one) is refused by the
 /// dispatcher with a structured error; the agent's next iteration sees
 /// the refusal and retries.</para>
+///
+/// <para>Tools that fire a terminal action or contribute a proposal back
+/// to the orchestrator implement <see cref="ITerminalTool"/> or
+/// <see cref="IProposalTool"/> — those interfaces are how the runtime
+/// pulls structured fields out of the tool's JSON result without
+/// hard-coding tool names.</para>
 /// </summary>
 public interface IIntakeTool
 {
@@ -46,10 +52,46 @@ public interface IIntakeTool
         CancellationToken ct);
 
     /// <summary>
-    /// Terminal tools end the agent loop on invocation — the runtime
-    /// captures the result + breaks out without asking the LLM for
-    /// another turn. <c>compute_readiness</c> is the only terminal tool;
-    /// every other returns <c>false</c>.
+    /// True iff this tool also implements <see cref="ITerminalTool"/>.
+    /// Kept as a property so the runtime can do its
+    /// "exactly-one-terminal" construction-time guard cheaply, without
+    /// a type-test against every tool. Concrete tools should implement
+    /// <see cref="ITerminalTool"/> instead of overriding this directly.
     /// </summary>
-    bool IsTerminal => false;
+    bool IsTerminal => this is ITerminalTool;
+}
+
+/// <summary>
+/// A tool that ends the agent loop on invocation. The runtime captures
+/// the terminal result via <see cref="TryReadTerminalResult"/> and breaks
+/// out without asking the LLM for another turn. Exactly one
+/// <see cref="ITerminalTool"/> must be registered (enforced at agent
+/// construction); today that's <c>compute_readiness</c>.
+/// </summary>
+public interface ITerminalTool : IIntakeTool
+{
+    /// <summary>
+    /// Pull the structured terminal payload (today: the readiness score
+    /// id) out of the tool's JSON result. Returning <c>false</c> means
+    /// the terminal fired but produced no usable payload — the runtime
+    /// logs and escalates rather than silently demoting to "empty turn."
+    /// </summary>
+    bool TryReadTerminalResult(JsonElement result, out Guid completedScoreId);
+}
+
+/// <summary>
+/// A non-terminal tool that contributes a proposal back to the
+/// orchestrator. Today that's <c>compose_followup</c>, which proposes an
+/// outbound email; the orchestrator (<c>IntakeTurnJob</c>, C5) commits
+/// the proposal as an <c>OutboundMessage</c> on the way out of the turn.
+/// </summary>
+public interface IProposalTool : IIntakeTool
+{
+    /// <summary>
+    /// Pull the proposal's subject/body out of the tool's JSON result.
+    /// Returning <c>false</c> means the tool ran but didn't produce a
+    /// proposal — the runtime ignores it and the next agent iteration
+    /// can retry.
+    /// </summary>
+    bool TryReadProposal(JsonElement result, out string subject, out string body);
 }

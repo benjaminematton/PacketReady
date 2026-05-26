@@ -7,6 +7,13 @@
 
   <ItemGroup>
     <PackageReference Include="Anthropic.SDK" Version="5.10.0" />
+    <!-- Hangfire.Core gives us [AutomaticRetry] + IBackgroundJobClient
+         where the jobs are declared (IntakeTurnJob / OutboxDispatcherJob).
+         The Postgres-backed storage and AspNetCore wiring live up in
+         Api.csproj (where the host configures dashboard + recurring
+         registration); Infrastructure just needs the abstractions to
+         compile. -->
+    <PackageReference Include="Hangfire.Core" Version="1.8.23" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.4" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.4">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -32,16 +39,18 @@
          PayerRequirementLoader can read them from AppContext.BaseDirectory at
          startup. PreserveNewest copies on rebuild; the loader's fail-loud
          shape validation catches schema drift before app start. -->
-    <Content Include="Payers\payers\*.yaml">
+    <Content Include="Payers/payers/*.yaml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <!-- NUCC taxonomy snapshot. Shipped at the repo root under data/ so a
          single file feeds the seed CLI, the eval generator, and the API.
-         Copied to Nucc\nucc-taxonomy-25.1.csv next to the assembly so
+         Copied to Nucc/nucc-taxonomy-25.1.csv next to the assembly so
          NuccTaxonomyLookup can resolve via AppContext.BaseDirectory at
          startup. Snapshot once; NUCC publishes biannually — bumping to
-         25.2 / 26.0 is a filename + path constant change here. -->
-    <Content Include="..\..\..\data\nucc-taxonomy-25.1.csv" Link="Nucc\nucc-taxonomy-25.1.csv">
+         25.2 / 26.0 is a filename + path constant change here. Forward
+         slashes intentional — backslash <Link> attributes are a Windows-
+         ism that has caused silent cross-platform breakage elsewhere. -->
+    <Content Include="$(MSBuildThisFileDirectory)../../../data/nucc-taxonomy-25.1.csv" Link="Nucc/nucc-taxonomy-25.1.csv">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

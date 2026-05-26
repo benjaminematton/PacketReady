@@ -17,4 +17,6 @@ public static class AuditEventType
 
     // Phase 5
     public const string IntakeStarted = "IntakeStarted";
+    public const string IntakeTurnCompleted = "IntakeTurnCompleted";
+    public const string OutboundMessageSent = "OutboundMessageSent";
 }

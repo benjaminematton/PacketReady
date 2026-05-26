@@ -19,8 +19,11 @@ internal static class ProblemResults
     private const string DocumentNotFoundType         = "urn:packetready:error:document_not_found";
     private const string DocumentBlobMissingType      = "urn:packetready:error:document_blob_missing";
     private const string UploadInvalidPdfType         = "urn:packetready:error:upload_invalid_pdf";
+    private const string PayerNotConfiguredType       = "urn:packetready:error:payer_not_configured";
+    private const string InvalidProviderIdentityType  = "urn:packetready:error:invalid_provider_identity";
     private const string IntakeAlreadyExistsType      = "urn:packetready:error:intake_already_exists";
     private const string MagicLinkInvalidType         = "urn:packetready:error:magic_link_invalid";
+    private const string InvalidIntakeStartType       = "urn:packetready:error:invalid_intake_start";
 
     public static IResult ProviderNotFound(Guid providerId) =>
         Results.Problem(
@@ -108,6 +111,48 @@ internal static class ProblemResults
             });
 
     /// <summary>
+    /// Provider.PayerId doesn't match any loaded payer YAML. 422 (not 500)
+    /// because the request shape is valid — it's the persisted PayerId that
+    /// drifted from the deployed payer set, or the YAML wasn't shipped. The
+    /// known-id list goes in <c>knownPayerIds</c> so an operator can
+    /// reconcile without grepping logs.
+    /// </summary>
+    public static IResult PayerNotConfigured(string payerId, IReadOnlyCollection<string> knownPayerIds) =>
+        Results.Problem(
+            type: PayerNotConfiguredType,
+            title: "Payer is not configured.",
+            detail: $"PayerId '{payerId}' is not backed by a YAML file deployed with this build.",
+            statusCode: StatusCodes.Status422UnprocessableEntity,
+            extensions: new Dictionary<string, object?>
+            {
+                ["payerId"] = payerId,
+                ["knownPayerIds"] = knownPayerIds,
+            });
+
+    /// <summary>
+    /// One or more wire-shape fields on a create-provider request failed
+    /// boundary validation — identity fields (NPI, DOB, state, fullName)
+    /// and / or the optional <c>payerId</c>. The full list of violations
+    /// rides under <c>violations</c> so a client can show every problem
+    /// at once instead of fix-one-retry-find-next. 400 (not 422) because
+    /// the request shape itself is malformed; 422 is reserved for
+    /// well-shaped requests that conflict with persisted config (see
+    /// <see cref="PayerNotConfigured"/>).
+    /// </summary>
+    public static IResult InvalidProviderIdentity(IReadOnlyList<string> violations) =>
+        Results.Problem(
+            type: InvalidProviderIdentityType,
+            title: "Create-provider request failed validation.",
+            detail: violations.Count == 1
+                ? violations[0]
+                : $"{violations.Count} validation errors; see violations for the full list.",
+            statusCode: StatusCodes.Status400BadRequest,
+            extensions: new Dictionary<string, object?>
+            {
+                ["violations"] = violations,
+            });
+
+    /// <summary>
     /// An <c>intake_sessions</c> row already exists for the target provider.
     /// 409 (not 400) because the request shape is valid; the conflict is
     /// with persisted state. Re-issuing a fresh magic link for an existing
@@ -143,4 +188,17 @@ internal static class ProblemResults
             detail: "This link can't be used. Ask the admin to issue a fresh one.",
             statusCode: StatusCodes.Status410Gone,
             extensions: new Dictionary<string, object?> { ["reason"] = reason });
+
+    /// <summary>
+    /// <c>POST /api/intakes</c> body failed boundary validation
+    /// (missing or malformed email, etc). 400 because the request shape
+    /// is wrong; 422 is reserved for valid-shape requests that conflict
+    /// with persisted state.
+    /// </summary>
+    public static IResult InvalidIntakeStart(string detail) =>
+        Results.Problem(
+            type: InvalidIntakeStartType,
+            title: "Start-intake request failed validation.",
+            detail: detail,
+            statusCode: StatusCodes.Status400BadRequest);
 }

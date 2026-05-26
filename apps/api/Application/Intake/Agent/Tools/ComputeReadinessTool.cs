@@ -19,9 +19,11 @@ namespace PacketReady.Application.Intake.Agent.Tools;
 /// avoids a parallel scoring path. Same handler that
 /// <c>POST /api/providers/{id}/scores</c> hits, same audit trail.</para>
 /// </summary>
-public sealed class ComputeReadinessTool : IIntakeTool
+public sealed class ComputeReadinessTool : ITerminalTool
 {
-    public string Name => "compute_readiness";
+    public const string ToolName = "compute_readiness";
+
+    public string Name => ToolName;
 
     public string Description =>
         "TERMINAL. Compute the readiness score for the provider — invoke ONLY when you believe the profile has enough credentialing data to score (e.g. license + DEA + malpractice + board cert all present and primary-source verified). Calling this ends the turn; do not call any other tool afterwards.";
@@ -41,8 +43,6 @@ public sealed class ComputeReadinessTool : IIntakeTool
         """).RootElement;
 
     public JsonElement InputSchema => _schema;
-
-    public bool IsTerminal => true;
 
     private readonly IMediator _mediator;
 
@@ -75,5 +75,14 @@ public sealed class ComputeReadinessTool : IIntakeTool
             computed_at = score.ComputedAt,
         });
         return JsonDocument.Parse(bytes).RootElement;
+    }
+
+    public bool TryReadTerminalResult(JsonElement result, out Guid completedScoreId)
+    {
+        completedScoreId = Guid.Empty;
+        return result.ValueKind == JsonValueKind.Object
+            && result.TryGetProperty("readiness_score_id", out var el)
+            && el.ValueKind == JsonValueKind.String
+            && Guid.TryParse(el.GetString(), out completedScoreId);
     }
 }

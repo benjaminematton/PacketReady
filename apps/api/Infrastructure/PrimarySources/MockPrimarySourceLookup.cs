@@ -134,19 +134,20 @@ public sealed class MockPrimarySourceLookup : IPrimarySourceLookup
 
         if (_table.TryGetValue((canonical, npi), out var entry))
         {
-            var bytes = JsonSerializer.SerializeToUtf8Bytes(entry);
-            return Task.FromResult(JsonDocument.Parse(bytes).RootElement);
+            var hitBytes = JsonSerializer.SerializeToUtf8Bytes(entry);
+            return Task.FromResult(JsonDocument.Parse(hitBytes).RootElement);
         }
 
         // Unknown source name OR npi-not-in-table → not_found. This is
         // the most common branch the agent hits in the demo — every
         // (source, npi) pair we don't seed lands here.
-        return Task.FromResult(JsonSerializer.SerializeToUtf8Bytes(new
+        var missBytes = JsonSerializer.SerializeToUtf8Bytes(new
         {
             found = false,
             fields = (object?)null,
             mismatch_fields = Array.Empty<string>(),
-        }) is var b ? JsonDocument.Parse(b).RootElement : default);
+        });
+        return Task.FromResult(JsonDocument.Parse(missBytes).RootElement);
     }
 
     private static JsonElement NotFound(string error)

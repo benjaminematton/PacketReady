@@ -5,6 +5,7 @@ using OpenTelemetry.Trace;
 using PacketReady.Api.Endpoints;
 using PacketReady.Api.Endpoints.Intake;
 using PacketReady.Api.Endpoints.Portal;
+using PacketReady.Api.Hangfire;
 using PacketReady.Application;
 using PacketReady.Application.Ping;
 using PacketReady.Application.Prompts;
@@ -55,6 +56,14 @@ var magicLinkSigningKey = builder.Configuration["MAGIC_LINK_SIGNING_KEY"]
     ?? throw new InvalidOperationException(
         "MAGIC_LINK_SIGNING_KEY is not configured; set it via env var or user-secrets.");
 builder.Services.AddMagicLinks(magicLinkSigningKey);
+
+// Hangfire — backs IntakeTurnJob (enqueued on portal submit) and
+// OutboxDispatcherJob (recurring, every 30s). Same Postgres as the
+// primary DbContext; Hangfire's schema is namespaced to `hangfire`.
+var hangfireConnStr = builder.Configuration["DB_CONNECTION_STRING"]
+    ?? throw new InvalidOperationException(
+        "DB_CONNECTION_STRING is required for Hangfire storage.");
+builder.Services.AddPacketReadyHangfire(hangfireConnStr);
 
 builder.Services.AddMediatR(cfg =>
     cfg.RegisterServicesFromAssembly(typeof(PingCommand).Assembly));
@@ -126,6 +135,12 @@ app.MapExtractEndpoint();
 app.MapDocumentEndpoints();
 app.MapStartIntakeEndpoint();
 app.MapPortalEndpoints();
+
+// Hangfire dashboard + recurring job registration. Order matters: the
+// dispatcher's AddOrUpdate runs once the service provider is up, so it
+// has to come after Build() and before Run().
+app.UsePacketReadyHangfire();
+
 app.Run();
 
 public partial class Program;
