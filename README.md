@@ -8,15 +8,21 @@ source PDF region.
 
 ## Demo
 
-[26-second walkthrough](DEMO_URL_TBD) — operator opens the worst-first
-provider list, drills into a Yellow at score 62, opens the top Critical
-issue's panel (PDF preview with bounding-box highlight), then switches to
-the per-provider audit timeline.
+26-second silent walkthrough — operator opens the worst-first provider
+list, drills into a Yellow at score 62, opens the top Critical issue's
+panel (PDF preview with bounding-box highlight), then switches to the
+per-provider audit timeline.
 
-<!-- Local copy at tools/demo-tour/demo.mp4 (H.264, 295 KB, recorded by
-tools/demo-tour/demo-tour.spec.ts against a live stack). To get a shareable
-URL: drag the mp4 into a new GitHub issue comment on this repo; GitHub
-uploads it to user-images.githubusercontent.com and returns a CDN link. -->
+<video src="https://github.com/benjaminematton/PacketReady/releases/download/demo-v1/demo.mp4" controls width="800"></video>
+
+If your viewer doesn't render the inline player:
+[watch / download the mp4](https://github.com/benjaminematton/PacketReady/releases/download/demo-v1/demo.mp4)
+or visit the
+[release page](https://github.com/benjaminematton/PacketReady/releases/tag/demo-v1)
+(mp4 + source webm attached). Recorded by
+[`tools/demo-tour/demo-tour.spec.ts`](tools/demo-tour/demo-tour.spec.ts)
+against the live API + dashboard stack — `npm run tour` from
+[`tools/demo-tour/`](tools/demo-tour/) re-runs it deterministically.
 
 ## Why it's interesting
 
