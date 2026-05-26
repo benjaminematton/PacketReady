@@ -4,6 +4,7 @@ using Microsoft.Extensions.Time.Testing;
 using Moq;
 using PacketReady.Application.Intake.Agent;
 using PacketReady.Application.Intake.MagicLinks;
+using PacketReady.Domain.Audit;
 using PacketReady.Domain.Intake;
 using PacketReady.Domain.MagicLinks;
 using PacketReady.Domain.Messaging;
@@ -109,6 +110,16 @@ public class IntakeTurnJobTests : IDisposable
             .SingleAsync(s => s.ProviderId == ProviderId);
         Assert.Equal(IntakeState.Complete, session.State);
         Assert.Equal(1, session.TurnsConsumed);
+
+        // Audit spans: IntakeTurnStarted at BeginAgentTurn, IntakeCompleted
+        // for the terminal transition, IntakeTurnCompleted for the
+        // telemetry summary. No IntakeEscalated.
+        var events = await ProviderAuditEventsAsync();
+        Assert.Contains(events, e => e.EventType == AuditEventType.IntakeTurnStarted);
+        Assert.Contains(events, e => e.EventType == AuditEventType.IntakeCompleted
+            && e.Payload.Contains(scoreId.ToString()));
+        Assert.Contains(events, e => e.EventType == AuditEventType.IntakeTurnCompleted);
+        Assert.DoesNotContain(events, e => e.EventType == AuditEventType.IntakeEscalated);
     }
 
     [Fact]
@@ -147,6 +158,14 @@ public class IntakeTurnJobTests : IDisposable
             .ToListAsync();
         Assert.Single(followups);
         Assert.Equal(ToAddr, followups[0].ToAddress);
+
+        var events = await ProviderAuditEventsAsync();
+        Assert.Contains(events, e => e.EventType == AuditEventType.IntakeTurnStarted);
+        Assert.Contains(events, e => e.EventType == AuditEventType.IntakeFollowupQueued
+            && e.Payload.Contains(followups[0].Id.ToString())
+            && e.Payload.Contains(links[0].Id.ToString()));
+        Assert.Contains(events, e => e.EventType == AuditEventType.IntakeTurnCompleted);
+        Assert.DoesNotContain(events, e => e.EventType == AuditEventType.IntakeEscalated);
     }
 
     // ───────────────────────────────────────────── budget paths ─────────
@@ -184,6 +203,13 @@ public class IntakeTurnJobTests : IDisposable
         Assert.Equal(IntakeState.Escalated, after.State);
         var payload = Assert.IsType<ProviderState.Escalated>(after.GetState());
         Assert.Equal("turn-budget-exhausted", payload.Reason);
+
+        // Pre-budget-check skips BeginAgentTurn, so no IntakeTurnStarted —
+        // only the IntakeEscalated audit row carrying the reason.
+        var events = await ProviderAuditEventsAsync();
+        Assert.DoesNotContain(events, e => e.EventType == AuditEventType.IntakeTurnStarted);
+        Assert.Contains(events, e => e.EventType == AuditEventType.IntakeEscalated
+            && e.Payload.Contains("turn-budget-exhausted"));
     }
 
     [Fact]
@@ -204,6 +230,15 @@ public class IntakeTurnJobTests : IDisposable
 
         // Turn was started before the agent threw, so TurnsConsumed bumped.
         Assert.Equal(1, session.TurnsConsumed);
+
+        // IntakeTurnStarted stamped at BeginAgentTurn time; IntakeEscalated
+        // when the BudgetExhaustedException landed. No IntakeTurnCompleted
+        // (that's the success-path summary).
+        var events = await ProviderAuditEventsAsync();
+        Assert.Contains(events, e => e.EventType == AuditEventType.IntakeTurnStarted);
+        Assert.Contains(events, e => e.EventType == AuditEventType.IntakeEscalated
+            && e.Payload.Contains("budget:tokens"));
+        Assert.DoesNotContain(events, e => e.EventType == AuditEventType.IntakeTurnCompleted);
     }
 
     [Fact]
@@ -226,6 +261,44 @@ public class IntakeTurnJobTests : IDisposable
         var payload = Assert.IsType<ProviderState.Escalated>(session.GetState());
         Assert.Equal("agent-error:InvalidOperationException", payload.Reason);
         Assert.Equal(1, session.TurnsConsumed);  // BeginAgentTurn already committed
+
+        var events = await ProviderAuditEventsAsync();
+        Assert.Contains(events, e => e.EventType == AuditEventType.IntakeTurnStarted);
+        Assert.Contains(events, e => e.EventType == AuditEventType.IntakeEscalated
+            && e.Payload.Contains("agent-error:InvalidOperationException"));
+    }
+
+    [Fact]
+    public async Task RunAsync_AgentReturnsEmptyTurn_EscalatesWithAgentEmptyTurnReason()
+    {
+        // Empty turn = agent returned without terminal flag AND without a
+        // followup proposal. The transitioner escalates internally; the
+        // job's audit code stages IntakeEscalated with reason
+        // "agent-empty-turn" via the StageTransitionEvent fallback.
+        await SeedSessionAwaitingProviderAsync();
+        _agent
+            .Setup(a => a.RunTurnAsync(ProviderId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid pid, Guid tid, CancellationToken _) =>
+                new AgentTurnResult(
+                    TurnId: tid,
+                    IsTerminal: false,
+                    CompletedReadinessScoreId: null,
+                    ProposedFollowupSubject: null,
+                    ProposedFollowupBody: null,
+                    StepsConsumed: 5, InputTokensConsumed: 100, OutputTokensConsumed: 25,
+                    WallClockConsumed: TimeSpan.FromSeconds(8)));
+
+        await _job.RunAsync(ProviderId);
+
+        using var verify = _factory.CreateDbContext();
+        var session = await verify.IntakeSessions.SingleAsync(s => s.ProviderId == ProviderId);
+        Assert.Equal(IntakeState.Escalated, session.State);
+
+        var events = await ProviderAuditEventsAsync();
+        Assert.Contains(events, e => e.EventType == AuditEventType.IntakeTurnStarted);
+        Assert.Contains(events, e => e.EventType == AuditEventType.IntakeTurnCompleted);
+        Assert.Contains(events, e => e.EventType == AuditEventType.IntakeEscalated
+            && e.Payload.Contains("agent-empty-turn"));
     }
 
     [Fact]
@@ -305,5 +378,18 @@ public class IntakeTurnJobTests : IDisposable
     public async Task RunAsync_EmptyProviderId_Throws()
     {
         await Assert.ThrowsAsync<ArgumentException>(() => _job.RunAsync(Guid.Empty));
+    }
+
+    // Pulls every audit row stamped for this test's provider, fresh from
+    // its own context so an open change-tracker on _db can't shadow the
+    // committed state.
+    private async Task<List<PacketReady.Domain.Audit.AuditEvent>> ProviderAuditEventsAsync()
+    {
+        using var verify = _factory.CreateDbContext();
+        return await verify.AuditEvents
+            .AsNoTracking()
+            .Where(e => e.ProviderId == ProviderId)
+            .OrderBy(e => e.OccurredAt)
+            .ToListAsync();
     }
 }

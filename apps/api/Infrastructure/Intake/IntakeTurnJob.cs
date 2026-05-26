@@ -112,6 +112,7 @@ public sealed class IntakeTurnJob
                 "Intake budget exhausted for provider {ProviderId} ({Consumed}/{Budget}); escalating.",
                 providerId, session.TurnsConsumed, session.TurnBudget);
             session.Escalate("turn-budget-exhausted", nowUtc);
+            StageEscalated(session, turnId: null, "turn-budget-exhausted", nowUtc);
             await _db.SaveChangesAsync(ct);
             return;
         }
@@ -121,6 +122,17 @@ public sealed class IntakeTurnJob
         // the "we attempted this" signal.
         var turnId = Guid.NewGuid();
         session.BeginAgentTurn(turnId, nowUtc);
+        _audit.Stage(AuditEvent.Create(
+            eventType: AuditEventType.IntakeTurnStarted,
+            payloadJson: new IntakeTurnStartedPayload(
+                ProviderId: providerId,
+                IntakeSessionId: session.Id,
+                TurnId: turnId,
+                TurnNumber: session.TurnsConsumed,  // already bumped by BeginAgentTurn
+                TurnBudget: session.TurnBudget).ToJson(),
+            providerId: providerId,
+            turnId: turnId,
+            occurredAt: nowUtc));
         await _db.SaveChangesAsync(ct);
 
         try
@@ -133,26 +145,31 @@ public sealed class IntakeTurnJob
             // commit notes.
             var toAddress = await GetMostRecentToAddressAsync(providerId, ct);
 
-            var effect = _transitioner.Apply(session, result, toAddress, _clock.GetUtcNow());
+            var transitionAt = _clock.GetUtcNow();
+            var effect = _transitioner.Apply(session, result, toAddress, transitionAt);
 
-            var payload = new IntakeTurnCompletedPayload(
-                ProviderId: providerId,
-                TurnId: turnId,
-                IsTerminal: result.IsTerminal,
-                CompletedReadinessScoreId: result.CompletedReadinessScoreId,
-                QueuedOutboundMessageId: effect.QueuedOutboundMessageId,
-                NewMagicLinkId: effect.NewMagicLinkId,
-                Steps: result.StepsConsumed,
-                InputTokens: result.InputTokensConsumed,
-                OutputTokens: result.OutputTokensConsumed,
-                WallClockMs: (int)result.WallClockConsumed.TotalMilliseconds);
-
+            // The per-turn telemetry summary lands on every successful
+            // run; the per-transition event (Completed / FollowupQueued /
+            // Escalated) lands alongside so the audit walk can branch
+            // by FSM transition without re-deriving it from the summary.
             _audit.Stage(AuditEvent.Create(
                 eventType: AuditEventType.IntakeTurnCompleted,
-                payloadJson: payload.ToJson(),
+                payloadJson: new IntakeTurnCompletedPayload(
+                    ProviderId: providerId,
+                    TurnId: turnId,
+                    IsTerminal: result.IsTerminal,
+                    CompletedReadinessScoreId: result.CompletedReadinessScoreId,
+                    QueuedOutboundMessageId: effect.QueuedOutboundMessageId,
+                    NewMagicLinkId: effect.NewMagicLinkId,
+                    Steps: result.StepsConsumed,
+                    InputTokens: result.InputTokensConsumed,
+                    OutputTokens: result.OutputTokensConsumed,
+                    WallClockMs: (int)result.WallClockConsumed.TotalMilliseconds).ToJson(),
                 providerId: providerId,
                 turnId: turnId,
-                occurredAt: _clock.GetUtcNow()));
+                occurredAt: transitionAt));
+
+            StageTransitionEvent(session, turnId, result, effect, transitionAt);
 
             await _db.SaveChangesAsync(ct);
 
@@ -167,7 +184,10 @@ public sealed class IntakeTurnJob
                 "Intake turn for provider {ProviderId} exhausted budget axis '{Axis}'; escalating.",
                 providerId, ex.Axis);
 
-            session.Escalate($"budget:{ex.Axis}", _clock.GetUtcNow());
+            var escalatedAt = _clock.GetUtcNow();
+            var reason = $"budget:{ex.Axis}";
+            session.Escalate(reason, escalatedAt);
+            StageEscalated(session, turnId, reason, escalatedAt);
             await _db.SaveChangesAsync(ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -192,9 +212,87 @@ public sealed class IntakeTurnJob
                 "Intake turn for provider {ProviderId} (turn {TurnId}) failed with {ExceptionType}; escalating.",
                 providerId, turnId, ex.GetType().Name);
 
-            session.Escalate($"agent-error:{ex.GetType().Name}", _clock.GetUtcNow());
+            var escalatedAt = _clock.GetUtcNow();
+            var reason = $"agent-error:{ex.GetType().Name}";
+            session.Escalate(reason, escalatedAt);
+            StageEscalated(session, turnId, reason, escalatedAt);
             await _db.SaveChangesAsync(ct);
         }
+    }
+
+    /// <summary>
+    /// Stage one of three FSM-transition audit events based on what the
+    /// transitioner did with the agent's result. The transitioner has
+    /// already mutated the session by the time we get here — we read the
+    /// effect tuple to pick the right event type rather than re-deriving
+    /// it from <c>session.State</c> (which could drift on a future
+    /// transitioner refactor that adds states).
+    /// </summary>
+    private void StageTransitionEvent(
+        IntakeSession session,
+        Guid turnId,
+        AgentTurnResult result,
+        IntakeStateTransitioner.TransitionEffect effect,
+        DateTimeOffset occurredAt)
+    {
+        if (result.IsTerminal && result.CompletedReadinessScoreId is { } scoreId)
+        {
+            _audit.Stage(AuditEvent.Create(
+                eventType: AuditEventType.IntakeCompleted,
+                payloadJson: new IntakeCompletedPayload(
+                    ProviderId: session.ProviderId,
+                    IntakeSessionId: session.Id,
+                    TurnId: turnId,
+                    ReadinessScoreId: scoreId,
+                    TurnsConsumed: session.TurnsConsumed).ToJson(),
+                providerId: session.ProviderId,
+                turnId: turnId,
+                occurredAt: occurredAt));
+            return;
+        }
+
+        if (effect.NewMagicLinkId is { } linkId
+            && effect.QueuedOutboundMessageId is { } messageId)
+        {
+            _audit.Stage(AuditEvent.Create(
+                eventType: AuditEventType.IntakeFollowupQueued,
+                payloadJson: new IntakeFollowupQueuedPayload(
+                    ProviderId: session.ProviderId,
+                    IntakeSessionId: session.Id,
+                    TurnId: turnId,
+                    NewMagicLinkId: linkId,
+                    QueuedOutboundMessageId: messageId).ToJson(),
+                providerId: session.ProviderId,
+                turnId: turnId,
+                occurredAt: occurredAt));
+            return;
+        }
+
+        // Neither terminal nor followup — the transitioner escalated for
+        // an empty turn. Audit it the same way as the explicit-escalate
+        // paths so the dashboard sees a single event type for every
+        // escalation.
+        StageEscalated(session, turnId, "agent-empty-turn", occurredAt);
+    }
+
+    private void StageEscalated(
+        IntakeSession session,
+        Guid? turnId,
+        string reason,
+        DateTimeOffset occurredAt)
+    {
+        _audit.Stage(AuditEvent.Create(
+            eventType: AuditEventType.IntakeEscalated,
+            payloadJson: new IntakeEscalatedPayload(
+                ProviderId: session.ProviderId,
+                IntakeSessionId: session.Id,
+                TurnId: turnId,
+                Reason: reason,
+                TurnsConsumed: session.TurnsConsumed,
+                TurnBudget: session.TurnBudget).ToJson(),
+            providerId: session.ProviderId,
+            turnId: turnId,
+            occurredAt: occurredAt));
     }
 
     /// <summary>
