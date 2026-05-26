@@ -98,4 +98,30 @@ public sealed class ConfidenceGuardTests
         Assert.Equal(Severity.Critical, result.Severity);
         Assert.False(result.IsLowConfidenceInput);
     }
+
+    [Fact]
+    public void MultiSourceLLMIssue_OneWeakCitation_DowngradesWholeIssue()
+    {
+        // Realistic NPI-taxonomy-match / identity-coherence shape: an Issue
+        // composed of citations from multiple source documents, only one of
+        // which is low-confidence. The guard's "any low-confidence" policy
+        // downgrades the whole Issue — pin the behavior deliberately so a
+        // future "all low-confidence" or "majority low-confidence" tweak
+        // shows up as a test failure rather than a silent score shift.
+        var issue = new Issue(
+            "npi_taxonomy_match",
+            Severity.Critical,
+            "License taxonomy maps to X, boardCert states Y.",
+            "Confirm specialty.",
+            new[]
+            {
+                new Citation("npi_taxonomy_match", "207RC0000X") { LowConfidence = false },
+                new Citation("npi_taxonomy_match", "Cardiology") { LowConfidence = true },
+            });
+
+        var result = ConfidenceGuard.Apply([issue]).Single();
+
+        Assert.Equal(Severity.Minor, result.Severity);
+        Assert.True(result.IsLowConfidenceInput);
+    }
 }

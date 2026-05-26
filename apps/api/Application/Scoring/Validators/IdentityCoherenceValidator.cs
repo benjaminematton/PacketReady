@@ -164,12 +164,17 @@ public sealed class IdentityCoherenceValidator : IValidator
             .ToList();
 
         // Field discriminator for the conflict-metrics runner. The planter
-        // names the variant source (e.g. "malpractice.fullName"), and the
-        // baseline is always license. Pick the first non-license source as
-        // the variant side; fall back to the first source otherwise so the
-        // shape stays populated even if a future planter drops the
-        // license-anchor convention.
-        var variantSource = d.Sources.FirstOrDefault(s => s != "license") ?? d.Sources[0];
+        // names the variant source (e.g. "malpractice.fullName"); the baseline
+        // is always license. Picking the first non-license source verbatim
+        // (the prior shape) was fragile — if Sonnet emits a 3-element
+        // sources array like ["license", "dea", "malpractice"], we'd stamp
+        // "dea.fullName" against a planted "malpractice.fullName" and silently
+        // miss the catch. Instead: pick the first source whose extracted name
+        // ACTUALLY differs from the license anchor. That isolates the real
+        // outlier regardless of how many docs the LLM listed; degrades
+        // gracefully (and deterministically) when the disagreement set is
+        // ambiguous.
+        var variantSource = PickVariantSource(d.Sources, namesByDocType);
         return new Issue(
             Validator: Name,
             Severity: ParseSeverity(d.Severity),
@@ -177,8 +182,46 @@ public sealed class IdentityCoherenceValidator : IValidator
             Remediation: d.Remediation,
             Citations: citations)
         {
-            Field = $"{variantSource}.{d.Field}",
+            Field = IssueFieldSpec.Format(variantSource, d.Field),
         };
+    }
+
+    /// <summary>
+    /// Deterministic outlier selection across the disagreement's sources.
+    /// Preference order:
+    /// <list type="number">
+    ///   <item>First non-license source whose extracted name differs from the
+    ///         license anchor.</item>
+    ///   <item>First non-license source (when license isn't in the set or
+    ///         name comparisons are inconclusive).</item>
+    ///   <item>First source (fully degenerate fallback — keeps the Field
+    ///         discriminator populated even if the LLM returns only
+    ///         <c>["license"]</c>).</item>
+    /// </list>
+    /// </summary>
+    private static string PickVariantSource(
+        IReadOnlyList<string> sources,
+        IReadOnlyDictionary<string, string> namesByDocType)
+    {
+        if (sources.Count == 0) return "";
+
+        namesByDocType.TryGetValue("license", out var licenseName);
+        if (!string.IsNullOrEmpty(licenseName))
+        {
+            foreach (var s in sources)
+            {
+                if (s == "license") continue;
+                if (namesByDocType.TryGetValue(s, out var name)
+                    && !string.IsNullOrEmpty(name)
+                    && !string.Equals(name, licenseName, StringComparison.Ordinal))
+                {
+                    return s;
+                }
+            }
+        }
+
+        var firstNonLicense = sources.FirstOrDefault(s => s != "license");
+        return firstNonLicense ?? sources[0];
     }
 
     private static Severity ParseSeverity(string s) => s switch

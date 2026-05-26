@@ -7,17 +7,20 @@ namespace PacketReady.Application.Scoring.Validators;
 
 /// <summary>
 /// Owns the full malpractice surface (P4 — design.md §7.6 promised this in P1
-/// but the validator never shipped). Three checks, all reading
+/// but the validator never shipped). Four checks, all reading
 /// <see cref="ProviderProfile.Malpractice"/>:
 /// <list type="bullet">
 ///   <item>Critical — <see cref="MalpracticeInfo.Status"/> is not Active.</item>
+///   <item>Critical — expiry strictly before today.</item>
 ///   <item>Major — coverage limits below the payer's required minimum.
 ///         Emitted only when the extracted value is non-null and below;
 ///         null means "extractor couldn't read it" and that's the
 ///         aggregator's Partial-Extraction lane, not ours.</item>
-///   <item>Critical — expiry strictly before today.</item>
-///   <item>Minor — still valid but expires within the payer's renewal
-///         window (default 30 days for payer-a, 60 days for payer-b).</item>
+///   <item>Minor — still valid AND active but expires within the payer's
+///         renewal window (default 30 days for payer-a, 60 days for payer-b).
+///         The Status==Active gate avoids stacking a renewal-soon Minor on
+///         top of an already-emitted status Critical for a Lapsed/Cancelled
+///         policy whose printed ExpiryDate happens to still be in the future.</item>
 /// </list>
 ///
 /// <para><b>Missing-malpractice</b> is owned by <c>IProviderProfileAggregator</c>
@@ -34,11 +37,11 @@ public sealed class MalpracticeCurrencyValidator : IValidator
     public string Name => "malpractice_currency";
 
     private readonly TimeProvider _clock;
-    private readonly IReadOnlyDictionary<string, PayerRequirement> _payers;
+    private readonly IPayerCatalog _payers;
 
     public MalpracticeCurrencyValidator(
         TimeProvider clock,
-        IReadOnlyDictionary<string, PayerRequirement> payers)
+        IPayerCatalog payers)
     {
         _clock = clock;
         _payers = payers;
@@ -53,28 +56,34 @@ public sealed class MalpracticeCurrencyValidator : IValidator
         if (profile.Malpractice is null)
             return Task.FromResult<IReadOnlyList<Issue>>(Array.Empty<Issue>());
 
-        // Payer resolution is fail-loud: an unknown id at run time means
-        // either a schema-drifted DB row or a YAML that wasn't deployed.
-        // Both are operator bugs; better a 500 with the missing id than
-        // silently validating against payer-a's defaults.
-        if (!_payers.TryGetValue(payerId, out var payer))
-            throw new KeyNotFoundException(
-                $"MalpracticeCurrencyValidator: payerId '{payerId}' is not backed by a YAML file. " +
-                $"Known payers: [{string.Join(", ", _payers.Keys)}].");
+        // Payer resolution is fail-loud: PayerNotConfiguredException maps to
+        // a 422 at the API boundary. In practice the score handler validates
+        // payerId at entry, so this branch only fires if the catalog itself
+        // is shadow-mutated mid-run — defensive-but-cheap.
+        var payer = _payers.Get(payerId);
 
         var issues = new List<Issue>();
         var today = _clock.Today();
         var mp = profile.Malpractice;
+
+        // Two parallel citations so the dashboard's drill-in lands on the
+        // status field for status Issues and the expiry field for expiry
+        // Issues. Building one shared `expiryCite` and reusing it for the
+        // status Critical sends the operator to the wrong PDF region.
+        IReadOnlyList<Citation> statusCite = [provenance.Cite(
+            Name,
+            $"{mp.Carrier} {mp.PolicyNumber} status={mp.Status}",
+            "malpractice.status")];
         IReadOnlyList<Citation> expiryCite = [provenance.Cite(
             Name,
-            $"{mp.Carrier} {mp.PolicyNumber} status={mp.Status} expires={mp.ExpiryDate:yyyy-MM-dd}",
+            $"{mp.Carrier} {mp.PolicyNumber} expires={mp.ExpiryDate:yyyy-MM-dd}",
             "malpractice.expiryDate")];
 
         if (mp.Status != MalpracticeStatus.Active)
             issues.Add(new Issue(Name, Severity.Critical,
                 $"Malpractice status is {mp.Status}; must be Active.",
                 "Confirm an active malpractice policy with the carrier before submission.",
-                expiryCite));
+                statusCite));
 
         if (mp.ExpiryDate < today)
             issues.Add(new Issue(Name, Severity.Critical,
@@ -109,10 +118,15 @@ public sealed class MalpracticeCurrencyValidator : IValidator
                 cite));
         }
 
-        // Renewal-window Minor only fires when the policy is otherwise valid —
-        // same convention as License/DEA. The window comes from payer YAML
+        // Renewal-window Minor only fires when the policy is otherwise valid:
+        // Active status AND expiry not yet past. Without the Active gate, a
+        // Lapsed/Cancelled policy whose printed ExpiryDate is still in the
+        // future would emit both Critical (status) and Minor (renewal-soon)
+        // for the same already-unsubmittable packet — pure noise on the
+        // dashboard. The window comes from payer YAML
         // (payer-a: 30 days, payer-b: 60 days).
-        if (mp.ExpiryDate >= today
+        if (mp.Status == MalpracticeStatus.Active
+            && mp.ExpiryDate >= today
             && (mp.ExpiryDate.DayNumber - today.DayNumber) < payer.WindowDays.MalpracticeRenewal)
         {
             issues.Add(new Issue(Name, Severity.Minor,

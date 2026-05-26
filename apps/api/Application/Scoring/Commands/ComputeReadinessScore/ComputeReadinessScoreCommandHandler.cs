@@ -7,6 +7,7 @@ using PacketReady.Application.Payers;
 using PacketReady.Application.Providers.Aggregation;
 using PacketReady.Application.Scoring.Validators;
 using PacketReady.Domain.Audit;
+using PacketReady.Domain.Documents;
 using PacketReady.Domain.Scoring;
 
 namespace PacketReady.Application.Scoring.Commands.ComputeReadinessScore;
@@ -17,7 +18,7 @@ public sealed class ComputeReadinessScoreCommandHandler
     private readonly IAppDbContext _db;
     private readonly IProviderProfileAggregator _aggregator;
     private readonly IEnumerable<IValidator> _validators;
-    private readonly IReadOnlyDictionary<string, PayerRequirement> _payers;
+    private readonly IPayerCatalog _payers;
     private readonly IAuditWriter _audit;
     private readonly TimeProvider _clock;
     private readonly ILogger<ComputeReadinessScoreCommandHandler> _logger;
@@ -26,7 +27,7 @@ public sealed class ComputeReadinessScoreCommandHandler
         IAppDbContext db,
         IProviderProfileAggregator aggregator,
         IEnumerable<IValidator> validators,
-        IReadOnlyDictionary<string, PayerRequirement> payers,
+        IPayerCatalog payers,
         IAuditWriter audit,
         TimeProvider clock,
         ILogger<ComputeReadinessScoreCommandHandler> logger)
@@ -52,6 +53,14 @@ public sealed class ComputeReadinessScoreCommandHandler
         var provenance = aggregated.Provenance;
         var payerId = aggregated.PayerId;
 
+        // Fail-loud at the boundary on an unknown payer id, before any
+        // validator runs — the dedicated exception type maps to a 4xx in
+        // ScoreEndpoint, instead of a raw KeyNotFoundException bubbling out
+        // of three different validators as an opaque 500. The catalog throws
+        // PayerNotConfiguredException; we don't catch — let the API layer
+        // shape it.
+        var payer = _payers.Get(payerId);
+
         // Fan-out validators. P1 validators are synchronous and return Task.FromResult,
         // so Task.WhenAll is allocation-only here — no thread-pool work. The async
         // contract pays off in P4 when LLM-augmented validators actually overlap on the wire.
@@ -66,17 +75,17 @@ public sealed class ComputeReadinessScoreCommandHandler
         // BoardCertRequired=false, drop the aggregator's Missing-BoardCert
         // Critical. The aggregator emits universal-4 Missing-Document Critical
         // unconditionally per the locked ownership split (it doesn't see
-        // payer config); this filter is the single legitimate place to
-        // honor "board cert is optional for this payer." Match by validator
-        // tag + message-contains rather than re-parsing — the aggregator's
-        // factory hard-codes the DocType label into the message string.
+        // payer config); this filter is the single legitimate place to honor
+        // "board cert is optional for this payer." We filter on the typed
+        // (Code, MissingDocType) discriminator stamped on Issue by the
+        // aggregator's factory — substring matching the Message string would
+        // silently break on any copy-edit.
         var aggregatorIssues = aggregated.Issues.AsEnumerable();
-        if (_payers.TryGetValue(payerId, out var payer) && !payer.BoardCertRequired)
+        if (!payer.BoardCertRequired)
         {
             aggregatorIssues = aggregatorIssues.Where(i =>
-                !(i.Validator == "DocumentStore"
-                  && i.Message.Contains("BoardCert", StringComparison.Ordinal)
-                  && i.Message.StartsWith("No ", StringComparison.Ordinal)));
+                !(i.Code == IssueCodes.MissingDocument
+                  && i.MissingDocType == DocType.BoardCert));
         }
 
         var merged = aggregatorIssues
@@ -100,6 +109,12 @@ public sealed class ComputeReadinessScoreCommandHandler
         var readiness = ReadinessScore.Create(request.ProviderId, score, issues, now);
         _db.ReadinessScores.Add(readiness);
 
+        // Count of Issues the guard downgraded. Surfaces the gate's blast
+        // radius into the audit JSONB so an operator scanning ScoreComputed
+        // rows can spot a packet whose tier moved because of low-confidence
+        // inputs rather than the underlying credential state.
+        var lowConfidenceCount = issues.Count(i => i.IsLowConfidenceInput);
+
         var payload = new ScoreComputedPayload(
             ProviderId: request.ProviderId,
             ReadinessScoreId: readiness.Id,
@@ -109,7 +124,8 @@ public sealed class ComputeReadinessScoreCommandHandler
             MajorCount: readiness.MajorCount,
             MinorCount: readiness.MinorCount,
             ValidatorCount: perValidator.Length,
-            IssueCount: issues.Count);
+            IssueCount: issues.Count,
+            LowConfidenceDowngradedCount: lowConfidenceCount);
         var evt = AuditEvent.Create(
             AuditEventType.ScoreComputed,
             payload.ToJson(),

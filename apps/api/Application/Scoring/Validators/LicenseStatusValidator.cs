@@ -39,38 +39,52 @@ public sealed class LicenseStatusValidator(TimeProvider clock) : IValidator
         var issues = new List<Issue>();
         var today = clock.Today();
         var lic = profile.License;
-        // One citation per emission, anchored on the expiry-date field — that's
-        // the most frequent trigger across the validator's branches; the
-        // dashboard's PDF drill-in highlights the right box for the common case.
-        IReadOnlyList<Citation> cite = [provenance.Cite(
+
+        // Parallel citations so the PDF drill-in lands on the field the
+        // Issue is actually about — status Issue → status box, expiry
+        // Issue → expiry box, state-mismatch → state box. A single shared
+        // expiry citation (the prior shape) sent the operator to the wrong
+        // region for status/state findings.
+        IReadOnlyList<Citation> statusCite = [provenance.Cite(
             Name,
-            $"{lic.State} {lic.Number} status={lic.Status} expires={lic.ExpiryDate:yyyy-MM-dd}",
+            $"{lic.State} {lic.Number} status={lic.Status}",
+            "license.status")];
+        IReadOnlyList<Citation> expiryCite = [provenance.Cite(
+            Name,
+            $"{lic.State} {lic.Number} expires={lic.ExpiryDate:yyyy-MM-dd}",
             "license.expiryDate")];
+        IReadOnlyList<Citation> stateCite = [provenance.Cite(
+            Name,
+            $"{lic.State} {lic.Number}",
+            "license.state")];
 
         if (lic.Status != LicenseStatus.Active)
             issues.Add(new Issue(Name, Severity.Critical,
                 $"License status is {lic.Status}; must be Active.",
-                "Resolve license status with the issuing board.", cite));
+                "Resolve license status with the issuing board.", statusCite));
 
         // Industry convention: valid through the expiry date inclusive. "Expires today"
         // is still valid; "expired" means expiry_date < today.
         if (lic.ExpiryDate < today)
             issues.Add(new Issue(Name, Severity.Critical,
                 $"License expired on {lic.ExpiryDate:yyyy-MM-dd}.",
-                "Renew with the state board before submission.", cite));
+                "Renew with the state board before submission.", expiryCite));
 
         if (lic.State != profile.CredentialingState)
             issues.Add(new Issue(Name, Severity.Major,
                 $"License is in {lic.State}; credentialing for {profile.CredentialingState}.",
                 "Confirm the provider is licensed in the credentialing state, or update the target.",
-                cite));
+                stateCite));
 
-        // Only emit renewal-window Minor when the license is otherwise valid.
-        if (lic.ExpiryDate >= today
+        // Renewal-window Minor only fires when the license is otherwise valid:
+        // Active status AND expiry not yet past. Matches the discipline in
+        // MalpracticeCurrencyValidator and BoardCertificationValidator.
+        if (lic.Status == LicenseStatus.Active
+            && lic.ExpiryDate >= today
             && (lic.ExpiryDate.DayNumber - today.DayNumber) < 30)
             issues.Add(new Issue(Name, Severity.Minor,
                 $"License expires in {lic.ExpiryDate.DayNumber - today.DayNumber} days.",
-                "Renewal recommended before payer submission.", cite));
+                "Renewal recommended before payer submission.", expiryCite));
 
         return Task.FromResult<IReadOnlyList<Issue>>(issues);
     }

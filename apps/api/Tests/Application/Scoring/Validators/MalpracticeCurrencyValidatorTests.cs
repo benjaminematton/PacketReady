@@ -113,25 +113,96 @@ public sealed class MalpracticeCurrencyValidatorTests
     }
 
     [Fact]
-    public async Task ExpiresToday_IsValid_NoIssue()
+    public async Task ExpiresToday_EmitsRenewalMinorOnly_NoCritical()
     {
-        // Industry convention: valid through the expiry date inclusive. With
-        // a 30-day payer window the 0-day delta is NOT inside `< 30 days`,
-        // so today-expiry produces no Minor either.
+        // Industry convention: valid through the expiry date inclusive — no
+        // expired-Critical for a today-dated expiry. 0 days < 30-day payer
+        // window, so the renewal-soon Minor fires.
         var profile = MakeProfile(malpractice: MakeMalpractice(expiryDate: TodayDate));
         var issues = await Build().RunAsync(profile, EmptyProvenance(), PayerA, default);
-        // No Critical (not yet expired), no Minor (0 < 30 holds, so renewal Minor fires).
-        // Verify the only Issue is the renewal Minor, not a Critical.
         var only = Assert.Single(issues);
         Assert.Equal(Severity.Minor, only.Severity);
+        Assert.Contains("0 days", only.Message);
+    }
+
+    [Fact]
+    public async Task RenewalWindow_ExactBoundary_ThirtyDays_EmitsEmpty()
+    {
+        // Renewal window is `< 30` days strict; exactly 30 days out is
+        // outside. Pins the strict-less-than boundary.
+        var profile = MakeProfile(malpractice: MakeMalpractice(expiryDate: TodayDate.AddDays(30)));
+        var issues = await Build().RunAsync(profile, EmptyProvenance(), PayerA, default);
+        Assert.Empty(issues);
+    }
+
+    [Fact]
+    public async Task RenewalWindow_OneInsideBoundary_TwentyNineDays_EmitsMinor()
+    {
+        var profile = MakeProfile(malpractice: MakeMalpractice(expiryDate: TodayDate.AddDays(29)));
+        var issues = await Build().RunAsync(profile, EmptyProvenance(), PayerA, default);
+        var only = Assert.Single(issues);
+        Assert.Equal(Severity.Minor, only.Severity);
+        Assert.Contains("29 days", only.Message);
+    }
+
+    [Fact]
+    public async Task PerOccurrenceExactlyAtMinimum_EmitsEmpty()
+    {
+        // Strict `<` on coverage. payer-a per-occurrence floor is $1M.
+        var profile = MakeProfile(malpractice: MakeMalpractice(perOccurrence: 1_000_000));
+        var issues = await Build().RunAsync(profile, EmptyProvenance(), PayerA, default);
+        Assert.Empty(issues);
+    }
+
+    [Fact]
+    public async Task OneCoverageNull_OtherBelow_EmitsOnlyTheNonNullMajor()
+    {
+        // perOccurrence null → skipped (aggregator's Partial-Extraction lane).
+        // aggregate below minimum → one Major. Pins the independence of the
+        // two coverage checks against null-tolerance.
+        var profile = MakeProfile(malpractice: MakeMalpractice(
+            perOccurrence: null, aggregate: 1_000_000));
+        var issues = await Build().RunAsync(profile, EmptyProvenance(), PayerA, default);
+        var only = Assert.Single(issues);
+        Assert.Equal(Severity.Major, only.Severity);
+        Assert.Contains("aggregate", only.Message);
+    }
+
+    [Fact]
+    public async Task LapsedWithFutureExpiry_DoesNotEmitRenewalMinor()
+    {
+        // Without the Status==Active gate this would emit Critical (status)
+        // + Minor (renewal-soon) on the same already-unsubmittable packet.
+        // The gate suppresses the renewal noise.
+        var profile = MakeProfile(malpractice: MakeMalpractice(
+            status: MalpracticeStatus.Lapsed,
+            expiryDate: TodayDate.AddDays(10)));
+        var issues = await Build().RunAsync(profile, EmptyProvenance(), PayerA, default);
+        var only = Assert.Single(issues);
+        Assert.Equal(Severity.Critical, only.Severity);
+        Assert.Contains("Lapsed", only.Message);
+    }
+
+    [Fact]
+    public async Task StatusCritical_CitesStatusField_NotExpiryField()
+    {
+        // Status Issue should carry a citation pointing at the status box on
+        // the PDF, not at the expiry field. Pins the parallel statusCite.
+        var profile = MakeProfile(malpractice: MakeMalpractice(status: MalpracticeStatus.Lapsed));
+        var issues = await Build().RunAsync(profile, EmptyProvenance(), PayerA, default);
+        var only = Assert.Single(issues);
+        var cite = Assert.Single(only.Citations);
+        Assert.Contains("status=", cite.ExtractedValue, StringComparison.Ordinal);
+        Assert.DoesNotContain("expires=", cite.ExtractedValue, StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task UnknownPayerId_Throws()
     {
         // Fail-loud: a payer id not backed by a YAML is an operator bug,
-        // not a default-to-payer-a moment.
-        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+        // not a default-to-payer-a moment. PayerCatalog throws the typed
+        // exception so the API can map to a 4xx.
+        await Assert.ThrowsAsync<PacketReady.Application.Payers.PayerNotConfiguredException>(() =>
             Build().RunAsync(MakeProfile(), EmptyProvenance(), "payer-c-doesnt-exist", default));
     }
 

@@ -28,6 +28,9 @@ export interface BoundingBox {
 /**
  * Cross-reference from an Issue back to where it came from. Phase 1 carries
  * validator name + extracted value; the optional doc-ref fields populate in P3.
+ * `lowConfidence` (P4) flags individual citations whose underlying extracted
+ * field had < 0.85 extractor confidence; the ConfidenceGuard downgrades the
+ * parent Issue if any of its citations carries the flag.
  */
 export interface Citation {
   sourceValidator: string;
@@ -35,14 +38,34 @@ export interface Citation {
   documentId: string | null;
   page: number | null;
   bbox: BoundingBox | null;
+  lowConfidence?: boolean;
 }
 
+/**
+ * P4 ConfidenceGuard-stamped fields:
+ *   - `isLowConfidenceInput`: this Issue was Critical pre-guard and got
+ *     downgraded to Minor because at least one cited field landed below
+ *     the 0.85 confidence threshold. The dashboard renders a pill so the
+ *     operator can tell "tier moved because of confidence" from "tier
+ *     moved because of credential state."
+ *   - `field`: discriminator naming the specific field an LLM-validator
+ *     finding is about (e.g. "malpractice.fullName"); empty for pure-code
+ *     validators.
+ *   - `code`: stable code identifying the kind of aggregator-emitted Issue
+ *     (see Domain/Scoring/IssueCodes.cs).
+ *   - `missingDocType`: doc-type tag set on aggregator missing/failed/partial
+ *     Issues so the dashboard can group by underlying document.
+ */
 export interface Issue {
   validator: string;
   severity: Severity;
   message: string;
   remediation: string;
   citations: Citation[];
+  isLowConfidenceInput?: boolean;
+  field?: string;
+  code?: string;
+  missingDocType?: string | null;
 }
 
 export interface ReadinessScore {

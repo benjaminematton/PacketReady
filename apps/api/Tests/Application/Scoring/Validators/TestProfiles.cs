@@ -75,10 +75,12 @@ internal static class TestProfiles
                perOccurrence, aggregate);
 
     // Two-payer fixture matching the committed YAMLs. Validator unit tests
-    // build against this in-memory dict rather than YAML-on-disk so they stay
-    // fast and decoupled from the loader. The loader has its own integration
-    // test that round-trips the real files.
-    public static IReadOnlyDictionary<string, PayerRequirement> MakePayers() =>
+    // build against this in-memory catalog rather than YAML-on-disk so they
+    // stay fast and decoupled from the loader. The loader has its own
+    // integration test that round-trips the real files.
+    public static IPayerCatalog MakePayers() => new PayerCatalog(MakePayerDict());
+
+    public static IReadOnlyDictionary<string, PayerRequirement> MakePayerDict() =>
         new Dictionary<string, PayerRequirement>(StringComparer.Ordinal)
         {
             ["payer-a-national-hmo"] = new()
@@ -92,7 +94,10 @@ internal static class TestProfiles
                 },
                 RequiredDocuments = ["license", "dea", "boardCert", "malpractice"],
                 BoardCertRequired = true,
-                AcceptedBoards = ["ABMS", "ABIM", "ABFM", "ABEM", "ABP", "ABS", "ABOG", "ABA", "ABPN", "ABR"],
+                // Full ABMS member-board enumeration. The umbrella body "ABMS"
+                // is intentionally omitted — no real cert is issued by ABMS;
+                // it's issued by one of the 24 member boards below.
+                AcceptedBoards = AbmsMemberBoards,
                 WindowDays = new WindowDays
                 {
                     MalpracticeRenewal = 30,
@@ -124,4 +129,37 @@ internal static class TestProfiles
         bool samClean = true,
         DateTimeOffset? checkedAt = null)
         => new(oigClean, samClean, checkedAt ?? DateTimeOffset.Parse(Today).AddDays(-7));
+
+    /// <summary>
+    /// All 24 ABMS member-board acronyms. Mirrors the YAML at
+    /// <c>apps/api/Infrastructure/Payers/payers/payer-a-national-hmo.yaml</c>;
+    /// keep both in lockstep. Source of truth: <c>https://www.abms.org/member-boards/</c>.
+    /// </summary>
+    public static readonly string[] AbmsMemberBoards =
+    [
+        "ABAI",   // Allergy and Immunology
+        "ABA",    // Anesthesiology
+        "ABCRS",  // Colon and Rectal Surgery
+        "ABD",    // Dermatology
+        "ABEM",   // Emergency Medicine
+        "ABFM",   // Family Medicine
+        "ABIM",   // Internal Medicine
+        "ABMGG",  // Medical Genetics and Genomics
+        "ABNS",   // Neurological Surgery
+        "ABNM",   // Nuclear Medicine
+        "ABOG",   // Obstetrics and Gynecology
+        "ABO",    // Ophthalmology
+        "ABOS",   // Orthopaedic Surgery
+        "ABOto",  // Otolaryngology
+        "ABPath", // Pathology
+        "ABP",    // Pediatrics
+        "ABPMR",  // Physical Medicine and Rehabilitation
+        "ABPS",   // Plastic Surgery
+        "ABPM",   // Preventive Medicine
+        "ABPN",   // Psychiatry and Neurology
+        "ABR",    // Radiology
+        "ABS",    // Surgery
+        "ABTS",   // Thoracic Surgery
+        "ABU",    // Urology
+    ];
 }

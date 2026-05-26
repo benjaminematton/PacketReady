@@ -11,11 +11,15 @@ namespace PacketReady.Application.Scoring;
 /// <para><b>How the flag gets there:</b>
 /// <see cref="Providers.Aggregation.ProvenanceExtensions.Cite"/> stamps
 /// <c>LowConfidence = (FieldProvenance.Confidence &lt; CriticalEligibleThreshold)</c>
-/// at citation construction. LLM validators that build <see cref="Citation"/>
-/// directly (e.g. IdentityCoherence) call the same helper, so they participate
-/// in the gate automatically. A validator that constructs a Citation
-/// outside the helper bypasses the guard — there are no such call sites in
-/// P4, but anyone adding one needs to set the flag themselves.</para>
+/// at citation construction. Every provenance-backed citation in P4 goes
+/// through that helper, so LLM validators that compose multi-doc citations
+/// participate in the gate automatically. The one documented exception is
+/// <c>SanctionsCheckValidator</c>, which constructs <see cref="Citation"/>
+/// directly because sanctions findings have no source PDF — confidence is
+/// implicitly 1.0 by design, so bypassing the helper is safe. Any future
+/// validator that constructs Citations outside the helper for any other
+/// reason MUST set <see cref="Citation.LowConfidence"/> manually, or it
+/// bypasses the guard.</para>
 ///
 /// <para><b>Why a downgrade and not a drop:</b> a low-confidence input that
 /// looks Critical is still a real signal — the dashboard wants to surface it

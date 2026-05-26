@@ -74,16 +74,18 @@ public static class DependencyInjection
         // Npgsql.PostgresException directly. Stateless; singleton.
         services.AddSingleton<IDbExceptionTranslator, PostgresExceptionTranslator>();
 
-        // Per-payer requirements. Loaded once at startup and held as a
-        // singleton dictionary keyed by payer id. PayerRequirementLoader fails
-        // loud on schema violation so the app refuses to start with a broken
-        // YAML — better than a NullReferenceException mid-request. Registered
-        // in AddPersistence (not AddInfrastructure) so the seed CLI and any
-        // future LLM-free binary can resolve PayerRequirement without
-        // dragging in the Anthropic SDK.
+        // Per-payer requirements behind the IPayerCatalog seam (see
+        // Application/Payers/IPayerCatalog.cs for rationale: centralizes the
+        // unknown-payer error so the API can map it to a 4xx via
+        // PayerNotConfiguredException). PayerRequirementLoader fails loud on
+        // schema violation so the app refuses to start with a broken YAML —
+        // better than a NullReferenceException mid-request. Registered in
+        // AddPersistence (not AddInfrastructure) so the seed CLI and any
+        // future LLM-free binary can resolve the catalog without dragging in
+        // the Anthropic SDK.
         var payerDir = Path.Combine(AppContext.BaseDirectory, "Payers", "payers");
-        services.AddSingleton<IReadOnlyDictionary<string, PayerRequirement>>(
-            PayerRequirementLoader.LoadAll(payerDir));
+        var payerDict = PayerRequirementLoader.LoadAll(payerDir);
+        services.AddSingleton<IPayerCatalog>(new PayerCatalog(payerDict));
 
         // NUCC taxonomy snapshot. Same lifetime pattern as the payer dict:
         // loaded once at DI bootstrap and held as a singleton; fails loud

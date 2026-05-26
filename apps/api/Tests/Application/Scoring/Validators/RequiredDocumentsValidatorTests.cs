@@ -12,9 +12,11 @@ public sealed class RequiredDocumentsValidatorTests
     private const string PayerA = "payer-a-national-hmo";
     private const string PayerB = "payer-b-state-medicaid";
 
-    private static RequiredDocumentsValidator Build(
-        IReadOnlyDictionary<string, PayerRequirement>? payers = null) =>
+    private static RequiredDocumentsValidator Build(IPayerCatalog? payers = null) =>
         new(payers ?? MakePayers());
+
+    private static IPayerCatalog Catalog(params PayerRequirement[] reqs) =>
+        new PayerCatalog(reqs.ToDictionary(r => r.Id, r => r, StringComparer.Ordinal));
 
     private static IReadOnlyDictionary<string, FieldProvenance> EmptyProvenance() =>
         new Dictionary<string, FieldProvenance>();
@@ -42,25 +44,22 @@ public sealed class RequiredDocumentsValidatorTests
         // Synthetic payer requires a state-registration doc beyond universal-4.
         // The validator emits Critical because there's no signal that a
         // non-universal doc was uploaded.
-        var payers = new Dictionary<string, PayerRequirement>
+        var payer = new PayerRequirement
         {
-            ["payer-x-with-state-reg"] = new()
+            Id = "payer-x-with-state-reg",
+            Name = "Payer X — Requires State Reg",
+            Malpractice = new MalpracticeRequirement
             {
-                Id = "payer-x-with-state-reg",
-                Name = "Payer X — Requires State Reg",
-                Malpractice = new MalpracticeRequirement
-                {
-                    MinimumPerOccurrence = 1_000_000,
-                    MinimumAggregate = 3_000_000,
-                },
-                RequiredDocuments = ["license", "dea", "boardCert", "malpractice", "stateRegistration"],
-                BoardCertRequired = true,
-                AcceptedBoards = ["ABMS"],
-                WindowDays = new WindowDays { MalpracticeRenewal = 30, LicenseRenewal = 30 },
+                MinimumPerOccurrence = 1_000_000,
+                MinimumAggregate = 3_000_000,
             },
+            RequiredDocuments = ["license", "dea", "boardCert", "malpractice", "stateRegistration"],
+            BoardCertRequired = true,
+            AcceptedBoards = ["ABMS"],
+            WindowDays = new WindowDays { MalpracticeRenewal = 30, LicenseRenewal = 30 },
         };
 
-        var issues = await Build(payers).RunAsync(
+        var issues = await Build(Catalog(payer)).RunAsync(
             MakeProfile(), EmptyProvenance(), "payer-x-with-state-reg", default);
 
         var only = Assert.Single(issues);
@@ -76,34 +75,65 @@ public sealed class RequiredDocumentsValidatorTests
         // Pathological payer YAML asking for license/dea/boardCert/malpractice
         // shouldn't double-count with the aggregator — even if the payer
         // names them, this validator stays silent on those exact types.
-        var payers = new Dictionary<string, PayerRequirement>
+        var payer = new PayerRequirement
         {
-            ["payer-y-only-universal"] = new()
+            Id = "payer-y-only-universal",
+            Name = "Payer Y — Only Universal Docs",
+            Malpractice = new MalpracticeRequirement
             {
-                Id = "payer-y-only-universal",
-                Name = "Payer Y — Only Universal Docs",
-                Malpractice = new MalpracticeRequirement
-                {
-                    MinimumPerOccurrence = 1_000_000,
-                    MinimumAggregate = 3_000_000,
-                },
-                RequiredDocuments = ["license", "dea", "boardCert", "malpractice"],
-                BoardCertRequired = true,
-                AcceptedBoards = ["ABMS"],
-                WindowDays = new WindowDays { MalpracticeRenewal = 30, LicenseRenewal = 30 },
+                MinimumPerOccurrence = 1_000_000,
+                MinimumAggregate = 3_000_000,
             },
+            RequiredDocuments = ["license", "dea", "boardCert", "malpractice"],
+            BoardCertRequired = true,
+            AcceptedBoards = ["ABMS"],
+            WindowDays = new WindowDays { MalpracticeRenewal = 30, LicenseRenewal = 30 },
         };
 
-        var issues = await Build(payers).RunAsync(
+        var issues = await Build(Catalog(payer)).RunAsync(
             MakeProfile(), EmptyProvenance(), "payer-y-only-universal", default);
 
         Assert.Empty(issues);
     }
 
     [Fact]
+    public async Task PayerRequiresMixed_Universal4PlusNonUniversal_EmitsOnlyForNonUniversal()
+    {
+        // Mixed required list: the 4 universal types AND a non-universal one.
+        // The aggregator owns the universal-4; this validator must emit
+        // Critical for the non-universal type only — proves the filter is
+        // per-element, not all-or-nothing.
+        var payer = new PayerRequirement
+        {
+            Id = "payer-z-mixed",
+            Name = "Payer Z — Mixed",
+            Malpractice = new MalpracticeRequirement
+            {
+                MinimumPerOccurrence = 1_000_000,
+                MinimumAggregate = 3_000_000,
+            },
+            RequiredDocuments = ["license", "dea", "boardCert", "malpractice", "stateRegistration"],
+            BoardCertRequired = true,
+            AcceptedBoards = ["ABIM"],
+            WindowDays = new WindowDays { MalpracticeRenewal = 30, LicenseRenewal = 30 },
+        };
+
+        var issues = await Build(Catalog(payer)).RunAsync(
+            MakeProfile(), EmptyProvenance(), "payer-z-mixed", default);
+
+        var only = Assert.Single(issues);
+        Assert.Equal(Severity.Critical, only.Severity);
+        Assert.Contains("stateRegistration", only.Message);
+        Assert.Contains("Payer Z", only.Message);
+    }
+
+    [Fact]
     public async Task UnknownPayerId_Throws()
     {
-        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+        // PayerCatalog.Get throws the typed exception, not a raw
+        // KeyNotFoundException — the dedicated type maps to a 4xx at the
+        // API boundary instead of an opaque 500.
+        await Assert.ThrowsAsync<PayerNotConfiguredException>(() =>
             Build().RunAsync(MakeProfile(), EmptyProvenance(), "payer-c-doesnt-exist", default));
     }
 }

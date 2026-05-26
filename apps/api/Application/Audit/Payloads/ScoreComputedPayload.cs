@@ -23,7 +23,12 @@ public sealed record ScoreComputedPayload(
     [property: JsonPropertyName("major_count")] int MajorCount,
     [property: JsonPropertyName("minor_count")] int MinorCount,
     [property: JsonPropertyName("validator_count")] int ValidatorCount,
-    [property: JsonPropertyName("issue_count")] int IssueCount)
+    [property: JsonPropertyName("issue_count")] int IssueCount,
+    // P4 task 14 — count of Issues the ConfidenceGuard downgraded from
+    // Critical to Minor on this run. Surfaces guard blast radius into the
+    // audit JSONB so an operator can tell "tier moved because of confidence,
+    // not credential state" from a row inspection alone.
+    [property: JsonPropertyName("low_confidence_downgraded_count")] int LowConfidenceDowngradedCount = 0)
 {
     public string ToJson() => JsonSerializer.Serialize(this);
 }

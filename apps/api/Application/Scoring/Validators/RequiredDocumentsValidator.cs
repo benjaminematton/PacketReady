@@ -1,5 +1,6 @@
 using PacketReady.Application.Payers;
 using PacketReady.Application.Providers.Aggregation;
+using PacketReady.Domain.Documents;
 using PacketReady.Domain.Providers;
 using PacketReady.Domain.Scoring;
 
@@ -40,21 +41,23 @@ public sealed class RequiredDocumentsValidator : IValidator
     public string Name => "required_documents";
 
     /// <summary>
-    /// The four doc types <c>IProviderProfileAggregator</c> emits
-    /// Missing-Document Critical for. Skip in code, not by coincidence —
-    /// the layering split is locked. Strings are the camelCase docType
-    /// labels that match payer YAML's <c>requiredDocuments</c> entries.
+    /// Doc types <c>IProviderProfileAggregator</c> owns Missing-Document
+    /// Critical for. Derived from the aggregator's <c>ExpectedDocTypes</c>
+    /// array via <see cref="DocTypeWire.ToWireString"/> — single source of
+    /// truth lives in the aggregator; adding a fifth universal type there
+    /// flows here automatically.
     /// </summary>
     public static readonly IReadOnlySet<string> UniversalDocTypes =
-        new HashSet<string>(StringComparer.Ordinal)
-        {
-            "license", "dea", "boardCert", "malpractice",
-        };
+        new HashSet<string>(
+            new[]
+            {
+                DocType.License, DocType.Dea, DocType.BoardCert, DocType.Malpractice,
+            }.Select(d => d.ToWireString()),
+            StringComparer.Ordinal);
 
-    private readonly IReadOnlyDictionary<string, PayerRequirement> _payers;
+    private readonly IPayerCatalog _payers;
 
-    public RequiredDocumentsValidator(
-        IReadOnlyDictionary<string, PayerRequirement> payers)
+    public RequiredDocumentsValidator(IPayerCatalog payers)
     {
         _payers = payers;
     }
@@ -65,10 +68,11 @@ public sealed class RequiredDocumentsValidator : IValidator
         string payerId,
         CancellationToken ct)
     {
-        if (!_payers.TryGetValue(payerId, out var payer))
-            throw new KeyNotFoundException(
-                $"RequiredDocumentsValidator: payerId '{payerId}' is not backed by a YAML file. " +
-                $"Known payers: [{string.Join(", ", _payers.Keys)}].");
+        // Catalog throws PayerNotConfiguredException on miss — handler-side
+        // pre-flight (`ComputeReadinessScoreCommandHandler.Handle`) calls
+        // `Get(payerId)` first, so this branch rarely fires in practice; kept
+        // for direct-validator-construction tests and any out-of-band caller.
+        var payer = _payers.Get(payerId);
 
         // Universal-4 entries are the aggregator's lane; everything else is
         // ours. Ordinal compare matches PayerRequirement loader's invariant.

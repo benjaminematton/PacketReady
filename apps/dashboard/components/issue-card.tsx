@@ -35,6 +35,7 @@ export function IssueCard({ issue }: { issue: Issue }) {
         )}
       >
         <SeverityTag severity={issue.severity} />
+        {issue.isLowConfidenceInput && <LowConfidencePill />}
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium">{issue.message}</p>
           <p className="mt-1 truncate text-xs text-muted-foreground">
@@ -48,8 +49,9 @@ export function IssueCard({ issue }: { issue: Issue }) {
 
       <SheetContent side="right" className="w-full sm:max-w-md">
         <SheetHeader className="space-y-3 px-6">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <SeverityTag severity={issue.severity} />
+            {issue.isLowConfidenceInput && <LowConfidencePill />}
             <span className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
               {issue.validator}
             </span>
@@ -63,6 +65,17 @@ export function IssueCard({ issue }: { issue: Issue }) {
         </SheetHeader>
 
         <div className="space-y-6 px-6 pt-2 pb-6">
+          {issue.isLowConfidenceInput && (
+            <Section title="Downgraded from Critical">
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                One or more cited fields had extractor confidence below 0.85.
+                ConfidenceGuard downgraded this Issue from Critical to Minor —
+                the underlying signal is real but the input is noisy enough
+                that it shouldn't gate readiness on its own.
+              </p>
+            </Section>
+          )}
+
           <Section title="Remediation">
             <p className="text-sm leading-relaxed text-foreground/80">
               {issue.remediation}
@@ -111,9 +124,12 @@ function CitationBody({ citation }: { citation: Citation }) {
   const docRef = formatDocRef(citation);
   return (
     <>
-      <p className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
-        {citation.sourceValidator}
-      </p>
+      <div className="flex items-center gap-2">
+        <p className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
+          {citation.sourceValidator}
+        </p>
+        {citation.lowConfidence && <LowConfidencePill compact />}
+      </div>
       <p className="mt-1 break-words font-mono text-xs text-foreground/90">
         {citation.extractedValue}
       </p>
@@ -121,6 +137,29 @@ function CitationBody({ citation }: { citation: Citation }) {
         <p className="mt-2 text-[11px] text-muted-foreground">{docRef}</p>
       )}
     </>
+  );
+}
+
+/**
+ * Badge rendered next to the severity tag (and per-citation, in compact form)
+ * when ConfidenceGuard flagged the input as low-confidence. Distinct visual
+ * weight from severity tags so it reads as a modifier, not a category.
+ */
+function LowConfidencePill({ compact = false }: { compact?: boolean }) {
+  return (
+    <span
+      title="Extractor confidence below 0.85"
+      className={cn(
+        "inline-flex shrink-0 items-center rounded-md border font-medium uppercase tracking-wide",
+        "border-amber-300 bg-amber-50 text-amber-800",
+        "dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300",
+        compact
+          ? "px-1.5 py-0 text-[10px]"
+          : "px-2 py-0.5 text-[11px]",
+      )}
+    >
+      {compact ? "low conf" : "low confidence"}
+    </span>
   );
 }
 

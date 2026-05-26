@@ -1,3 +1,5 @@
+using PacketReady.Domain.Documents;
+
 namespace PacketReady.Domain.Scoring;
 
 /// <summary>
@@ -28,11 +30,33 @@ public sealed record Issue(
     /// Discriminator used by P4 LLM validators (<c>identity_coherence</c>,
     /// <c>npi_taxonomy_match</c>) to name the specific field a finding is
     /// about — e.g. <c>"malpractice.fullName"</c> or
-    /// <c>"boardCert.specialty"</c>. The eval runner's
+    /// <c>"boardCert.specialty"</c>. Format is locked to
+    /// <c>"&lt;docType&gt;&lt;FieldSeparator&gt;&lt;fieldName&gt;"</c>; see
+    /// <see cref="IssueFieldSpec"/>. The eval runner's
     /// <c>conflict_metrics.py</c> uses this (predicate 3) to distinguish
     /// "right validator, wrong finding" from a real catch. Empty string is
     /// the unset sentinel; pure-code validators leave it unset because
     /// their citations already pin the field via <c>provenanceKey</c>.
     /// </summary>
     public string Field { get; init; } = "";
+
+    /// <summary>
+    /// Stable code identifying the kind of finding (e.g.
+    /// <c>"missing_document"</c>, <c>"extraction_failed"</c>) — see
+    /// <see cref="IssueCodes"/>. Set by the aggregator on its emitted Issues
+    /// so the handler can suppress / re-route by tag instead of by message
+    /// substring. Validators leave it empty; the validator name plus
+    /// <see cref="Field"/> already discriminate finely enough for them.
+    /// </summary>
+    public string Code { get; init; } = "";
+
+    /// <summary>
+    /// Doc-type tag for aggregator-emitted Issues that point at a specific
+    /// uploaded document (missing-document, extraction-failed,
+    /// partial-extraction, low-confidence-classification). Lets the handler
+    /// run payer-config-driven suppression (e.g. drop missing-BoardCert
+    /// Critical when payer.BoardCertRequired == false) without re-parsing
+    /// the message string. Null on validator-emitted Issues.
+    /// </summary>
+    public DocType? MissingDocType { get; init; } = null;
 }
