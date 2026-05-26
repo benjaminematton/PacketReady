@@ -3,6 +3,7 @@ using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using PacketReady.Application.Abstractions;
 using PacketReady.Application.Intake.MagicLinks;
+using PacketReady.Domain.Documents;
 using PacketReady.Domain.Intake;
 using PacketReady.Domain.MagicLinks;
 using PacketReady.Domain.Providers;
@@ -17,11 +18,19 @@ namespace PacketReady.Api.Endpoints.Portal;
 /// because the token IS the URL — no Authorization header gymnastics
 /// needed.
 ///
-/// <para><b>C3 surface (minimal).</b> GET returns a small portal state
-/// (provider name + session status + link expiry) the Next.js page can
-/// render the "you're in the right place" screen against. POST consumes
-/// the link, transitions the session, and acks. The full extraction-cards
-/// UX from <c>design.md §7.9</c> (per-field confirm/edit) is C4+.</para>
+/// <para><b>GET surface.</b> Returns provider name + session status +
+/// link expiry + the per-document extraction state §7.9 calls for
+/// (each uploaded doc's latest succeeded extraction, with field
+/// values, locations, and per-field confidence). The Next.js portal
+/// renders these as cards so the provider sees what we pulled before
+/// submitting. Per-field <i>edit</i> (the §7.9 append-a-new-extraction
+/// path with <c>source='provider_edit'</c>) is still deferred — the
+/// POST body's <c>ConfirmedFields</c> shape ignores edits for now.</para>
+///
+/// <para><b>POST surface.</b> Consumes the link, transitions the
+/// session, enqueues the agent turn. Lossless in the sense that a
+/// failed Hangfire enqueue surfaces as 500 (the consume is already
+/// committed; we never return 200 with no job queued).</para>
 /// </summary>
 public static class PortalEndpoints
 {
@@ -31,7 +40,40 @@ public static class PortalEndpoints
         Guid IntakeSessionId,
         IntakeState SessionState,
         DateTimeOffset LinkIssuedAt,
-        DateTimeOffset LinkExpiresAt);
+        DateTimeOffset LinkExpiresAt,
+        IReadOnlyList<PortalDocumentDto> Documents);
+
+    /// <summary>
+    /// One uploaded document's view for the portal. <see cref="LatestExtraction"/>
+    /// is null when the classifier saw the file but the extractor failed
+    /// or hasn't run yet — surfaces as an empty card so the provider
+    /// sees "we have your file but haven't read it yet" rather than the
+    /// doc silently dropping from the page.
+    /// </summary>
+    public sealed record PortalDocumentDto(
+        Guid DocumentId,
+        string DocType,
+        double? DocTypeConfidence,
+        string OriginalName,
+        int PageCount,
+        DateTimeOffset UploadedAt,
+        PortalExtractionDto? LatestExtraction);
+
+    /// <summary>
+    /// JSONB blobs travel as raw JSON strings so the wire format
+    /// matches what's stored. The Next.js page parses each and renders
+    /// one row per field — value + bbox / page (from
+    /// <see cref="FieldLocationsJson"/>) + 0..1 confidence (from
+    /// <see cref="ConfidenceJson"/>).
+    /// </summary>
+    public sealed record PortalExtractionDto(
+        Guid ExtractionId,
+        string SchemaVersion,
+        string FieldsJson,
+        string FieldLocationsJson,
+        string ConfidenceJson,
+        DateTimeOffset ExtractedAt,
+        DateTimeOffset? ConfirmedAt);
 
     public sealed record PortalSubmitRequest(
         // C3 ships an empty submit body. C4 expands this with confirmed /
@@ -91,13 +133,54 @@ public static class PortalEndpoints
                 .AsNoTracking()
                 .SingleOrDefaultAsync(p => p.Id == link.ProviderId, ct);
 
+            // Pull every uploaded document for this provider, joined to
+            // its latest succeeded extraction (one row per
+            // document_id × MAX(extracted_at)). EF translates the
+            // correlated subquery to a LATERAL on Postgres; the
+            // resulting plan reads ix_document_extractions_doc_schema_extracted
+            // index-only. AsNoTracking — strictly a read.
+            var documents = await db.Documents
+                .AsNoTracking()
+                .Where(d => d.ProviderId == link.ProviderId)
+                .OrderBy(d => d.UploadedAt)
+                .Select(d => new
+                {
+                    Document = d,
+                    LatestExtraction = db.DocumentExtractions
+                        .AsNoTracking()
+                        .Where(e => e.DocumentId == d.Id
+                                 && e.Status == ExtractionStatus.Succeeded)
+                        .OrderByDescending(e => e.ExtractedAt)
+                        .FirstOrDefault(),
+                })
+                .ToListAsync(ct);
+
+            var documentDtos = documents
+                .Select(row => new PortalDocumentDto(
+                    DocumentId: row.Document.Id,
+                    DocType: row.Document.DocType?.ToString() ?? "Unknown",
+                    DocTypeConfidence: row.Document.DocTypeConfidence,
+                    OriginalName: row.Document.OriginalName,
+                    PageCount: row.Document.PageCount,
+                    UploadedAt: row.Document.UploadedAt,
+                    LatestExtraction: row.LatestExtraction is null ? null : new PortalExtractionDto(
+                        ExtractionId: row.LatestExtraction.Id,
+                        SchemaVersion: row.LatestExtraction.SchemaVersion,
+                        FieldsJson: row.LatestExtraction.FieldsJson,
+                        FieldLocationsJson: row.LatestExtraction.FieldLocationsJson,
+                        ConfidenceJson: row.LatestExtraction.ConfidenceJson,
+                        ExtractedAt: row.LatestExtraction.ExtractedAt,
+                        ConfirmedAt: row.LatestExtraction.ConfirmedAt)))
+                .ToList();
+
             return Results.Ok(new PortalStateDto(
                 ProviderId: link.ProviderId,
                 ProviderFullName: TryExtractFullName(provider, logger),
                 IntakeSessionId: session.Id,
                 SessionState: session.State,
                 LinkIssuedAt: link.IssuedAt,
-                LinkExpiresAt: link.ExpiresAt));
+                LinkExpiresAt: link.ExpiresAt,
+                Documents: documentDtos));
         })
             .WithName("PortalGet")
             .WithTags("Portal")

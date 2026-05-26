@@ -42,29 +42,34 @@ portal/
 │           ├── actions.ts             # server action — POST submit + redirect
 │           └── submitted/
 │               └── page.tsx           # static ack
+├── components/
+│   └── extraction-card.tsx            # §7.9 doc card: fields + confidence
 └── lib/
     └── api.ts                         # typed client for /api/portal/{token}
 ```
 
 ## What's *not* in v1
 
-The DoD calls for "the extracted-field cards from §7.9 of the design
-doc — provider sees what was pulled and confirms / edits inline before
-submit." The portal page today renders the greeting + session state +
-submit button only. The extraction-card UX needs the .NET
-`GET /api/portal/{token}` endpoint to return documents +
-extractions; that's a follow-up.
+Extraction cards now render (read-only) — the page lists every
+uploaded document with its latest extracted fields + per-field
+confidence + classifier confidence. Per-field **edit** (the §7.9
+`source='provider_edit'` append path) is still deferred.
 
 Also deferred:
 
 - Drag-and-drop document upload. Uploads happen via the .NET API's
   `POST /api/providers/{id}/documents` from P3; for the demo loom an
   operator uploads via `curl` before sharing the magic link.
-- Per-field confirm/edit UI from `design.md §7.9`. Same blocker as
-  above — needs the GET endpoint extended.
+- Per-field confirm / edit UI from `design.md §7.9`. The cards read;
+  they don't write. Editing a row would append a new
+  `document_extractions` row with `source='provider_edit'` and trigger
+  a cascading validator re-run; both wiring + UI are TBD.
+- PDF preview with bbox highlighting next to each field. The
+  `fieldLocationsJson` payload carries `{ page, bbox: [x,y,w,h] }`,
+  the dashboard already renders this; the portal hasn't yet.
 - Re-issue admin endpoint UI. Today an admin re-runs `POST /api/intakes`
   (which 409s since `IntakeAlreadyExistsException` fires); the
-  recovery path is a future endpoint, not this page.
+  recovery path is a future .NET endpoint, not this page.
 
 ## Why server-only
 

@@ -1,4 +1,5 @@
 import { fetchPortalState, type MagicLinkInvalidReason } from "@/lib/api";
+import { ExtractionCard } from "@/components/extraction-card";
 import { submitAction } from "./actions";
 
 type Props = {
@@ -13,7 +14,7 @@ export default async function PortalPage({ params }: Props) {
 
   if ("kind" in state) {
     return (
-      <main className="mx-auto max-w-2xl px-6 py-16">
+      <main className="mx-auto max-w-3xl px-6 py-16">
         <h1 className="text-2xl font-semibold tracking-tight">
           Link no longer valid
         </h1>
@@ -43,7 +44,7 @@ export default async function PortalPage({ params }: Props) {
     state.sessionState === "Pending";
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-16">
+    <main className="mx-auto max-w-3xl px-6 py-16">
       <h1 className="text-3xl font-semibold tracking-tight">
         Hi{state.providerFullName ? `, ${greeting}` : ""}.
       </h1>
@@ -67,6 +68,28 @@ export default async function PortalPage({ params }: Props) {
           </dd>
         </dl>
       </section>
+
+      {state.documents.length > 0 ? (
+        <section className="mt-10 space-y-4">
+          <h2 className="text-lg font-medium">What we have on file</h2>
+          <p className="text-sm text-[color:var(--muted)]">
+            These are the documents you've sent us and what we read from
+            each. Glance through before submitting — if anything looks
+            wrong, reply to the email and we'll fix it.
+          </p>
+          {state.documents.map((doc) => (
+            <ExtractionCard key={doc.documentId} document={doc} />
+          ))}
+        </section>
+      ) : (
+        <section className="mt-10 rounded-lg border border-dashed border-neutral-300 p-6 dark:border-neutral-700">
+          <p className="text-sm text-[color:var(--muted)]">
+            We don't have any documents on file for you yet. Reply to the
+            intake email with attachments (license, DEA, malpractice,
+            board cert) and they'll show up here.
+          </p>
+        </section>
+      )}
 
       {canSubmit ? (
         <form

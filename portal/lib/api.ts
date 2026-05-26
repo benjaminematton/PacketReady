@@ -26,6 +26,45 @@ export type PortalState = {
   sessionState: IntakeState;
   linkIssuedAt: string;
   linkExpiresAt: string;
+  documents: PortalDocument[];
+};
+
+/**
+ * One uploaded document's view for the portal page. `latestExtraction`
+ * is null when the document is on file but the extractor hasn't run /
+ * failed — the card renders as "we have your file but haven't read it
+ * yet" rather than dropping silently.
+ */
+export type PortalDocument = {
+  documentId: string;
+  /** PascalCase doc type from the classifier — `License | Dea | BoardCert | Malpractice | Cv | Other | Unknown`. */
+  docType: string;
+  /** 0..1 self-reported by the classifier; null when classification failed. */
+  docTypeConfidence: number | null;
+  originalName: string;
+  pageCount: number;
+  uploadedAt: string;
+  latestExtraction: PortalExtraction | null;
+};
+
+/**
+ * JSONB blobs travel as raw strings — the .NET side stores them that
+ * way, and the portal parses each lazily when rendering. Parse failures
+ * land as empty objects (the field row just doesn't render); they don't
+ * blow up the page.
+ */
+export type PortalExtraction = {
+  extractionId: string;
+  schemaVersion: string;
+  /** `{ fieldName: value, ... }`. Values are strings, numbers, arrays. */
+  fieldsJson: string;
+  /** `{ fieldName: { page, bbox: [x,y,w,h] }, ... }`. */
+  fieldLocationsJson: string;
+  /** `{ fieldName: 0..1, ... }`. Missing key = 0. */
+  confidenceJson: string;
+  extractedAt: string;
+  /** Set when the row is confirmed for downstream consumption; LLM rows auto-confirm at write time. */
+  confirmedAt: string | null;
 };
 
 export type PortalSubmitAck = {
