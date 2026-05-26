@@ -1,0 +1,60 @@
+{
+  "packetId": "packet-039-scanned-king",
+  "label": "Dr. Laura King",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Laura King, MD",
+        "licenseNumber": "MD-TX-73957",
+        "state": "TX",
+        "issueDate": "2024-05-25",
+        "expiryDate": "2030-05-24",
+        "status": "Active",
+        "taxonomyCode": "207N00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Laura King",
+        "deaNumber": "HG9773957",
+        "expiryDate": "2028-05-24",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Laura  King, MD",
+        "board": "ABD",
+        "specialty": "Dermatology",
+        "issueDate": "2020-05-26",
+        "expiryDate": "2030-05-24",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Laura King, MD",
+        "carrier": "Midwest Health Indemnity",
+        "policyNumber": "MID-TX-773957",
+        "expiryDate": "2027-02-10",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [],
+  "notes": "P4 programmatic (scanned, clean_pattern=WHITESPACE_VARIANT). NPPES taxonomy 207N00000X / Dermatology."
+}

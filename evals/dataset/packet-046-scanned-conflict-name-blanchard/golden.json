@@ -1,0 +1,73 @@
+{
+  "packetId": "packet-046-scanned-conflict-name-blanchard",
+  "label": "Dr. Todd Blanchard",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Todd Blanchard, M.D.",
+        "licenseNumber": "MD-VA-20716",
+        "state": "VA",
+        "issueDate": "2021-05-26",
+        "expiryDate": "2027-05-25",
+        "status": "Active",
+        "taxonomyCode": "207R00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Todd Blanchard",
+        "deaNumber": "VD5920716",
+        "expiryDate": "2028-05-24",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Todd Blanchard, M.D.",
+        "board": "ABIM",
+        "specialty": "Internal Medicine",
+        "issueDate": "2023-05-26",
+        "expiryDate": "2033-05-23",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Mike Blanchard, M.D.",
+        "carrier": "Atlantic Liability Mutual",
+        "policyNumber": "ATL-VA-920716",
+        "expiryDate": "2028-01-19",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [
+    {
+      "kind": "name_variant",
+      "shape": "NICKNAME",
+      "field": "malpractice.fullName",
+      "sources": [
+        "license",
+        "malpractice"
+      ],
+      "description": "license: 'Todd Blanchard, M.D.'; malpractice: 'Mike Blanchard, M.D.'",
+      "expectedSeverity": "Critical",
+      "expected_to_flag": true
+    }
+  ],
+  "notes": "P4 programmatic (scanned-conflict-name, clean_pattern=CREDENTIAL_PERIODS). NPPES taxonomy 207R00000X / Internal Medicine."
+}

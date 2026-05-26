@@ -40,6 +40,10 @@ SCHEMA: dict[str, tuple[str, ...]] = {
         "issueDate",
         "expiryDate",
         "status",
+        # P4 task 5: surfaced from the license PDF so npi_taxonomy_match can
+        # roll up the code to a canonical specialty and compare against
+        # boardCert.specialty. Empty string when absent on pre-P4 fixtures.
+        "taxonomyCode",
     ),
     DEA: (
         "fullName",

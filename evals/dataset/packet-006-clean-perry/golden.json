@@ -1,0 +1,60 @@
+{
+  "packetId": "packet-006-clean-perry",
+  "label": "Dr. Michelle Perry",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Michelle Perry, M.D.",
+        "licenseNumber": "MD-PA-95942",
+        "state": "PA",
+        "issueDate": "2023-05-26",
+        "expiryDate": "2029-05-24",
+        "status": "Active",
+        "taxonomyCode": "208000000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Michelle Perry",
+        "deaNumber": "OO9595942",
+        "expiryDate": "2028-05-24",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Michelle Perry, M.D.",
+        "board": "ABP",
+        "specialty": "Pediatrics",
+        "issueDate": "2021-05-26",
+        "expiryDate": "2031-05-24",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Michelle Perry, M.D.",
+        "carrier": "Coverys Specialty",
+        "policyNumber": "COV-PA-595942",
+        "expiryDate": "2027-10-17",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [],
+  "notes": "P4 programmatic (clean, clean_pattern=CREDENTIAL_PERIODS). NPPES taxonomy 208000000X / Pediatrics."
+}

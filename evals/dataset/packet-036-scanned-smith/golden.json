@@ -1,0 +1,60 @@
+{
+  "packetId": "packet-036-scanned-smith",
+  "label": "Dr. Craig Smith",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Craig Smith, M.D.",
+        "licenseNumber": "MD-CA-12077",
+        "state": "CA",
+        "issueDate": "2024-05-25",
+        "expiryDate": "2030-05-24",
+        "status": "Active",
+        "taxonomyCode": "207P00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Craig Smith",
+        "deaNumber": "ML9212077",
+        "expiryDate": "2027-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Craig Smith, M.D.",
+        "board": "ABEM",
+        "specialty": "Emergency Medicine",
+        "issueDate": "2023-05-26",
+        "expiryDate": "2033-05-23",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Craig Smith, M.D.",
+        "carrier": "ISMIE Mutual",
+        "policyNumber": "ISM-CA-212077",
+        "expiryDate": "2027-04-18",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [],
+  "notes": "P4 programmatic (scanned, clean_pattern=CREDENTIAL_PERIODS). NPPES taxonomy 207P00000X / Emergency Medicine."
+}

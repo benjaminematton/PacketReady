@@ -1,0 +1,60 @@
+{
+  "packetId": "packet-009-clean-cervantes",
+  "label": "Dr. Tristan Cervantes",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Tristan Cervantes, MD",
+        "licenseNumber": "MD-MA-12806",
+        "state": "MA",
+        "issueDate": "2023-05-26",
+        "expiryDate": "2029-05-24",
+        "status": "Active",
+        "taxonomyCode": "207Q00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Tristan Cervantes",
+        "deaNumber": "YF9112806",
+        "expiryDate": "2026-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Tristan  Cervantes, MD",
+        "board": "ABFM",
+        "specialty": "Family Medicine",
+        "issueDate": "2021-05-26",
+        "expiryDate": "2031-05-24",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Tristan Cervantes, MD",
+        "carrier": "Midwest Health Indemnity",
+        "policyNumber": "MID-MA-112806",
+        "expiryDate": "2027-12-08",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [],
+  "notes": "P4 programmatic (clean, clean_pattern=WHITESPACE_VARIANT). NPPES taxonomy 207Q00000X / Family Medicine."
+}

@@ -1,0 +1,60 @@
+{
+  "packetId": "packet-011-clean-wilson",
+  "label": "Dr. Emily Wilson",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Emily Wilson, M.D.",
+        "licenseNumber": "MD-CA-97458",
+        "state": "CA",
+        "issueDate": "2024-05-25",
+        "expiryDate": "2030-05-24",
+        "status": "Active",
+        "taxonomyCode": "207P00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Emily Wilson",
+        "deaNumber": "RF0497458",
+        "expiryDate": "2027-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Emily Wilson, M.D.",
+        "board": "ABEM",
+        "specialty": "Emergency Medicine",
+        "issueDate": "2022-05-26",
+        "expiryDate": "2032-05-23",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Emily Wilson, M.D.",
+        "carrier": "MedMal Specialty Insurance",
+        "policyNumber": "MED-CA-497458",
+        "expiryDate": "2027-03-07",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [],
+  "notes": "P4 programmatic (clean, clean_pattern=CREDENTIAL_PERIODS). NPPES taxonomy 207P00000X / Emergency Medicine."
+}

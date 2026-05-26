@@ -1,0 +1,73 @@
+{
+  "packetId": "packet-023-clean-conflict-name-cummings",
+  "label": "Dr. Lisa Cummings",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Lisa Cummings-Jones, MD",
+        "licenseNumber": "MD-IL-75585",
+        "state": "IL",
+        "issueDate": "2024-05-25",
+        "expiryDate": "2030-05-24",
+        "status": "Active",
+        "taxonomyCode": "207Q00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Lisa Cummings-Jones",
+        "deaNumber": "RI3675585",
+        "expiryDate": "2027-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Lisa Cummings-Jones, MD",
+        "board": "ABFM",
+        "specialty": "Family Medicine",
+        "issueDate": "2024-05-25",
+        "expiryDate": "2034-05-23",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Lisa Voss, MD",
+        "carrier": "Pacific Indemnity Group",
+        "policyNumber": "PAC-IL-675585",
+        "expiryDate": "2028-03-14",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [
+    {
+      "kind": "name_variant",
+      "shape": "SURNAME_SWAP",
+      "field": "malpractice.fullName",
+      "sources": [
+        "license",
+        "malpractice"
+      ],
+      "description": "license: 'Lisa Cummings-Jones, MD'; malpractice: 'Lisa Voss, MD'",
+      "expectedSeverity": "Critical",
+      "expected_to_flag": true
+    }
+  ],
+  "notes": "P4 programmatic (clean-conflict-name, clean_pattern=HYPHENATED_ALREADY). NPPES taxonomy 207Q00000X / Family Medicine."
+}

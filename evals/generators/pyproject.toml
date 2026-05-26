@@ -12,6 +12,9 @@ dependencies = [
     "Pillow==11.0.0",
     "PyMuPDF==1.24.13",
     "httpx==0.27.2",
+    # NPPES-sampler companion: provider names + addresses keyed off the same
+    # seed as `sample_n`, so PACKET_SPECS is reproducible byte-for-byte.
+    "Faker==28.4.1",
 ]
 
 [project.optional-dependencies]

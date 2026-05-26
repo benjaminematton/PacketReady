@@ -1,0 +1,60 @@
+{
+  "packetId": "packet-037-scanned-peters",
+  "label": "Dr. Andrew Peters",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Andrew J. Peters, MD",
+        "licenseNumber": "MD-CA-11940",
+        "state": "CA",
+        "issueDate": "2023-05-26",
+        "expiryDate": "2029-05-24",
+        "status": "Active",
+        "taxonomyCode": "207L00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Andrew J Peters",
+        "deaNumber": "WZ4911940",
+        "expiryDate": "2028-05-24",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Andrew J. Peters, MD",
+        "board": "ABA",
+        "specialty": "Anesthesiology",
+        "issueDate": "2022-05-26",
+        "expiryDate": "2032-05-23",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Andrew J. Peters, MD",
+        "carrier": "ISMIE Mutual",
+        "policyNumber": "ISM-CA-911940",
+        "expiryDate": "2028-01-01",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [],
+  "notes": "P4 programmatic (scanned, clean_pattern=MIDDLE_INITIAL). NPPES taxonomy 207L00000X / Anesthesiology."
+}

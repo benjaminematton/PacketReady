@@ -1,0 +1,60 @@
+{
+  "packetId": "packet-035-scanned-ferguson",
+  "label": "Dr. Kristin Ferguson",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Kristin Ferguson, MD",
+        "licenseNumber": "MD-PA-61124",
+        "state": "PA",
+        "issueDate": "2023-05-26",
+        "expiryDate": "2029-05-24",
+        "status": "Active",
+        "taxonomyCode": "2085B0100X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Kristin Ferguson",
+        "deaNumber": "MA7961124",
+        "expiryDate": "2027-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Kristin Ferguson, MD",
+        "board": "ABR",
+        "specialty": "Radiology",
+        "issueDate": "2020-05-26",
+        "expiryDate": "2030-05-24",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Kristin Ferguson, MD",
+        "carrier": "MAG Mutual",
+        "policyNumber": "MAG-PA-961124",
+        "expiryDate": "2027-06-16",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [],
+  "notes": "P4 programmatic (scanned, clean_pattern=CREDENTIAL_MD). NPPES taxonomy 2085B0100X / Radiology."
+}

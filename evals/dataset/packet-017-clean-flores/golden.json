@@ -1,0 +1,60 @@
+{
+  "packetId": "packet-017-clean-flores",
+  "label": "Dr. Matthew Flores",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Matthew J. Flores, MD",
+        "licenseNumber": "MD-MN-07222",
+        "state": "MN",
+        "issueDate": "2024-05-25",
+        "expiryDate": "2030-05-24",
+        "status": "Active",
+        "taxonomyCode": "207R00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Matthew J Flores",
+        "deaNumber": "LZ2407222",
+        "expiryDate": "2026-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Matthew J. Flores, MD",
+        "board": "ABIM",
+        "specialty": "Internal Medicine",
+        "issueDate": "2023-05-26",
+        "expiryDate": "2033-05-23",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Matthew J. Flores, MD",
+        "carrier": "Continental Casualty Co.",
+        "policyNumber": "CON-MN-407222",
+        "expiryDate": "2027-12-23",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [],
+  "notes": "P4 programmatic (clean, clean_pattern=MIDDLE_INITIAL). NPPES taxonomy 207R00000X / Internal Medicine."
+}

@@ -1,0 +1,60 @@
+{
+  "packetId": "packet-041-scanned-henderson",
+  "label": "Dr. Jeff Henderson",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Jeff Henderson, M.D.",
+        "licenseNumber": "MD-WA-82089",
+        "state": "WA",
+        "issueDate": "2021-05-26",
+        "expiryDate": "2027-05-25",
+        "status": "Active",
+        "taxonomyCode": "208G00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Jeff Henderson",
+        "deaNumber": "EW9882089",
+        "expiryDate": "2027-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Jeff Henderson, M.D.",
+        "board": "ABTS",
+        "specialty": "Thoracic Surgery (Cardiothoracic Vascular Surgery)",
+        "issueDate": "2022-05-26",
+        "expiryDate": "2032-05-23",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Jeff Henderson, M.D.",
+        "carrier": "The Doctors Company",
+        "policyNumber": "THE-WA-882089",
+        "expiryDate": "2027-09-30",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [],
+  "notes": "P4 programmatic (scanned, clean_pattern=CREDENTIAL_PERIODS). NPPES taxonomy 208G00000X / Thoracic Surgery (Cardiothoracic Vascular Surgery)."
+}

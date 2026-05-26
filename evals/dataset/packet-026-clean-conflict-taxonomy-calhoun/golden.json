@@ -1,0 +1,72 @@
+{
+  "packetId": "packet-026-clean-conflict-taxonomy-calhoun",
+  "label": "Dr. Timothy Calhoun",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Timothy Calhoun, M.D.",
+        "licenseNumber": "MD-PA-78667",
+        "state": "PA",
+        "issueDate": "2022-05-26",
+        "expiryDate": "2028-05-24",
+        "status": "Active",
+        "taxonomyCode": "207Q00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Timothy Calhoun",
+        "deaNumber": "ZN9978667",
+        "expiryDate": "2026-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Timothy Calhoun, M.D.",
+        "board": "ABEM",
+        "specialty": "Emergency Medicine",
+        "issueDate": "2024-05-25",
+        "expiryDate": "2034-05-23",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Timothy Calhoun, M.D.",
+        "carrier": "Continental Casualty Co.",
+        "policyNumber": "CON-PA-978667",
+        "expiryDate": "2027-11-22",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [
+    {
+      "kind": "taxonomy_specialty_mismatch",
+      "field": "boardCert.specialty",
+      "sources": [
+        "license",
+        "boardCert"
+      ],
+      "description": "license taxonomy_code 207Q00000X → canonical specialty 'Family Medicine'; board cert specialty 'Emergency Medicine' (ABEM)",
+      "expectedSeverity": "Critical",
+      "expected_to_flag": true
+    }
+  ],
+  "notes": "P4 programmatic (clean-conflict-taxonomy, clean_pattern=CREDENTIAL_PERIODS). NPPES taxonomy 207X00000X / Orthopaedic Surgery."
+}

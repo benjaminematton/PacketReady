@@ -1,0 +1,60 @@
+{
+  "packetId": "packet-007-clean-myers",
+  "label": "Dr. Anthony Myers",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Anthony J. Myers, MD",
+        "licenseNumber": "MD-NJ-97300",
+        "state": "NJ",
+        "issueDate": "2021-05-26",
+        "expiryDate": "2027-05-25",
+        "status": "Active",
+        "taxonomyCode": "207R00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Anthony J Myers",
+        "deaNumber": "LY4297300",
+        "expiryDate": "2027-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Anthony J. Myers, MD",
+        "board": "ABIM",
+        "specialty": "Internal Medicine",
+        "issueDate": "2020-05-26",
+        "expiryDate": "2030-05-24",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Anthony J. Myers, MD",
+        "carrier": "Pacific Indemnity Group",
+        "policyNumber": "PAC-NJ-297300",
+        "expiryDate": "2027-09-20",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [],
+  "notes": "P4 programmatic (clean, clean_pattern=MIDDLE_INITIAL). NPPES taxonomy 207R00000X / Internal Medicine."
+}

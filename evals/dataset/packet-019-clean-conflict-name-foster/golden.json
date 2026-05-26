@@ -1,0 +1,73 @@
+{
+  "packetId": "packet-019-clean-conflict-name-foster",
+  "label": "Dr. Michael Foster",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Michael Foster, MD",
+        "licenseNumber": "MD-CA-99141",
+        "state": "CA",
+        "issueDate": "2022-05-26",
+        "expiryDate": "2028-05-24",
+        "status": "Active",
+        "taxonomyCode": "207V00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Michael Foster",
+        "deaNumber": "GF1699141",
+        "expiryDate": "2028-05-24",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Michael  Foster, MD",
+        "board": "ABOG",
+        "specialty": "Obstetrics & Gynecology",
+        "issueDate": "2021-05-26",
+        "expiryDate": "2031-05-24",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Michael M. Foster-Williams, MD",
+        "carrier": "MedMal Specialty Insurance",
+        "policyNumber": "MED-CA-699141",
+        "expiryDate": "2027-07-10",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [
+    {
+      "kind": "name_variant",
+      "shape": "HYPHENATED_SUFFIX",
+      "field": "malpractice.fullName",
+      "sources": [
+        "license",
+        "malpractice"
+      ],
+      "description": "license: 'Michael Foster, MD'; malpractice: 'Michael M. Foster-Williams, MD'",
+      "expectedSeverity": "Critical",
+      "expected_to_flag": true
+    }
+  ],
+  "notes": "P4 programmatic (clean-conflict-name, clean_pattern=WHITESPACE_VARIANT). NPPES taxonomy 207V00000X / Obstetrics & Gynecology."
+}

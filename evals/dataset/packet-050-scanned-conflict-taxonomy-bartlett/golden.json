@@ -1,0 +1,72 @@
+{
+  "packetId": "packet-050-scanned-conflict-taxonomy-bartlett",
+  "label": "Dr. Anthony Bartlett",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Anthony Bartlett, MD",
+        "licenseNumber": "MD-SC-42706",
+        "state": "SC",
+        "issueDate": "2021-05-26",
+        "expiryDate": "2027-05-25",
+        "status": "Active",
+        "taxonomyCode": "207R00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Anthony Bartlett",
+        "deaNumber": "DP5742706",
+        "expiryDate": "2026-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Anthony Bartlett, MD",
+        "board": "ABU",
+        "specialty": "Urology",
+        "issueDate": "2021-05-26",
+        "expiryDate": "2031-05-24",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Anthony Bartlett, MD",
+        "carrier": "Continental Casualty Co.",
+        "policyNumber": "CON-SC-742706",
+        "expiryDate": "2028-02-26",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [
+    {
+      "kind": "taxonomy_specialty_mismatch",
+      "field": "boardCert.specialty",
+      "sources": [
+        "license",
+        "boardCert"
+      ],
+      "description": "license taxonomy_code 207R00000X → canonical specialty 'Internal Medicine'; board cert specialty 'Urology' (ABU)",
+      "expectedSeverity": "Critical",
+      "expected_to_flag": true
+    }
+  ],
+  "notes": "P4 programmatic (scanned-conflict-taxonomy, clean_pattern=CREDENTIAL_MD). NPPES taxonomy 207R00000X / Internal Medicine."
+}

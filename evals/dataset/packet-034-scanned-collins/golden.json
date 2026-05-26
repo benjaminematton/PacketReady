@@ -1,0 +1,60 @@
+{
+  "packetId": "packet-034-scanned-collins",
+  "label": "Dr. Christopher Collins",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Christopher Collins, MD",
+        "licenseNumber": "MD-MD-84073",
+        "state": "MD",
+        "issueDate": "2022-05-26",
+        "expiryDate": "2028-05-24",
+        "status": "Active",
+        "taxonomyCode": "207P00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Christopher Collins",
+        "deaNumber": "GH1284073",
+        "expiryDate": "2026-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Christopher  Collins, MD",
+        "board": "ABEM",
+        "specialty": "Emergency Medicine",
+        "issueDate": "2021-05-26",
+        "expiryDate": "2031-05-24",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Christopher Collins, MD",
+        "carrier": "MedProtect Mutual",
+        "policyNumber": "MED-MD-284073",
+        "expiryDate": "2027-10-06",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [],
+  "notes": "P4 programmatic (scanned, clean_pattern=WHITESPACE_VARIANT). NPPES taxonomy 207P00000X / Emergency Medicine."
+}

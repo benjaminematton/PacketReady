@@ -1,0 +1,60 @@
+{
+  "packetId": "packet-032-scanned-wright",
+  "label": "Dr. Jeffrey Wright",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Jeffrey J. Wright, MD",
+        "licenseNumber": "MD-TN-80223",
+        "state": "TN",
+        "issueDate": "2021-05-26",
+        "expiryDate": "2027-05-25",
+        "status": "Active",
+        "taxonomyCode": "207R00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Jeffrey J Wright",
+        "deaNumber": "FL1680223",
+        "expiryDate": "2028-05-24",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Jeffrey J. Wright, MD",
+        "board": "ABIM",
+        "specialty": "Internal Medicine",
+        "issueDate": "2024-05-25",
+        "expiryDate": "2034-05-23",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Jeffrey J. Wright, MD",
+        "carrier": "Midwest Health Indemnity",
+        "policyNumber": "MID-TN-680223",
+        "expiryDate": "2028-03-29",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [],
+  "notes": "P4 programmatic (scanned, clean_pattern=MIDDLE_INITIAL). NPPES taxonomy 207R00000X / Internal Medicine."
+}

@@ -1,0 +1,60 @@
+{
+  "packetId": "packet-044-scanned-wagner",
+  "label": "Dr. Tricia Wagner",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Tricia Wagner, MD",
+        "licenseNumber": "MD-TX-26905",
+        "state": "TX",
+        "issueDate": "2022-05-26",
+        "expiryDate": "2028-05-24",
+        "status": "Active",
+        "taxonomyCode": "207V00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Tricia Wagner",
+        "deaNumber": "FB0826905",
+        "expiryDate": "2026-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Tricia  Wagner, MD",
+        "board": "ABOG",
+        "specialty": "Obstetrics & Gynecology",
+        "issueDate": "2023-05-26",
+        "expiryDate": "2033-05-23",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Tricia Wagner, MD",
+        "carrier": "The Doctors Company",
+        "policyNumber": "THE-TX-826905",
+        "expiryDate": "2027-11-01",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [],
+  "notes": "P4 programmatic (scanned, clean_pattern=WHITESPACE_VARIANT). NPPES taxonomy 207V00000X / Obstetrics & Gynecology."
+}

@@ -1,0 +1,60 @@
+{
+  "packetId": "packet-016-clean-durham",
+  "label": "Dr. Sean Durham",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Sean Durham, M.D.",
+        "licenseNumber": "MD-CA-22612",
+        "state": "CA",
+        "issueDate": "2024-05-25",
+        "expiryDate": "2030-05-24",
+        "status": "Active",
+        "taxonomyCode": "2085B0100X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Sean Durham",
+        "deaNumber": "ZU8322612",
+        "expiryDate": "2028-05-24",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Sean Durham, M.D.",
+        "board": "ABR",
+        "specialty": "Radiology",
+        "issueDate": "2022-05-26",
+        "expiryDate": "2032-05-23",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Sean Durham, M.D.",
+        "carrier": "NORCAL Mutual",
+        "policyNumber": "NOR-CA-322612",
+        "expiryDate": "2027-02-27",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [],
+  "notes": "P4 programmatic (clean, clean_pattern=CREDENTIAL_PERIODS). NPPES taxonomy 2085B0100X / Radiology."
+}

@@ -1,0 +1,73 @@
+{
+  "packetId": "packet-048-scanned-conflict-name-patel",
+  "label": "Dr. Kenneth Patel",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Kenneth Patel-Jones, MD",
+        "licenseNumber": "MD-TX-55943",
+        "state": "TX",
+        "issueDate": "2021-05-26",
+        "expiryDate": "2027-05-25",
+        "status": "Active",
+        "taxonomyCode": "207Q00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Kenneth Patel-Jones",
+        "deaNumber": "ZQ6455943",
+        "expiryDate": "2027-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Kenneth Patel-Jones, MD",
+        "board": "ABFM",
+        "specialty": "Family Medicine",
+        "issueDate": "2022-05-26",
+        "expiryDate": "2032-05-23",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Kenneth Nakamura, MD",
+        "carrier": "ISMIE Mutual",
+        "policyNumber": "ISM-TX-455943",
+        "expiryDate": "2027-06-11",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [
+    {
+      "kind": "name_variant",
+      "shape": "SURNAME_SWAP",
+      "field": "malpractice.fullName",
+      "sources": [
+        "license",
+        "malpractice"
+      ],
+      "description": "license: 'Kenneth Patel-Jones, MD'; malpractice: 'Kenneth Nakamura, MD'",
+      "expectedSeverity": "Critical",
+      "expected_to_flag": true
+    }
+  ],
+  "notes": "P4 programmatic (scanned-conflict-name, clean_pattern=HYPHENATED_ALREADY). NPPES taxonomy 207Q00000X / Family Medicine."
+}

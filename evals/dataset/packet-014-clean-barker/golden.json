@@ -1,0 +1,60 @@
+{
+  "packetId": "packet-014-clean-barker",
+  "label": "Dr. John Barker",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "John Barker, MD",
+        "licenseNumber": "MD-OK-93105",
+        "state": "OK",
+        "issueDate": "2022-05-26",
+        "expiryDate": "2028-05-24",
+        "status": "Active",
+        "taxonomyCode": "208000000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "John Barker",
+        "deaNumber": "HX0493105",
+        "expiryDate": "2027-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "John  Barker, MD",
+        "board": "ABP",
+        "specialty": "Pediatrics",
+        "issueDate": "2021-05-26",
+        "expiryDate": "2031-05-24",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "John Barker, MD",
+        "carrier": "Coverys Specialty",
+        "policyNumber": "COV-OK-493105",
+        "expiryDate": "2028-02-27",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [],
+  "notes": "P4 programmatic (clean, clean_pattern=WHITESPACE_VARIANT). NPPES taxonomy 208000000X / Pediatrics."
+}

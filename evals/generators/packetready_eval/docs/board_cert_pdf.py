@@ -11,11 +11,34 @@ from reportlab.pdfgen.canvas import Canvas
 from ._layout import HeaderSpec, draw_field_grid, draw_footer, draw_header
 
 _BOARD_NAMES = {
-    "ABIM": "American Board of Internal Medicine",
-    "ABFM": "American Board of Family Medicine",
-    "ABEM": "American Board of Emergency Medicine",
-    "ABMS": "American Board of Medical Specialties",
-    "ABP": "American Board of Pediatrics",
+    "ABIM":   "American Board of Internal Medicine",
+    "ABFM":   "American Board of Family Medicine",
+    "ABEM":   "American Board of Emergency Medicine",
+    "ABMS":   "American Board of Medical Specialties",
+    "ABP":    "American Board of Pediatrics",
+    # P4 task 6: programmatic packets cover ~24 NUCC physician specialties;
+    # extending the allowlist keeps the renderer fail-loud on truly unknown
+    # abbreviations while letting the generator emit realistic board chrome.
+    "ABA":    "American Board of Anesthesiology",
+    "ABOG":   "American Board of Obstetrics and Gynecology",
+    "ABS":    "American Board of Surgery",
+    "ABR":    "American Board of Radiology",
+    "ABOS":   "American Board of Orthopaedic Surgery",
+    "ABO":    "American Board of Ophthalmology",
+    "ABPath": "American Board of Pathology",
+    "ABD":    "American Board of Dermatology",
+    "ABOto":  "American Board of Otolaryngology - Head and Neck Surgery",
+    "ABU":    "American Board of Urology",
+    "ABPMR":  "American Board of Physical Medicine and Rehabilitation",
+    "ABPS":   "American Board of Plastic Surgery",
+    "ABNS":   "American Board of Neurological Surgery",
+    "ABAI":   "American Board of Allergy and Immunology",
+    "ABCRS":  "American Board of Colon and Rectal Surgery",
+    "ABTS":   "American Board of Thoracic Surgery",
+    "ABNM":   "American Board of Nuclear Medicine",
+    "ABPM":   "American Board of Preventive Medicine",
+    "ABMG":   "American Board of Medical Genetics and Genomics",
+    "ABPN":   "American Board of Psychiatry and Neurology",
 }
 
 

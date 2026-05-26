@@ -1,0 +1,72 @@
+{
+  "packetId": "packet-049-scanned-conflict-taxonomy-atkins",
+  "label": "Dr. Heather Atkins",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Heather Atkins, MD",
+        "licenseNumber": "MD-SC-53548",
+        "state": "SC",
+        "issueDate": "2024-05-25",
+        "expiryDate": "2030-05-24",
+        "status": "Active",
+        "taxonomyCode": "208000000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Heather Atkins",
+        "deaNumber": "BH4753548",
+        "expiryDate": "2027-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Heather  Atkins, MD",
+        "board": "ABFM",
+        "specialty": "Family Medicine",
+        "issueDate": "2021-05-26",
+        "expiryDate": "2031-05-24",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Heather Atkins, MD",
+        "carrier": "Coverys Specialty",
+        "policyNumber": "COV-SC-753548",
+        "expiryDate": "2027-12-10",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [
+    {
+      "kind": "taxonomy_specialty_mismatch",
+      "field": "boardCert.specialty",
+      "sources": [
+        "license",
+        "boardCert"
+      ],
+      "description": "license taxonomy_code 208000000X → canonical specialty 'Pediatrics'; board cert specialty 'Family Medicine' (ABFM)",
+      "expectedSeverity": "Critical",
+      "expected_to_flag": true
+    }
+  ],
+  "notes": "P4 programmatic (scanned-conflict-taxonomy, clean_pattern=WHITESPACE_VARIANT). NPPES taxonomy 208600000X / Surgery."
+}

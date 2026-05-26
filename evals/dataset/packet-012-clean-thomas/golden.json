@@ -1,0 +1,60 @@
+{
+  "packetId": "packet-012-clean-thomas",
+  "label": "Dr. David Thomas",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "David J. Thomas, MD",
+        "licenseNumber": "MD-GA-92769",
+        "state": "GA",
+        "issueDate": "2022-05-26",
+        "expiryDate": "2028-05-24",
+        "status": "Active",
+        "taxonomyCode": "208600000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "David J Thomas",
+        "deaNumber": "PM1592769",
+        "expiryDate": "2026-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "David J. Thomas, MD",
+        "board": "ABS",
+        "specialty": "Surgery",
+        "issueDate": "2024-05-25",
+        "expiryDate": "2034-05-23",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "David J. Thomas, MD",
+        "carrier": "MedMal Specialty Insurance",
+        "policyNumber": "MED-GA-592769",
+        "expiryDate": "2027-10-31",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [],
+  "notes": "P4 programmatic (clean, clean_pattern=MIDDLE_INITIAL). NPPES taxonomy 208600000X / Surgery."
+}

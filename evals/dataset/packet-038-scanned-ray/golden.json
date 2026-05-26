@@ -1,0 +1,60 @@
+{
+  "packetId": "packet-038-scanned-ray",
+  "label": "Dr. Carla Ray",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Carla Ray-Jones, MD",
+        "licenseNumber": "MD-FL-15648",
+        "state": "FL",
+        "issueDate": "2021-05-26",
+        "expiryDate": "2027-05-25",
+        "status": "Active",
+        "taxonomyCode": "207V00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Carla Ray-Jones",
+        "deaNumber": "VT6915648",
+        "expiryDate": "2026-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Carla Ray-Jones, MD",
+        "board": "ABOG",
+        "specialty": "Obstetrics & Gynecology",
+        "issueDate": "2022-05-26",
+        "expiryDate": "2032-05-23",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Carla Ray-Jones, MD",
+        "carrier": "Continental Casualty Co.",
+        "policyNumber": "CON-FL-915648",
+        "expiryDate": "2027-06-15",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [],
+  "notes": "P4 programmatic (scanned, clean_pattern=HYPHENATED_ALREADY). NPPES taxonomy 207V00000X / Obstetrics & Gynecology."
+}

@@ -1,0 +1,73 @@
+{
+  "packetId": "packet-021-clean-conflict-name-guzman",
+  "label": "Dr. Gary Guzman",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Gary Guzman, M.D.",
+        "licenseNumber": "MD-MI-46416",
+        "state": "MI",
+        "issueDate": "2023-05-26",
+        "expiryDate": "2029-05-24",
+        "status": "Active",
+        "taxonomyCode": "2085B0100X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Gary Guzman",
+        "deaNumber": "CP1546416",
+        "expiryDate": "2027-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Gary Guzman, M.D.",
+        "board": "ABR",
+        "specialty": "Radiology",
+        "issueDate": "2021-05-26",
+        "expiryDate": "2031-05-24",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Chris Guzman, M.D.",
+        "carrier": "The Doctors Company",
+        "policyNumber": "THE-MI-546416",
+        "expiryDate": "2028-03-18",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [
+    {
+      "kind": "name_variant",
+      "shape": "NICKNAME",
+      "field": "malpractice.fullName",
+      "sources": [
+        "license",
+        "malpractice"
+      ],
+      "description": "license: 'Gary Guzman, M.D.'; malpractice: 'Chris Guzman, M.D.'",
+      "expectedSeverity": "Critical",
+      "expected_to_flag": true
+    }
+  ],
+  "notes": "P4 programmatic (clean-conflict-name, clean_pattern=CREDENTIAL_PERIODS). NPPES taxonomy 2085B0100X / Radiology."
+}

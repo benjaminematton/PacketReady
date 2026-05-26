@@ -1,4 +1,4 @@
-"""Generate all 5 P2 packets from a single Python literal.
+"""Generate all PacketReady eval packets from a single Python literal.
 
 The literal is the source of truth: it drives the PDFs AND the golden.json.
 Drift between a PDF and its corresponding `documents[i].fields` block is
@@ -13,18 +13,27 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import string
 import sys
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from datetime import date, timedelta
 from pathlib import Path
-from typing import Any
+from random import Random
+from typing import Any, Literal
 
+from faker import Faker
+
+from .conflict_planters import plant_name_variant, plant_taxonomy_specialty_mismatch
+from .name_variants import CleanNamePattern, ConflictShape, names_for_clean_pattern
 from .docs.board_cert_pdf import BoardCertFields, render as render_board_cert
 from .docs.dea_pdf import DeaFields, render as render_dea
 from .docs.license_pdf import LicenseFields, render as render_license
 from .docs.malpractice_pdf import MalpracticeFields, render as render_malpractice
+from .nppes_sampling import SampledProfile, faker_for, sample_n
 from .scan_artifacts import rasterize_and_degrade
 from .schema import BOARD_CERT, DEA, DOC_FILENAMES, LICENSE, MALPRACTICE
+from .specialty_catalog import board_for_specialty
 
 
 @dataclass(frozen=True)
@@ -52,6 +61,7 @@ _ANDERSON_LICENSE = LicenseFields(
     issue_date="2020-04-15",
     expiry_date="2027-04-14",
     status="Active",
+    taxonomy_code="207R00000X",      # Internal Medicine (matches board cert)
 )
 _ANDERSON_DEA = DeaFields(
     full_name="Henry Anderson",
@@ -102,6 +112,10 @@ PACKET_SPECS: list[PacketSpec] = [
             issue_date="2016-09-12",
             expiry_date="2027-09-11",
             status="Active",
+            # Base Internal Medicine code; board cert specialty "Cardiovascular
+            # Disease" is a subspec that rolls up to IM via NUCC — the validator
+            # is expected to accept this synonymy.
+            taxonomy_code="207R00000X",
         ),
         dea_fields=DeaFields(
             full_name="Marisol Bautista",
@@ -141,6 +155,7 @@ PACKET_SPECS: list[PacketSpec] = [
             issue_date="2017-07-01",
             expiry_date="2027-06-30",
             status="Active",
+            taxonomy_code="207P00000X",  # Emergency Medicine (matches board cert)
         ),
         dea_fields=DeaFields(
             full_name="Jane Calloway",
@@ -170,9 +185,12 @@ PACKET_SPECS: list[PacketSpec] = [
         planted_conflicts=[
             {
                 "kind": "name_variant",
+                "shape": "HYPHENATED_SUFFIX",  # hand-coded predecessor of the planter's HYPHENATED_SUFFIX
+                "field": "malpractice.fullName",
                 "sources": ["license", "malpractice"],
                 "description": "license: 'Jane Calloway, MD'; malpractice: 'Jane C. Calloway-Smith, MD'",
                 "expectedSeverity": "Critical",
+                "expected_to_flag": True,
             },
         ],
         notes="Per-doc extraction must read each PDF's literal name. Cross-doc validator (P4) surfaces the variant.",
@@ -189,6 +207,7 @@ PACKET_SPECS: list[PacketSpec] = [
             issue_date="2015-03-20",
             expiry_date="2026-09-30",            # License says 2026-09-30
             status="Active",
+            taxonomy_code="207Q00000X",  # Family Medicine (matches board cert)
         ),
         dea_fields=DeaFields(
             full_name="Amadou Diallo",
@@ -221,6 +240,10 @@ PACKET_SPECS: list[PacketSpec] = [
                 "sources": ["license", "malpractice"],
                 "description": "license.pdf shows expiry 2026-09-30; malpractice.pdf's Licensee footer records expiry 2027-09-30 for the same license number 036-IL-58031",
                 "expectedSeverity": "Critical",
+                # P4.5 grandfather — the validator that would catch this ships
+                # in 4.5. Not measured by P4's conflict_metrics; flag is here
+                # for marker-schema uniformity.
+                "expected_to_flag": False,
             },
         ],
         notes="Per-doc extraction reads each PDF accurately. P4 cross-doc validator catches the disagreement.",
@@ -250,6 +273,7 @@ def _license_json(f: LicenseFields) -> dict[str, str]:
         "issueDate": f.issue_date,
         "expiryDate": f.expiry_date,
         "status": f.status,
+        "taxonomyCode": f.taxonomy_code,
     }
 
 
@@ -336,6 +360,11 @@ def _write_packet(packet_dir: Path, spec: PacketSpec) -> None:
     )
 
 
+def all_specs() -> list[PacketSpec]:
+    """The full 50-packet manifest: 5 hand-crafted P2 specs + 45 programmatic P4 specs."""
+    return [*PACKET_SPECS, *build_new_packets()]
+
+
 def generate_all(output_root: Path) -> None:
     """Idempotent: wipes each packet directory before regenerating.
 
@@ -344,14 +373,233 @@ def generate_all(output_root: Path) -> None:
     hang in CI logs.
     """
     output_root.mkdir(parents=True, exist_ok=True)
-    total = len(PACKET_SPECS)
-    for idx, spec in enumerate(PACKET_SPECS, start=1):
+    specs = all_specs()
+    total = len(specs)
+    for idx, spec in enumerate(specs, start=1):
         suffix = " (scanned)" if spec.scanned else ""
         print(f"  [{idx}/{total}] {spec.id}{suffix}", flush=True)
         packet_dir = output_root / spec.id
         if packet_dir.exists():
             shutil.rmtree(packet_dir)
         _write_packet(packet_dir, spec)
+
+
+# --- P4 task 6: programmatic 45-packet builder --------------------------------
+
+# Single anchor for every date in every new packet. Today's calendar date drifts
+# (today's `now` in 6 months would shift every expiry), which would silently
+# mutate goldens and break the regression gate. Pin once.
+_NEW_PACKET_ANCHOR: date = date(2026, 5, 25)
+
+# Master seed for the programmatic builder. Threading one seed through the
+# sampler, faker, and bucket-shuffling RNG keeps the 45 specs byte-reproducible.
+_NEW_PACKET_SEED: int = 4242
+
+# Per-packet RNG seed = master * stride + packet_idx. 100_000 leaves five
+# decimal digits of headroom for the packet index, so collisions with adjacent
+# master seeds (which we don't use today, but might) only happen if the dataset
+# ever exceeds 100k packets — well past the foreseeable design.
+_PACKET_RNG_STRIDE: int = 100_000
+
+
+_ConflictKind = Literal["none", "name", "taxonomy"]
+
+
+@dataclass(frozen=True)
+class _Bucket:
+    """One row of the bucket plan — exhaustive over the (scanned × conflict) grid."""
+    slug: str
+    count: int
+    scanned: bool
+    conflict: _ConflictKind
+
+
+# Bucket sizes for the 45 NEW packets. The 5 P2 packets already cover
+# (2 clean+valid, 2 clean+conflicts, 1 scanned+clean, 0 scanned+conflicts);
+# adding these gets each bucket to the DoD targets (15/15/15/5 = 50 total).
+# Within conflict buckets, splits favor the lower-cost-to-tune validator
+# (identity_coherence → name_variant) by one.
+_BUCKET_PLAN: tuple[_Bucket, ...] = (
+    _Bucket("clean",                    13, scanned=False, conflict="none"),
+    _Bucket("clean-conflict-name",       7, scanned=False, conflict="name"),
+    _Bucket("clean-conflict-taxonomy",   6, scanned=False, conflict="taxonomy"),
+    _Bucket("scanned",                  14, scanned=True,  conflict="none"),
+    _Bucket("scanned-conflict-name",     3, scanned=True,  conflict="name"),
+    _Bucket("scanned-conflict-taxonomy", 2, scanned=True,  conflict="taxonomy"),
+)
+
+_TOTAL_NEW_PACKETS = sum(b.count for b in _BUCKET_PLAN)
+if _TOTAL_NEW_PACKETS != 45:
+    raise AssertionError(
+        f"_BUCKET_PLAN must sum to 45 (got {_TOTAL_NEW_PACKETS}) — see docs/p4-dod.md"
+    )
+
+
+# Carrier name pool for malpractice — varied enough that the extractor sees
+# multi-word, hyphenated, and acronym carriers in the same set.
+_CARRIERS: tuple[str, ...] = (
+    "MedProtect Mutual", "Pacific Indemnity Group", "Atlantic Liability Mutual",
+    "Midwest Health Indemnity", "ProAssurance Casualty Co.", "MAG Mutual",
+    "The Doctors Company", "MedMal Specialty Insurance", "Coverys Specialty",
+    "Continental Casualty Co.", "ISMIE Mutual", "NORCAL Mutual",
+)
+
+# DEA registration numbers are <2 letters><7 digits>. Generated 2-letter prefix
+# kept upper-case ASCII per DEA spec — DEA's own check-digit math we don't
+# reproduce (the validators don't enforce it; extractor just reads the string).
+_DEA_PREFIX_LETTERS = string.ascii_uppercase
+
+
+def _date_str(d: date) -> str:
+    return d.isoformat()
+
+
+def _draw_person(faker: Faker) -> tuple[str, str]:
+    """Returns (first, last) from a Faker instance."""
+    first: str = faker.first_name()
+    last: str = faker.last_name()
+    return first, last
+
+
+def _carrier_policy_prefix(carrier: str) -> str:
+    """Three-letter uppercased prefix of the carrier's first word.
+
+    Falls back to `"MED"` if the carrier name is unusually short — keeps the
+    policy number well-formed without crashing for an exotic future entry."""
+    head = carrier.split()[0] if carrier.split() else ""
+    return (head[:3] or "MED").upper()
+
+
+def _spec_from_profile(idx: int, profile: SampledProfile, faker: Faker, rng: Random,
+                       *, tag: str, clean_pattern: CleanNamePattern) -> PacketSpec:
+    """
+    Build a clean PacketSpec from one sampled NPPES row + a Faker instance.
+    All four docs end up Active and not-expired against `_NEW_PACKET_ANCHOR`,
+    so the spec lands in the "clean" buckets by default; the caller layers
+    planters / `scanned=True` on top for the conflict / scanned buckets.
+
+    `clean_pattern` dictates the per-doc fullName shape (credential suffix,
+    middle initial, hyphenation, whitespace). Rotated by packet_idx in
+    :pyfunc:`build_new_packets` so every pattern appears in the 50-packet set.
+    """
+    first, last = _draw_person(faker)
+    names = names_for_clean_pattern(clean_pattern, first, last)
+    last_slug = "".join(c.lower() for c in last if c.isalpha()) or "anon"
+    packet_id = f"packet-{idx:03d}-{tag}-{last_slug}"
+
+    # Dates anchored to a fixed reference so goldens don't drift with today's
+    # clock. rng controls the per-packet offset so each packet's dates differ.
+    license_issue   = _NEW_PACKET_ANCHOR - timedelta(days=365 * rng.randint(2, 5))
+    license_expiry  = license_issue + timedelta(days=365 * 6)
+    dea_issue       = _NEW_PACKET_ANCHOR - timedelta(days=365 * rng.randint(1, 3))
+    dea_expiry      = dea_issue + timedelta(days=365 * 3)
+    board_issue     = _NEW_PACKET_ANCHOR - timedelta(days=365 * rng.randint(2, 6))
+    board_expiry    = board_issue + timedelta(days=365 * 10)
+    malpractice_exp = _NEW_PACKET_ANCHOR + timedelta(days=rng.randint(200, 700))
+
+    license_number = f"MD-{profile.license_state}-{profile.npi[-5:]}"
+    dea_number     = (rng.choice(_DEA_PREFIX_LETTERS)
+                      + rng.choice(_DEA_PREFIX_LETTERS)
+                      + profile.npi[-7:])
+    # Carrier and policy-number prefix come from the SAME draw — otherwise the
+    # PDF reads "Carrier: MedProtect Mutual / Policy: ALM-…" and produces a
+    # silent, unplanted realism conflict for every programmatic packet.
+    carrier        = rng.choice(_CARRIERS)
+    policy_number  = f"{_carrier_policy_prefix(carrier)}-{profile.license_state}-{profile.npi[-6:]}"
+    board          = board_for_specialty(profile.primary_specialty)
+
+    return PacketSpec(
+        id=packet_id,
+        label=f"Dr. {first} {last}",
+        license_fields=LicenseFields(
+            full_name=names.license,
+            license_number=license_number,
+            state=profile.license_state,
+            issue_date=_date_str(license_issue),
+            expiry_date=_date_str(license_expiry),
+            status="Active",
+            taxonomy_code=profile.taxonomy_code,
+        ),
+        dea_fields=DeaFields(
+            full_name=names.dea,
+            dea_number=dea_number,
+            expiry_date=_date_str(dea_expiry),
+            status="Active",
+            schedules=("II", "III", "IV", "V"),
+        ),
+        board_cert_fields=BoardCertFields(
+            full_name=names.board_cert,
+            board=board,
+            specialty=profile.primary_specialty,
+            issue_date=_date_str(board_issue),
+            expiry_date=_date_str(board_expiry),
+            status="Active",
+        ),
+        malpractice_fields=MalpracticeFields(
+            full_name=names.malpractice,
+            carrier=carrier,
+            policy_number=policy_number,
+            expiry_date=_date_str(malpractice_exp),
+            status="Active",
+            licensee_license_number=license_number,
+            licensee_license_expiry=_date_str(license_expiry),
+        ),
+        notes=(
+            f"P4 programmatic ({tag}, clean_pattern={clean_pattern.name}). "
+            f"NPPES taxonomy {profile.taxonomy_code} / {profile.primary_specialty}."
+        ),
+    )
+
+
+def build_new_packets() -> list[PacketSpec]:
+    """45 programmatically generated P4 packets across the 6 sub-buckets.
+
+    Order is deterministic from `_NEW_PACKET_SEED`: sampler draws 45 NPPES
+    profiles, the loop walks them in sampler order, and each spec's per-packet
+    Random uses a derived seed so adding a bucket doesn't shift downstream
+    packets' field values.
+    """
+    profiles = sample_n(_NEW_PACKET_SEED, _TOTAL_NEW_PACKETS)
+    faker = faker_for(_NEW_PACKET_SEED)
+
+    specs: list[PacketSpec] = []
+    profile_iter = iter(profiles)
+    packet_idx = 6  # P2 occupies 001..005
+
+    # Separate counter for name-conflict packets so ConflictShape rotates
+    # independently of packet_idx — keeps each shape appearing roughly
+    # (10 name-conflict packets / 5 shapes) = 2 times across the bucket plan.
+    name_conflict_idx = 0
+    clean_patterns = list(CleanNamePattern)
+    conflict_shapes = list(ConflictShape)
+
+    for bucket in _BUCKET_PLAN:
+        for _ in range(bucket.count):
+            profile = next(profile_iter)
+            # Per-packet RNG derived from the master seed + packet index. Adding
+            # a bucket re-routes packet indices but keeps each packet's local
+            # rng stable for its own field generation.
+            packet_rng = Random(_NEW_PACKET_SEED * _PACKET_RNG_STRIDE + packet_idx)
+            # Clean pattern rotates by packet_idx so every pattern appears in
+            # both clean buckets and conflict buckets — no FP category is
+            # confined to packets the LLM never has to learn the clean shape of.
+            clean_pattern = clean_patterns[packet_idx % len(clean_patterns)]
+            spec = _spec_from_profile(
+                packet_idx, profile, faker, packet_rng,
+                tag=bucket.slug, clean_pattern=clean_pattern,
+            )
+            if bucket.conflict == "name":
+                shape = conflict_shapes[name_conflict_idx % len(conflict_shapes)]
+                spec = plant_name_variant(spec, packet_rng, shape=shape)
+                name_conflict_idx += 1
+            elif bucket.conflict == "taxonomy":
+                spec = plant_taxonomy_specialty_mismatch(spec, packet_rng)
+            if bucket.scanned:
+                spec = replace(spec, scanned=True)
+            specs.append(spec)
+            packet_idx += 1
+
+    return specs
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -363,7 +611,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     generate_all(args.output_root)
-    print(f"wrote {len(PACKET_SPECS)} packets into {args.output_root}")
+    print(f"wrote {len(all_specs())} packets into {args.output_root}")
     return 0
 
 

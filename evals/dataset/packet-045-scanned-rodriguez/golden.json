@@ -1,0 +1,60 @@
+{
+  "packetId": "packet-045-scanned-rodriguez",
+  "label": "Dr. Nicholas Rodriguez",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Nicholas Rodriguez, MD",
+        "licenseNumber": "MD-CA-19615",
+        "state": "CA",
+        "issueDate": "2024-05-25",
+        "expiryDate": "2030-05-24",
+        "status": "Active",
+        "taxonomyCode": "207R00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Nicholas Rodriguez",
+        "deaNumber": "YZ0519615",
+        "expiryDate": "2026-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Nicholas Rodriguez, MD",
+        "board": "ABIM",
+        "specialty": "Internal Medicine",
+        "issueDate": "2020-05-26",
+        "expiryDate": "2030-05-24",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Nicholas Rodriguez, MD",
+        "carrier": "MedMal Specialty Insurance",
+        "policyNumber": "MED-CA-519615",
+        "expiryDate": "2027-11-12",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [],
+  "notes": "P4 programmatic (scanned, clean_pattern=CREDENTIAL_MD). NPPES taxonomy 207R00000X / Internal Medicine."
+}

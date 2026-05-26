@@ -1,0 +1,72 @@
+{
+  "packetId": "packet-029-clean-conflict-taxonomy-perez",
+  "label": "Dr. Steven Perez",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Steven Perez, MD",
+        "licenseNumber": "MD-FL-77140",
+        "state": "FL",
+        "issueDate": "2023-05-26",
+        "expiryDate": "2029-05-24",
+        "status": "Active",
+        "taxonomyCode": "207L00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Steven Perez",
+        "deaNumber": "ZS3577140",
+        "expiryDate": "2026-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Steven  Perez, MD",
+        "board": "ABIM",
+        "specialty": "Internal Medicine",
+        "issueDate": "2020-05-26",
+        "expiryDate": "2030-05-24",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Steven Perez, MD",
+        "carrier": "MedProtect Mutual",
+        "policyNumber": "MED-FL-577140",
+        "expiryDate": "2027-05-09",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [
+    {
+      "kind": "taxonomy_specialty_mismatch",
+      "field": "boardCert.specialty",
+      "sources": [
+        "license",
+        "boardCert"
+      ],
+      "description": "license taxonomy_code 207L00000X → canonical specialty 'Anesthesiology'; board cert specialty 'Internal Medicine' (ABIM)",
+      "expectedSeverity": "Critical",
+      "expected_to_flag": true
+    }
+  ],
+  "notes": "P4 programmatic (clean-conflict-taxonomy, clean_pattern=WHITESPACE_VARIANT). NPPES taxonomy 207V00000X / Obstetrics & Gynecology."
+}

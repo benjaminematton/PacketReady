@@ -1,0 +1,60 @@
+{
+  "packetId": "packet-043-scanned-pratt",
+  "label": "Dr. Maria Pratt",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Maria Pratt-Jones, MD",
+        "licenseNumber": "MD-PA-80949",
+        "state": "PA",
+        "issueDate": "2021-05-26",
+        "expiryDate": "2027-05-25",
+        "status": "Active",
+        "taxonomyCode": "207N00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Maria Pratt-Jones",
+        "deaNumber": "ET8880949",
+        "expiryDate": "2027-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Maria Pratt-Jones, MD",
+        "board": "ABD",
+        "specialty": "Dermatology",
+        "issueDate": "2023-05-26",
+        "expiryDate": "2033-05-23",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Maria Pratt-Jones, MD",
+        "carrier": "NORCAL Mutual",
+        "policyNumber": "NOR-PA-880949",
+        "expiryDate": "2028-01-13",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [],
+  "notes": "P4 programmatic (scanned, clean_pattern=HYPHENATED_ALREADY). NPPES taxonomy 207N00000X / Dermatology."
+}

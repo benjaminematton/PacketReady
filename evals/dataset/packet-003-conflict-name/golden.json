@@ -11,7 +11,8 @@
         "state": "NY",
         "issueDate": "2017-07-01",
         "expiryDate": "2027-06-30",
-        "status": "Active"
+        "status": "Active",
+        "taxonomyCode": "207P00000X"
       }
     },
     {
@@ -57,12 +58,15 @@
   "plantedConflicts": [
     {
       "kind": "name_variant",
+      "shape": "HYPHENATED_SUFFIX",
+      "field": "malpractice.fullName",
       "sources": [
         "license",
         "malpractice"
       ],
       "description": "license: 'Jane Calloway, MD'; malpractice: 'Jane C. Calloway-Smith, MD'",
-      "expectedSeverity": "Critical"
+      "expectedSeverity": "Critical",
+      "expected_to_flag": true
     }
   ],
   "notes": "Per-doc extraction must read each PDF's literal name. Cross-doc validator (P4) surfaces the variant."

@@ -1,0 +1,73 @@
+{
+  "packetId": "packet-025-clean-conflict-name-bartlett",
+  "label": "Dr. Cheryl Bartlett",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Cheryl Bartlett, MD",
+        "licenseNumber": "MD-FL-96585",
+        "state": "FL",
+        "issueDate": "2023-05-26",
+        "expiryDate": "2029-05-24",
+        "status": "Active",
+        "taxonomyCode": "207R00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Cheryl Bartlett",
+        "deaNumber": "GH0996585",
+        "expiryDate": "2027-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Cheryl Bartlett, MD",
+        "board": "ABIM",
+        "specialty": "Internal Medicine",
+        "issueDate": "2024-05-25",
+        "expiryDate": "2034-05-23",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Cheryl Joseph Bartlett, MD",
+        "carrier": "NORCAL Mutual",
+        "policyNumber": "NOR-FL-996585",
+        "expiryDate": "2027-05-21",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [
+    {
+      "kind": "name_variant",
+      "shape": "MIDDLE_NAME_ADDED",
+      "field": "malpractice.fullName",
+      "sources": [
+        "license",
+        "malpractice"
+      ],
+      "description": "license: 'Cheryl Bartlett, MD'; malpractice: 'Cheryl Joseph Bartlett, MD'",
+      "expectedSeverity": "Critical",
+      "expected_to_flag": true
+    }
+  ],
+  "notes": "P4 programmatic (clean-conflict-name, clean_pattern=CREDENTIAL_MD). NPPES taxonomy 207R00000X / Internal Medicine."
+}

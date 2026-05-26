@@ -1,0 +1,73 @@
+{
+  "packetId": "packet-020-clean-conflict-name-parker",
+  "label": "Dr. Manuel Parker",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Manuel Parker, MD",
+        "licenseNumber": "MD-CA-95295",
+        "state": "CA",
+        "issueDate": "2024-05-25",
+        "expiryDate": "2030-05-24",
+        "status": "Active",
+        "taxonomyCode": "207Q00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Manuel Parker",
+        "deaNumber": "IX0295295",
+        "expiryDate": "2026-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Manuel Parker, MD",
+        "board": "ABFM",
+        "specialty": "Family Medicine",
+        "issueDate": "2021-05-26",
+        "expiryDate": "2031-05-24",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Manuel Alexander Parker, MD",
+        "carrier": "NORCAL Mutual",
+        "policyNumber": "NOR-CA-295295",
+        "expiryDate": "2028-03-11",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [
+    {
+      "kind": "name_variant",
+      "shape": "MIDDLE_NAME_ADDED",
+      "field": "malpractice.fullName",
+      "sources": [
+        "license",
+        "malpractice"
+      ],
+      "description": "license: 'Manuel Parker, MD'; malpractice: 'Manuel Alexander Parker, MD'",
+      "expectedSeverity": "Critical",
+      "expected_to_flag": true
+    }
+  ],
+  "notes": "P4 programmatic (clean-conflict-name, clean_pattern=CREDENTIAL_MD). NPPES taxonomy 207Q00000X / Family Medicine."
+}

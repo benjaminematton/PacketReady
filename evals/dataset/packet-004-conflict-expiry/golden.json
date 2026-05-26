@@ -11,7 +11,8 @@
         "state": "IL",
         "issueDate": "2015-03-20",
         "expiryDate": "2026-09-30",
-        "status": "Active"
+        "status": "Active",
+        "taxonomyCode": "207Q00000X"
       }
     },
     {
@@ -63,7 +64,8 @@
         "malpractice"
       ],
       "description": "license.pdf shows expiry 2026-09-30; malpractice.pdf's Licensee footer records expiry 2027-09-30 for the same license number 036-IL-58031",
-      "expectedSeverity": "Critical"
+      "expectedSeverity": "Critical",
+      "expected_to_flag": false
     }
   ],
   "notes": "Per-doc extraction reads each PDF accurately. P4 cross-doc validator catches the disagreement."

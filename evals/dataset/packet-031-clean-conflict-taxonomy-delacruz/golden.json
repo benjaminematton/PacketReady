@@ -1,0 +1,72 @@
+{
+  "packetId": "packet-031-clean-conflict-taxonomy-delacruz",
+  "label": "Dr. Robert Delacruz",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Robert Delacruz, M.D.",
+        "licenseNumber": "MD-SD-07239",
+        "state": "SD",
+        "issueDate": "2021-05-26",
+        "expiryDate": "2027-05-25",
+        "status": "Active",
+        "taxonomyCode": "207N00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Robert Delacruz",
+        "deaNumber": "ZQ8607239",
+        "expiryDate": "2026-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Robert Delacruz, M.D.",
+        "board": "ABU",
+        "specialty": "Urology",
+        "issueDate": "2022-05-26",
+        "expiryDate": "2032-05-23",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Robert Delacruz, M.D.",
+        "carrier": "Midwest Health Indemnity",
+        "policyNumber": "MID-SD-607239",
+        "expiryDate": "2027-06-06",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [
+    {
+      "kind": "taxonomy_specialty_mismatch",
+      "field": "boardCert.specialty",
+      "sources": [
+        "license",
+        "boardCert"
+      ],
+      "description": "license taxonomy_code 207N00000X → canonical specialty 'Dermatology'; board cert specialty 'Urology' (ABU)",
+      "expectedSeverity": "Critical",
+      "expected_to_flag": true
+    }
+  ],
+  "notes": "P4 programmatic (clean-conflict-taxonomy, clean_pattern=CREDENTIAL_PERIODS). NPPES taxonomy 2085B0100X / Radiology."
+}

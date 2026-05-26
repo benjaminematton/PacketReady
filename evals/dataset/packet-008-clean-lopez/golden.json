@@ -1,0 +1,60 @@
+{
+  "packetId": "packet-008-clean-lopez",
+  "label": "Dr. Manuel Lopez",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Manuel Lopez-Jones, MD",
+        "licenseNumber": "MD-PA-06348",
+        "state": "PA",
+        "issueDate": "2022-05-26",
+        "expiryDate": "2028-05-24",
+        "status": "Active",
+        "taxonomyCode": "207Q00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Manuel Lopez-Jones",
+        "deaNumber": "PK2206348",
+        "expiryDate": "2028-05-24",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Manuel Lopez-Jones, MD",
+        "board": "ABFM",
+        "specialty": "Family Medicine",
+        "issueDate": "2023-05-26",
+        "expiryDate": "2033-05-23",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Manuel Lopez-Jones, MD",
+        "carrier": "Midwest Health Indemnity",
+        "policyNumber": "MID-PA-206348",
+        "expiryDate": "2027-11-04",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [],
+  "notes": "P4 programmatic (clean, clean_pattern=HYPHENATED_ALREADY). NPPES taxonomy 207Q00000X / Family Medicine."
+}

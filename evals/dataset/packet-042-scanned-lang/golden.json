@@ -1,0 +1,60 @@
+{
+  "packetId": "packet-042-scanned-lang",
+  "label": "Dr. John Lang",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "John J. Lang, MD",
+        "licenseNumber": "MD-FL-72106",
+        "state": "FL",
+        "issueDate": "2022-05-26",
+        "expiryDate": "2028-05-24",
+        "status": "Active",
+        "taxonomyCode": "208000000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "John J Lang",
+        "deaNumber": "BG9472106",
+        "expiryDate": "2028-05-24",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "John J. Lang, MD",
+        "board": "ABP",
+        "specialty": "Pediatrics",
+        "issueDate": "2023-05-26",
+        "expiryDate": "2033-05-23",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "John J. Lang, MD",
+        "carrier": "Coverys Specialty",
+        "policyNumber": "COV-FL-472106",
+        "expiryDate": "2028-01-15",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [],
+  "notes": "P4 programmatic (scanned, clean_pattern=MIDDLE_INITIAL). NPPES taxonomy 208000000X / Pediatrics."
+}

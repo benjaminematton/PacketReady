@@ -1,0 +1,72 @@
+{
+  "packetId": "packet-030-clean-conflict-taxonomy-oliver",
+  "label": "Dr. Jeffrey Oliver",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Jeffrey Oliver, MD",
+        "licenseNumber": "MD-NY-37675",
+        "state": "NY",
+        "issueDate": "2023-05-26",
+        "expiryDate": "2029-05-24",
+        "status": "Active",
+        "taxonomyCode": "207R00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Jeffrey Oliver",
+        "deaNumber": "QW8537675",
+        "expiryDate": "2027-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Jeffrey Oliver, MD",
+        "board": "ABEM",
+        "specialty": "Emergency Medicine",
+        "issueDate": "2020-05-26",
+        "expiryDate": "2030-05-24",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Jeffrey Oliver, MD",
+        "carrier": "Atlantic Liability Mutual",
+        "policyNumber": "ATL-NY-537675",
+        "expiryDate": "2027-10-08",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [
+    {
+      "kind": "taxonomy_specialty_mismatch",
+      "field": "boardCert.specialty",
+      "sources": [
+        "license",
+        "boardCert"
+      ],
+      "description": "license taxonomy_code 207R00000X → canonical specialty 'Internal Medicine'; board cert specialty 'Emergency Medicine' (ABEM)",
+      "expectedSeverity": "Critical",
+      "expected_to_flag": true
+    }
+  ],
+  "notes": "P4 programmatic (clean-conflict-taxonomy, clean_pattern=CREDENTIAL_MD). NPPES taxonomy 208000000X / Pediatrics."
+}

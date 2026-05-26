@@ -1,0 +1,60 @@
+{
+  "packetId": "packet-013-clean-jackson",
+  "label": "Dr. Matthew Jackson",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Matthew Jackson-Jones, MD",
+        "licenseNumber": "MD-IN-43231",
+        "state": "IN",
+        "issueDate": "2022-05-26",
+        "expiryDate": "2028-05-24",
+        "status": "Active",
+        "taxonomyCode": "207Q00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Matthew Jackson-Jones",
+        "deaNumber": "VH4643231",
+        "expiryDate": "2026-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Matthew Jackson-Jones, MD",
+        "board": "ABFM",
+        "specialty": "Family Medicine",
+        "issueDate": "2022-05-26",
+        "expiryDate": "2032-05-23",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Matthew Jackson-Jones, MD",
+        "carrier": "Atlantic Liability Mutual",
+        "policyNumber": "ATL-IN-643231",
+        "expiryDate": "2027-08-10",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [],
+  "notes": "P4 programmatic (clean, clean_pattern=HYPHENATED_ALREADY). NPPES taxonomy 207Q00000X / Family Medicine."
+}

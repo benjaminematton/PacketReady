@@ -1,0 +1,60 @@
+{
+  "packetId": "packet-015-clean-hall",
+  "label": "Dr. Elizabeth Hall",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Elizabeth Hall, MD",
+        "licenseNumber": "MD-TN-36032",
+        "state": "TN",
+        "issueDate": "2024-05-25",
+        "expiryDate": "2030-05-24",
+        "status": "Active",
+        "taxonomyCode": "2084A0401X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Elizabeth Hall",
+        "deaNumber": "YI1036032",
+        "expiryDate": "2026-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Elizabeth Hall, MD",
+        "board": "ABPN",
+        "specialty": "Psychiatry & Neurology",
+        "issueDate": "2024-05-25",
+        "expiryDate": "2034-05-23",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Elizabeth Hall, MD",
+        "carrier": "ProAssurance Casualty Co.",
+        "policyNumber": "PRO-TN-036032",
+        "expiryDate": "2027-02-25",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [],
+  "notes": "P4 programmatic (clean, clean_pattern=CREDENTIAL_MD). NPPES taxonomy 2084A0401X / Psychiatry & Neurology."
+}

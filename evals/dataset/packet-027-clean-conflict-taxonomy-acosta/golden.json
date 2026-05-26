@@ -1,0 +1,72 @@
+{
+  "packetId": "packet-027-clean-conflict-taxonomy-acosta",
+  "label": "Dr. Nicole Acosta",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Nicole J. Acosta, MD",
+        "licenseNumber": "MD-SC-28146",
+        "state": "SC",
+        "issueDate": "2023-05-26",
+        "expiryDate": "2029-05-24",
+        "status": "Active",
+        "taxonomyCode": "207N00000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Nicole J Acosta",
+        "deaNumber": "DI9528146",
+        "expiryDate": "2027-05-25",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Nicole J. Acosta, MD",
+        "board": "ABIM",
+        "specialty": "Internal Medicine",
+        "issueDate": "2022-05-26",
+        "expiryDate": "2032-05-23",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Nicole J. Acosta, MD",
+        "carrier": "Continental Casualty Co.",
+        "policyNumber": "CON-SC-528146",
+        "expiryDate": "2027-03-01",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [
+    {
+      "kind": "taxonomy_specialty_mismatch",
+      "field": "boardCert.specialty",
+      "sources": [
+        "license",
+        "boardCert"
+      ],
+      "description": "license taxonomy_code 207N00000X → canonical specialty 'Dermatology'; board cert specialty 'Internal Medicine' (ABIM)",
+      "expectedSeverity": "Critical",
+      "expected_to_flag": true
+    }
+  ],
+  "notes": "P4 programmatic (clean-conflict-taxonomy, clean_pattern=MIDDLE_INITIAL). NPPES taxonomy 207K00000X / Allergy & Immunology."
+}

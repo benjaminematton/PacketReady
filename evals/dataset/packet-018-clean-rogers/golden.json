@@ -1,0 +1,60 @@
+{
+  "packetId": "packet-018-clean-rogers",
+  "label": "Dr. Gary Rogers",
+  "documents": [
+    {
+      "type": "license",
+      "filename": "license.pdf",
+      "fields": {
+        "fullName": "Gary Rogers-Jones, MD",
+        "licenseNumber": "MD-NY-17964",
+        "state": "NY",
+        "issueDate": "2023-05-26",
+        "expiryDate": "2029-05-24",
+        "status": "Active",
+        "taxonomyCode": "208600000X"
+      }
+    },
+    {
+      "type": "dea",
+      "filename": "dea.pdf",
+      "fields": {
+        "fullName": "Gary Rogers-Jones",
+        "deaNumber": "WL2417964",
+        "expiryDate": "2028-05-24",
+        "status": "Active",
+        "schedules": [
+          "II",
+          "III",
+          "IV",
+          "V"
+        ]
+      }
+    },
+    {
+      "type": "boardCert",
+      "filename": "board-cert.pdf",
+      "fields": {
+        "fullName": "Gary Rogers-Jones, MD",
+        "board": "ABS",
+        "specialty": "Surgery",
+        "issueDate": "2020-05-26",
+        "expiryDate": "2030-05-24",
+        "status": "Active"
+      }
+    },
+    {
+      "type": "malpractice",
+      "filename": "malpractice.pdf",
+      "fields": {
+        "fullName": "Gary Rogers-Jones, MD",
+        "carrier": "Coverys Specialty",
+        "policyNumber": "COV-NY-417964",
+        "expiryDate": "2028-03-05",
+        "status": "Active"
+      }
+    }
+  ],
+  "plantedConflicts": [],
+  "notes": "P4 programmatic (clean, clean_pattern=HYPHENATED_ALREADY). NPPES taxonomy 208600000X / Surgery."
+}
