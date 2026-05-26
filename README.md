@@ -1,8 +1,9 @@
 # PacketReady
 
-Hi Jake — this is the take-home from our conversation. Built solo
-over 5 days. The 26-second demo below is the fastest way in; the
-eval numbers further down are the honest answer to "does it work."
+Built as a three-day solo take-home for Atano, a credentialing AI
+startup. The 26-second demo below is the fastest way to get a feel
+for it; the eval numbers further down are the honest answer to whether
+it works.
 
 ![demo](docs/assets/demo.gif)
 
@@ -21,37 +22,39 @@ Two companion artifacts to read alongside this README:
 
 ## Why this build
 
-The brief was open-ended, so the most important decision was scope.
-Here's how I narrowed it.
+Open-ended brief, so the real call was scope. Three days isn't long
+enough to ship something general; it's long enough to ship one slice
+that actually works. Here's how I picked the slice.
 
-Atano's homepage promises five primitives — document intelligence,
-primary source verification, payer auto-fill, real-time reporting, and
-smart follow-ups — plus the bottom-line claim that providers get
-"approved the first time, every time." The seam I picked is that
+Atano's homepage promises five things — document intelligence,
+primary source verification, payer auto-fill, real-time reporting,
+smart follow-ups — under the bigger promise that providers get
+"approved the first time, every time." I went after that bigger
 promise. The five primitives are all collection-side or
-post-credentialing surfaces; none of them is *cross-document validation
+post-credentialing work; none of them is *cross-document validation
 against payer-readiness criteria before submission*. That's where
-first-time denials get prevented, and it's the part of Atano's pitch
-that doesn't have a marketed feature behind it yet.
+first-time denials actually get prevented, and it's the part of the
+pitch I couldn't find a shipped feature behind.
 
-A few alternatives I considered and rejected:
+A few things I considered and didn't build:
 
-- **A better document triage classifier than your filename regex.**
-  Rejected because you told me regex is fine for that — building a
-  fancier version is solving a problem you don't think you have.
-- **An end-to-end provider intake portal.** Rejected because Verifiable
-  ships this (their Provider Intake module + CredAgent's 150-step
-  pipeline), Medallion ships this, Assured ships this. A weekend MVP
-  in a crowded lane.
-- **An eval harness for your existing extraction pipeline.** Rejected
-  as standalone because it's a measurement tool, not a product slice
-  — though I built one as part of this anyway.
+- **A better document triage classifier than Atano's filename regex.**
+  Their team told me regex is fine for triage. No point building a
+  fancier version of something that isn't broken.
+- **An end-to-end provider intake portal.** Verifiable ships this
+  (Provider Intake + CredAgent's 150-step pipeline), Medallion ships
+  this, Assured ships this. A weekend MVP in a crowded lane.
+- **An eval harness for Atano's existing extraction pipeline.** Useful,
+  but it's a measurement tool, not a product. I built one anyway, just
+  as part of this.
 
-PacketReady picks up after extraction and before submission. The
+So PacketReady picks up after extraction and before submission. The
 intake half exists to feed the score half realistic noisy data; the
-score half is the differentiated product.
+score half is where the differentiation lives.
 
 ## What's actually shipped
+
+End-to-end, not "framework with TODOs":
 
 - Sonnet-based per-doc extractors (license / DEA / malpractice / board
   cert) with confidence-weighted outputs and bbox-level citations.
@@ -78,11 +81,12 @@ score half is the differentiated product.
   orchestrator, with weighted Cohen's κ = 0.68 against 20 hand-labeled
   tier judgments.
 
-## What's mocked behind a real port (the swap is the v1.1 work)
+## What's mocked (and where the real swap goes)
 
-These are the seams where the production system needs a live integration
-that PacketReady ships as a mock. The interface is real and the calling
-code is unchanged when you swap; the implementation isn't.
+A few places need a live integration that doesn't make sense to build
+in a take-home. In each case the interface is production-shape and the
+calling code doesn't change when you swap the implementation — the
+mock just stands in for the network call.
 
 - **Primary-source verification.** `IPrimarySourceLookup`
   ([`Application/Intake/PrimarySources/`](apps/api/Application/Intake/PrimarySources/))
@@ -96,20 +100,20 @@ code is unchanged when you swap; the implementation isn't.
 - **Blob storage.** `IBlobStore` is local-filesystem in dev
   (`LocalFileBlobStore`). S3 / GCS swap is one registration line.
 
-## What's deliberately out of v1
+## What's out of scope
 
-- **Browser-driven payer portal submission.** Atano markets this; not
-  the differentiator we're showing.
-- **Production authn/authz.** Magic-link is the only auth surface.
-  No org / role model.
+- **Browser-driven payer portal submission.** Atano already does this;
+  not the differentiator.
+- **Production authn/authz.** Magic-link is the only auth surface, no
+  org or role model.
 - **HIPAA-compliant deployment posture.** Synthetic data only.
 
-If I were joining and shipped this from day one, the first 30 days
-would be: wire real CAQH + NPPES + OIG + SAM behind
-`IPrimarySourceLookup`, swap `MockSmtpSender` for a real provider
-(Postmark is the closest fit to the current shape), and bring in a
-second labeler on the eval set to move κ from a self-consistency upper
-bound to a real one.
+If I were joining and shipping this from day one, the first 30 days
+would be three things. Wire real CAQH, NPPES, OIG, and SAM behind
+`IPrimarySourceLookup`. Swap `MockSmtpSender` for a real provider —
+Postmark fits the current shape closest. Bring in a second labeler on
+the eval set so κ moves from a self-consistency upper bound to a real
+one.
 
 ## Accuracy
 
