@@ -1,0 +1,706 @@
+{
+  "iteration": 100,
+  "recordedAt": "2026-05-26T12:12:08.577641+00:00",
+  "promptPath": "embedded:IdentityCoherencePrompt.v1.md",
+  "promptSha256": "48322ce74b3586a737a2b2f56e516154103b557f4c18edb647d1e703f92943a4",
+  "modelId": "claude-sonnet-4-6",
+  "notes": "full-50 scoring baseline (3 runs, worst-of metrics)",
+  "packetIds": [
+    "packet-001-clean-anderson",
+    "packet-002-clean-bautista",
+    "packet-003-conflict-name",
+    "packet-004-conflict-expiry",
+    "packet-005-scanned-anderson",
+    "packet-006-clean-perry",
+    "packet-007-clean-myers",
+    "packet-008-clean-lopez",
+    "packet-009-clean-cervantes",
+    "packet-010-clean-berry",
+    "packet-011-clean-wilson",
+    "packet-012-clean-thomas",
+    "packet-013-clean-jackson",
+    "packet-014-clean-barker",
+    "packet-015-clean-hall",
+    "packet-016-clean-durham",
+    "packet-017-clean-flores",
+    "packet-018-clean-rogers",
+    "packet-019-clean-conflict-name-foster",
+    "packet-020-clean-conflict-name-parker",
+    "packet-021-clean-conflict-name-guzman",
+    "packet-022-clean-conflict-name-alexander",
+    "packet-023-clean-conflict-name-cummings",
+    "packet-024-clean-conflict-name-jackson",
+    "packet-025-clean-conflict-name-bartlett",
+    "packet-026-clean-conflict-taxonomy-calhoun",
+    "packet-027-clean-conflict-taxonomy-acosta",
+    "packet-028-clean-conflict-taxonomy-wade",
+    "packet-029-clean-conflict-taxonomy-perez",
+    "packet-030-clean-conflict-taxonomy-oliver",
+    "packet-031-clean-conflict-taxonomy-delacruz",
+    "packet-032-scanned-wright",
+    "packet-033-scanned-rice",
+    "packet-034-scanned-collins",
+    "packet-035-scanned-ferguson",
+    "packet-036-scanned-smith",
+    "packet-037-scanned-peters",
+    "packet-038-scanned-ray",
+    "packet-039-scanned-king",
+    "packet-040-scanned-tucker",
+    "packet-041-scanned-henderson",
+    "packet-042-scanned-lang",
+    "packet-043-scanned-pratt",
+    "packet-044-scanned-wagner",
+    "packet-045-scanned-rodriguez",
+    "packet-046-scanned-conflict-name-blanchard",
+    "packet-047-scanned-conflict-name-brooks",
+    "packet-048-scanned-conflict-name-patel",
+    "packet-049-scanned-conflict-taxonomy-atkins",
+    "packet-050-scanned-conflict-taxonomy-bartlett"
+  ],
+  "packetResults": [
+    {
+      "packetId": "packet-001-clean-anderson",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1759,
+      "outputTokens": 9,
+      "wallTimeMs": 1911
+    },
+    {
+      "packetId": "packet-002-clean-bautista",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1783,
+      "outputTokens": 9,
+      "wallTimeMs": 1904
+    },
+    {
+      "packetId": "packet-003-conflict-name",
+      "plantedKinds": [
+        "name_variant"
+      ],
+      "plantedShape": "HYPHENATED_SUFFIX",
+      "expectedToFlag": true,
+      "emittedIssues": [
+        {
+          "severity": "Critical",
+          "message": "License, DEA, and board certification record \u0027Jane Calloway\u0027 while malpractice records \u0027Jane C. Calloway-Smith, MD\u0027, indicating a hyphenated/married-name surname disagreement.",
+          "remediation": "Confirm the provider\u0027s current legal name and obtain matching documentation such as a marriage certificate or name-change record to reconcile \u0027Calloway\u0027 with \u0027Calloway-Smith\u0027.",
+          "sources": [
+            "Jane Calloway, MD",
+            "Jane Calloway",
+            "Jane Calloway, MD",
+            "Jane C. Calloway-Smith, MD"
+          ]
+        }
+      ],
+      "inputTokens": 1771,
+      "outputTokens": 132,
+      "wallTimeMs": 3380
+    },
+    {
+      "packetId": "packet-004-conflict-expiry",
+      "plantedKinds": [
+        "expiry_mismatch"
+      ],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1775,
+      "outputTokens": 9,
+      "wallTimeMs": 1735
+    },
+    {
+      "packetId": "packet-005-scanned-anderson",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1759,
+      "outputTokens": 9,
+      "wallTimeMs": 1730
+    },
+    {
+      "packetId": "packet-006-clean-perry",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1768,
+      "outputTokens": 9,
+      "wallTimeMs": 1719
+    },
+    {
+      "packetId": "packet-007-clean-myers",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1766,
+      "outputTokens": 9,
+      "wallTimeMs": 1673
+    },
+    {
+      "packetId": "packet-008-clean-lopez",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1767,
+      "outputTokens": 9,
+      "wallTimeMs": 1828
+    },
+    {
+      "packetId": "packet-009-clean-cervantes",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1775,
+      "outputTokens": 9,
+      "wallTimeMs": 1639
+    },
+    {
+      "packetId": "packet-010-clean-berry",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1759,
+      "outputTokens": 9,
+      "wallTimeMs": 1634
+    },
+    {
+      "packetId": "packet-011-clean-wilson",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1768,
+      "outputTokens": 9,
+      "wallTimeMs": 2258
+    },
+    {
+      "packetId": "packet-012-clean-thomas",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1766,
+      "outputTokens": 9,
+      "wallTimeMs": 32166
+    },
+    {
+      "packetId": "packet-013-clean-jackson",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1767,
+      "outputTokens": 9,
+      "wallTimeMs": 1616
+    },
+    {
+      "packetId": "packet-014-clean-barker",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1768,
+      "outputTokens": 9,
+      "wallTimeMs": 1620
+    },
+    {
+      "packetId": "packet-015-clean-hall",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1759,
+      "outputTokens": 9,
+      "wallTimeMs": 1597
+    },
+    {
+      "packetId": "packet-016-clean-durham",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1768,
+      "outputTokens": 9,
+      "wallTimeMs": 1707
+    },
+    {
+      "packetId": "packet-017-clean-flores",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1770,
+      "outputTokens": 9,
+      "wallTimeMs": 1822
+    },
+    {
+      "packetId": "packet-018-clean-rogers",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1767,
+      "outputTokens": 9,
+      "wallTimeMs": 1799
+    },
+    {
+      "packetId": "packet-019-clean-conflict-name-foster",
+      "plantedKinds": [
+        "name_variant"
+      ],
+      "plantedShape": "HYPHENATED_SUFFIX",
+      "expectedToFlag": true,
+      "emittedIssues": [
+        {
+          "severity": "Critical",
+          "message": "License, DEA, and board certification record \u0027Michael Foster\u0027 while malpractice records \u0027Michael M. Foster-Williams, MD\u0027, indicating a hyphenated surname extension not present on the other documents.",
+          "remediation": "Confirm the provider\u0027s current legal surname with them and obtain matching documentation such as a marriage certificate or name-change record to reconcile \u0027Foster\u0027 versus \u0027Foster-Williams\u0027.",
+          "sources": [
+            "Michael Foster, MD",
+            "MICHAEL FOSTER",
+            "Michael Foster, MD",
+            "Michael M. Foster-Williams, MD"
+          ]
+        }
+      ],
+      "inputTokens": 1765,
+      "outputTokens": 127,
+      "wallTimeMs": 3828
+    },
+    {
+      "packetId": "packet-020-clean-conflict-name-parker",
+      "plantedKinds": [
+        "name_variant"
+      ],
+      "plantedShape": "MIDDLE_NAME_ADDED",
+      "expectedToFlag": true,
+      "emittedIssues": [
+        {
+          "severity": "Critical",
+          "message": "License, DEA, and board certification record \u0027Manuel Parker\u0027 (with or without MD suffix), while malpractice records \u0027Manuel Alexander Parker, MD\u0027, introducing a full middle name \u0027Alexander\u0027 with no middle initial present on any other source.",
+          "remediation": "Confirm the provider\u0027s legal name and whether \u0027Alexander\u0027 is a middle name on the legal record; obtain matching documentation or a name-change/clarification record from the malpractice carrier.",
+          "sources": [
+            "Manuel Parker, MD",
+            "Manuel Parker",
+            "Manuel Parker, MD",
+            "Manuel Alexander Parker, MD"
+          ]
+        }
+      ],
+      "inputTokens": 1760,
+      "outputTokens": 140,
+      "wallTimeMs": 4053
+    },
+    {
+      "packetId": "packet-021-clean-conflict-name-guzman",
+      "plantedKinds": [
+        "name_variant"
+      ],
+      "plantedShape": "NICKNAME",
+      "expectedToFlag": true,
+      "emittedIssues": [
+        {
+          "severity": "Critical",
+          "message": "License, DEA, and board certification record \u0027Gary Guzman\u0027 while malpractice records \u0027Chris Guzman, M.D.\u0027 \u2014 the first names \u0027Gary\u0027 and \u0027Chris\u0027 differ.",
+          "remediation": "Confirm the provider\u0027s legal first name and obtain a corrected malpractice certificate or documentation explaining the discrepancy.",
+          "sources": [
+            "Gary Guzman, M.D.",
+            "Gary Guzman",
+            "Gary Guzman, M.D.",
+            "Chris Guzman, M.D."
+          ]
+        }
+      ],
+      "inputTokens": 1780,
+      "outputTokens": 120,
+      "wallTimeMs": 3348
+    },
+    {
+      "packetId": "packet-022-clean-conflict-name-alexander",
+      "plantedKinds": [
+        "name_variant"
+      ],
+      "plantedShape": "SURNAME_TYPO",
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1767,
+      "outputTokens": 9,
+      "wallTimeMs": 1394
+    },
+    {
+      "packetId": "packet-023-clean-conflict-name-cummings",
+      "plantedKinds": [
+        "name_variant"
+      ],
+      "plantedShape": "SURNAME_SWAP",
+      "expectedToFlag": true,
+      "emittedIssues": [
+        {
+          "severity": "Critical",
+          "message": "License, DEA, and board certification record the surname as \u0027Cummings-Jones\u0027, while malpractice records \u0027Voss\u0027 (full values: \u0027Lisa Cummings-Jones, MD\u0027 / \u0027Lisa Cummings-Jones\u0027 / \u0027Lisa Cummings-Jones, MD\u0027 vs \u0027Lisa Voss, MD\u0027).",
+          "remediation": "Confirm the provider\u0027s current legal surname with supporting documentation (e.g., marriage certificate or name-change record) and ensure all credentialing documents reflect the same legal name.",
+          "sources": [
+            "Lisa Cummings-Jones, MD",
+            "Lisa Cummings-Jones",
+            "Lisa Cummings-Jones, MD",
+            "Lisa Voss, MD"
+          ]
+        }
+      ],
+      "inputTokens": 1776,
+      "outputTokens": 164,
+      "wallTimeMs": 4222
+    },
+    {
+      "packetId": "packet-024-clean-conflict-name-jackson",
+      "plantedKinds": [
+        "name_variant"
+      ],
+      "plantedShape": "HYPHENATED_SUFFIX",
+      "expectedToFlag": true,
+      "emittedIssues": [
+        {
+          "severity": "Critical",
+          "message": "License, DEA, and board certification record \u0027Timothy Jackson\u0027 while malpractice records \u0027Timothy T. Jackson-Taylor, MD\u0027, indicating a hyphenated surname extension not present on the other documents.",
+          "remediation": "Confirm the provider\u0027s current legal surname with them and obtain matching documentation such as a marriage certificate or name-change record to reconcile \u0027Jackson\u0027 versus \u0027Jackson-Taylor\u0027.",
+          "sources": [
+            "Timothy Jackson, MD",
+            "TIMOTHY JACKSON",
+            "Timothy Jackson, MD",
+            "Timothy T. Jackson-Taylor, MD"
+          ]
+        }
+      ],
+      "inputTokens": 1765,
+      "outputTokens": 127,
+      "wallTimeMs": 3445
+    },
+    {
+      "packetId": "packet-025-clean-conflict-name-bartlett",
+      "plantedKinds": [
+        "name_variant"
+      ],
+      "plantedShape": "MIDDLE_NAME_ADDED",
+      "expectedToFlag": true,
+      "emittedIssues": [
+        {
+          "severity": "Critical",
+          "message": "License, DEA, and board certification record \u0027Cheryl Bartlett\u0027 (with no middle name or initial), while malpractice records \u0027Cheryl Joseph Bartlett, MD\u0027, introducing a middle name with no initial trace on any other document.",
+          "remediation": "Confirm the provider\u0027s current legal name and request documentation explaining the middle name \u0027Joseph\u0027 appearing only on the malpractice certificate, or obtain a name-change or legal name record to reconcile.",
+          "sources": [
+            "Cheryl Bartlett, MD",
+            "Cheryl Bartlett",
+            "Cheryl Bartlett, MD",
+            "Cheryl Joseph Bartlett, MD"
+          ]
+        }
+      ],
+      "inputTokens": 1776,
+      "outputTokens": 144,
+      "wallTimeMs": 4058
+    },
+    {
+      "packetId": "packet-026-clean-conflict-taxonomy-calhoun",
+      "plantedKinds": [
+        "taxonomy_specialty_mismatch"
+      ],
+      "expectedToFlag": true,
+      "emittedIssues": [],
+      "inputTokens": 1780,
+      "outputTokens": 9,
+      "wallTimeMs": 1730
+    },
+    {
+      "packetId": "packet-027-clean-conflict-taxonomy-acosta",
+      "plantedKinds": [
+        "taxonomy_specialty_mismatch"
+      ],
+      "expectedToFlag": true,
+      "emittedIssues": [],
+      "inputTokens": 1774,
+      "outputTokens": 9,
+      "wallTimeMs": 2070
+    },
+    {
+      "packetId": "packet-028-clean-conflict-taxonomy-wade",
+      "plantedKinds": [
+        "taxonomy_specialty_mismatch"
+      ],
+      "expectedToFlag": true,
+      "emittedIssues": [],
+      "inputTokens": 1767,
+      "outputTokens": 9,
+      "wallTimeMs": 2840
+    },
+    {
+      "packetId": "packet-029-clean-conflict-taxonomy-perez",
+      "plantedKinds": [
+        "taxonomy_specialty_mismatch"
+      ],
+      "expectedToFlag": true,
+      "emittedIssues": [],
+      "inputTokens": 1768,
+      "outputTokens": 9,
+      "wallTimeMs": 1633
+    },
+    {
+      "packetId": "packet-030-clean-conflict-taxonomy-oliver",
+      "plantedKinds": [
+        "taxonomy_specialty_mismatch"
+      ],
+      "expectedToFlag": true,
+      "emittedIssues": [],
+      "inputTokens": 1759,
+      "outputTokens": 9,
+      "wallTimeMs": 1651
+    },
+    {
+      "packetId": "packet-031-clean-conflict-taxonomy-delacruz",
+      "plantedKinds": [
+        "taxonomy_specialty_mismatch"
+      ],
+      "expectedToFlag": true,
+      "emittedIssues": [],
+      "inputTokens": 1784,
+      "outputTokens": 9,
+      "wallTimeMs": 6067
+    },
+    {
+      "packetId": "packet-032-scanned-wright",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1766,
+      "outputTokens": 9,
+      "wallTimeMs": 1953
+    },
+    {
+      "packetId": "packet-033-scanned-rice",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1767,
+      "outputTokens": 9,
+      "wallTimeMs": 1695
+    },
+    {
+      "packetId": "packet-034-scanned-collins",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1761,
+      "outputTokens": 9,
+      "wallTimeMs": 2469
+    },
+    {
+      "packetId": "packet-035-scanned-ferguson",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1767,
+      "outputTokens": 9,
+      "wallTimeMs": 1639
+    },
+    {
+      "packetId": "packet-036-scanned-smith",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1768,
+      "outputTokens": 9,
+      "wallTimeMs": 1699
+    },
+    {
+      "packetId": "packet-037-scanned-peters",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1766,
+      "outputTokens": 9,
+      "wallTimeMs": 1909
+    },
+    {
+      "packetId": "packet-038-scanned-ray",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1775,
+      "outputTokens": 9,
+      "wallTimeMs": 2139
+    },
+    {
+      "packetId": "packet-039-scanned-king",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1761,
+      "outputTokens": 9,
+      "wallTimeMs": 1819
+    },
+    {
+      "packetId": "packet-040-scanned-tucker",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1759,
+      "outputTokens": 9,
+      "wallTimeMs": 1865
+    },
+    {
+      "packetId": "packet-041-scanned-henderson",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1768,
+      "outputTokens": 9,
+      "wallTimeMs": 2858
+    },
+    {
+      "packetId": "packet-042-scanned-lang",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1766,
+      "outputTokens": 9,
+      "wallTimeMs": 8241
+    },
+    {
+      "packetId": "packet-043-scanned-pratt",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1775,
+      "outputTokens": 9,
+      "wallTimeMs": 1626
+    },
+    {
+      "packetId": "packet-044-scanned-wagner",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1768,
+      "outputTokens": 9,
+      "wallTimeMs": 1545
+    },
+    {
+      "packetId": "packet-045-scanned-rodriguez",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1759,
+      "outputTokens": 9,
+      "wallTimeMs": 1689
+    },
+    {
+      "packetId": "packet-046-scanned-conflict-name-blanchard",
+      "plantedKinds": [
+        "name_variant"
+      ],
+      "plantedShape": "NICKNAME",
+      "expectedToFlag": true,
+      "emittedIssues": [
+        {
+          "severity": "Critical",
+          "message": "License, DEA, and board certification record \u0027Todd Blanchard\u0027 while malpractice records \u0027Mike Blanchard, M.D.\u0027 \u2014 the first names \u0027Todd\u0027 and \u0027Mike\u0027 are different.",
+          "remediation": "Confirm the provider\u0027s legal first name and obtain a corrected malpractice certificate or documentation explaining the discrepancy.",
+          "sources": [
+            "Todd Blanchard, M.D.",
+            "Todd Blanchard",
+            "Todd Blanchard, M.D.",
+            "Mike Blanchard, M.D."
+          ]
+        }
+      ],
+      "inputTokens": 1776,
+      "outputTokens": 119,
+      "wallTimeMs": 3586
+    },
+    {
+      "packetId": "packet-047-scanned-conflict-name-brooks",
+      "plantedKinds": [
+        "name_variant"
+      ],
+      "plantedShape": "SURNAME_TYPO",
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1766,
+      "outputTokens": 9,
+      "wallTimeMs": 1936
+    },
+    {
+      "packetId": "packet-048-scanned-conflict-name-patel",
+      "plantedKinds": [
+        "name_variant"
+      ],
+      "plantedShape": "SURNAME_SWAP",
+      "expectedToFlag": true,
+      "emittedIssues": [
+        {
+          "severity": "Critical",
+          "message": "License, DEA, and board certification record the surname as \u0027Patel-Jones\u0027, while malpractice records \u0027Nakamura\u0027 \u2014 these are entirely different surnames.",
+          "remediation": "Confirm the provider\u0027s current legal surname and obtain matching documentation across all sources, or request a name-change record explaining the discrepancy.",
+          "sources": [
+            "Kenneth Patel-Jones, MD",
+            "Kenneth Patel-Jones",
+            "Kenneth Patel-Jones, MD",
+            "Kenneth Nakamura, MD"
+          ]
+        }
+      ],
+      "inputTokens": 1774,
+      "outputTokens": 113,
+      "wallTimeMs": 3677
+    },
+    {
+      "packetId": "packet-049-scanned-conflict-taxonomy-atkins",
+      "plantedKinds": [
+        "taxonomy_specialty_mismatch"
+      ],
+      "expectedToFlag": true,
+      "emittedIssues": [],
+      "inputTokens": 1775,
+      "outputTokens": 9,
+      "wallTimeMs": 1728
+    },
+    {
+      "packetId": "packet-050-scanned-conflict-taxonomy-bartlett",
+      "plantedKinds": [
+        "taxonomy_specialty_mismatch"
+      ],
+      "expectedToFlag": true,
+      "emittedIssues": [],
+      "inputTokens": 1767,
+      "outputTokens": 9,
+      "wallTimeMs": 1568
+    }
+  ],
+  "metrics": {
+    "fpRate": 0,
+    "recall": 0.5294117647058824,
+    "fpOnCleanCount": 0,
+    "fpOnDontFlagCount": 0,
+    "missedShouldFlagCount": 8,
+    "cleanPacketCount": 30,
+    "shouldFlagPacketCount": 17,
+    "dontFlagPacketCount": 3,
+    "perShape": {
+      "HYPHENATED_SUFFIX": {
+        "planted": 3,
+        "flagged": 3
+      },
+      "MIDDLE_NAME_ADDED": {
+        "planted": 2,
+        "flagged": 2
+      },
+      "NICKNAME": {
+        "planted": 2,
+        "flagged": 2
+      },
+      "SURNAME_TYPO": {
+        "planted": 2,
+        "flagged": 0
+      },
+      "SURNAME_SWAP": {
+        "planted": 2,
+        "flagged": 2
+      }
+    }
+  },
+  "totalInputTokens": 88420,
+  "totalOutputTokens": 1555,
+  "estimatedCostUsd": 0.288585
+}

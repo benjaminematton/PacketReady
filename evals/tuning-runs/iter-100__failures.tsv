@@ -1,0 +1,9 @@
+iteration	packet_id	failure_type	llm_message	category
+100	packet-026-clean-conflict-taxonomy-calhoun	missed_should_flag		
+100	packet-027-clean-conflict-taxonomy-acosta	missed_should_flag		
+100	packet-028-clean-conflict-taxonomy-wade	missed_should_flag		
+100	packet-029-clean-conflict-taxonomy-perez	missed_should_flag		
+100	packet-030-clean-conflict-taxonomy-oliver	missed_should_flag		
+100	packet-031-clean-conflict-taxonomy-delacruz	missed_should_flag		
+100	packet-049-scanned-conflict-taxonomy-atkins	missed_should_flag		
+100	packet-050-scanned-conflict-taxonomy-bartlett	missed_should_flag		
