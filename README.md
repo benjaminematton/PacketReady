@@ -1,9 +1,9 @@
 # PacketReady
 
-Built as a three-day solo take-home for Atano, a credentialing AI
-startup. The 26-second demo below is the fastest way to get a feel
-for it; the eval numbers further down are the honest answer to whether
-it works.
+Pre-CAQH credentialing readiness score. PDFs in, 0–100 score out,
+every issue cited back to its source PDF region. The 26-second demo
+below is the fastest way to get a feel for it; the eval numbers
+further down are the honest answer to whether it works.
 
 ![demo](docs/assets/demo.gif)
 
