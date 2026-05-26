@@ -21,6 +21,12 @@ namespace PacketReady.Application.Providers.Commands.CreateProvider;
 ///         identity is delegated to <see cref="ProviderProfile.Validate"/>
 ///         (via <see cref="ProviderProfile.Create"/>) for domain-shape
 ///         enforcement.</item>
+///   <item><b>IntakeBudgetTurns</b>: <c>null</c> defaults to
+///         <see cref="Provider.DefaultIntakeBudgetTurns"/>. Non-positive
+///         values are rejected at the endpoint (400) and again at
+///         <see cref="Provider.Create"/> as
+///         <see cref="ArgumentOutOfRangeException"/> for the
+///         non-HTTP-caller path.</item>
 /// </list>
 ///
 /// <para><b>Luhn lives at the wire boundary, not here.</b> The handler does
@@ -83,7 +89,11 @@ public sealed class CreateProviderCommandHandler
             credentialingState: identity.CredentialingState,
             nowUtc: now);
 
-        var provider = Provider.Create(profile, now, resolvedPayerId);
+        var provider = Provider.Create(
+            profile,
+            now,
+            payerId: resolvedPayerId,
+            intakeBudgetTurns: request.IntakeBudgetTurns);
         _db.Providers.Add(provider);
         await _db.SaveChangesAsync(ct);
 

@@ -7,10 +7,31 @@
 //   GET  /api/portal/{token}         → PortalStateDto | 410 magic_link_invalid
 //   POST /api/portal/{token}/submit  → consume-ack    | 410 magic_link_invalid
 
-// Default to the dev HTTP port. The HTTPS port (5066) needs a trusted
-// dev cert, which Node's fetch refuses by default. Operators override
-// in non-dev via `API_BASE_URL`.
-const API_BASE_URL = process.env.API_BASE_URL ?? "http://localhost:5065";
+// Dev defaults to the .NET HTTP port (5066's self-signed cert is rejected
+// by Node's fetch). In production a missing `API_BASE_URL` is a config
+// bug — fail at first request rather than silently dialing localhost.
+//
+// Resolved lazily (not at module load) so the build's `collect-page-data`
+// step, which evaluates server modules under NODE_ENV=production without
+// runtime env, doesn't fail the build for a missing var that will be
+// present at deploy time.
+function apiBaseUrl(): string {
+  const fromEnv = process.env.API_BASE_URL;
+  if (fromEnv && fromEnv.length > 0) return fromEnv;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "API_BASE_URL is required in production but was not set.",
+    );
+  }
+  return "http://localhost:5065";
+}
+
+// Server-component fetches inherit no default timeout. Without one a
+// hung .NET process or unreachable host wedges the portal page until
+// the upstream socket times out — minutes, not seconds. 10s is the
+// budget for a single round-trip to the local API; bump if the portal
+// ever fans out to a slower backend.
+const FETCH_TIMEOUT_MS = 10_000;
 
 export type IntakeState =
   | "Pending"
@@ -74,17 +95,26 @@ export type PortalSubmitAck = {
   turnJobId?: string;
 };
 
-/** Why a magic-link token failed validation. Matches MagicLinkInvalidReason from the .NET side, verbatim. */
+/**
+ * Why a magic-link token failed validation. Matches `MagicLinkInvalidReason`
+ * from the .NET side. The wire value is a free-form string (an unknown
+ * reason from a future API rev shouldn't crash the page); `formatReason`
+ * in the page component owns the unknown-fallback copy and the
+ * exhaustive switch's `default` arm is the single place that handles it.
+ */
 export type MagicLinkInvalidReason =
   | "Malformed"
   | "BadSignature"
   | "NotFound"
   | "Expired"
-  | "Consumed"
-  | string; // string fallback so a new enum member doesn't crash the page
+  | "Consumed";
 
 export type PortalError =
-  | { kind: "magic_link_invalid"; reason: MagicLinkInvalidReason }
+  | {
+      kind: "magic_link_invalid";
+      /** Typed when the API returns a known reason; raw string otherwise. */
+      reason: MagicLinkInvalidReason | (string & {});
+    }
   | { kind: "transport"; status: number; detail: string };
 
 function tokenPath(token: string): string {
@@ -113,11 +143,11 @@ async function asPortalError(res: Response): Promise<PortalError> {
 export async function fetchPortalState(
   token: string,
 ): Promise<PortalState | PortalError> {
-  const res = await fetch(`${API_BASE_URL}/api/portal/${tokenPath(token)}`, {
-    cache: "no-store",
-    headers: { Accept: "application/json" },
-  });
-
+  const res = await fetchOrTransport(
+    `${apiBaseUrl()}/api/portal/${tokenPath(token)}`,
+    { cache: "no-store", headers: { Accept: "application/json" } },
+  );
+  if ("kind" in res) return res;
   if (res.ok) return (await res.json()) as PortalState;
   return asPortalError(res);
 }
@@ -125,8 +155,8 @@ export async function fetchPortalState(
 export async function submitPortal(
   token: string,
 ): Promise<PortalSubmitAck | PortalError> {
-  const res = await fetch(
-    `${API_BASE_URL}/api/portal/${tokenPath(token)}/submit`,
+  const res = await fetchOrTransport(
+    `${apiBaseUrl()}/api/portal/${tokenPath(token)}/submit`,
     {
       method: "POST",
       cache: "no-store",
@@ -137,7 +167,31 @@ export async function submitPortal(
       body: JSON.stringify({}),
     },
   );
-
+  if ("kind" in res) return res;
   if (res.ok) return (await res.json()) as PortalSubmitAck;
   return asPortalError(res);
+}
+
+// Wraps `fetch` with a timeout + transport-error normalization. Network
+// errors (DNS, refused, reset) and timeouts both surface as
+// `{ kind: 'transport', status, detail }` — the same shape `asPortalError`
+// produces for non-410 HTTP failures — so callers handle one error model.
+async function fetchOrTransport(
+  url: string,
+  init: RequestInit,
+): Promise<Response | Extract<PortalError, { kind: "transport" }>> {
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    // AbortError → 504-ish; other failures → 502-ish. The numeric status
+    // is synthetic (no Response object exists) but mirrors the upstream
+    // semantics callers will see in production.
+    const status =
+      err instanceof DOMException && err.name === "TimeoutError" ? 504 : 502;
+    return { kind: "transport", status, detail };
+  }
 }

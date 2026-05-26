@@ -4,6 +4,7 @@ using PacketReady.Application.Intake.MagicLinks;
 using PacketReady.Domain.Intake;
 using PacketReady.Domain.MagicLinks;
 using PacketReady.Domain.Messaging;
+using PacketReady.Domain.Providers;
 using PacketReady.Infrastructure.Intake;
 using PacketReady.Infrastructure.Persistence;
 using Xunit;
@@ -38,7 +39,7 @@ public class IntakeStateTransitionerTests : IDisposable
 
     private IntakeSession SessionInAgentProcessing(out Guid turnId)
     {
-        var session = IntakeSession.Start(ProviderId, IntakeSession.DefaultTurnBudget, T0);
+        var session = IntakeSession.Start(ProviderId, Provider.DefaultIntakeBudgetTurns, T0);
         session.NotifyInvitationSent(Guid.NewGuid(), T0.AddSeconds(1));
         turnId = Guid.NewGuid();
         session.BeginAgentTurn(turnId, T0.AddSeconds(2));

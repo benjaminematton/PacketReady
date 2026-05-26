@@ -34,8 +34,6 @@ namespace PacketReady.Domain.Intake;
 /// </summary>
 public sealed class IntakeSession
 {
-    public const int DefaultTurnBudget = 8;
-
     public Guid Id { get; private set; }
     public Guid ProviderId { get; private set; }
 

@@ -19,12 +19,13 @@ public static class AuditEventType
     //
     // Stamped per FSM transition + per outbound dispatch (DoD item 9).
     // IntakeTurnCompleted is the per-turn telemetry summary (steps,
-    // tokens, wall clock); the three transition events
-    // (IntakeTurnStarted / IntakeCompleted / IntakeEscalated /
-    // IntakeFollowupQueued) carry the FSM signal. Pairing both in the
-    // audit log lets the dashboard's side panel reconstruct "what did
-    // the system do for provider X" without re-deriving the FSM walk
-    // from outbox + score rows.
+    // tokens, wall clock) and lands only on success outcomes
+    // (terminal / followup-queued). The four lifecycle events
+    // (IntakeTurnStarted / IntakeCompleted / IntakeFollowupQueued /
+    // IntakeEscalated) carry the FSM signal. Pairing the telemetry
+    // and the FSM signal in the audit log lets the dashboard's side
+    // panel reconstruct "what did the system do for provider X"
+    // without re-deriving the walk from outbox + score rows.
     public const string IntakeStarted = "IntakeStarted";
     public const string IntakeTurnStarted = "IntakeTurnStarted";
     public const string IntakeTurnCompleted = "IntakeTurnCompleted";

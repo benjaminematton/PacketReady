@@ -107,7 +107,7 @@ public sealed class IntakeStateTransitioner
         // profile is whatever the aggregator can pull from extractions
         // at admin-review time; we don't snapshot it here.
         session.Escalate(
-            reason: "agent-empty-turn",
+            reason: IntakeEscalationReason.AgentEmptyTurn,
             nowUtc: nowUtc);
         return new TransitionEffect(null, null, null);
     }

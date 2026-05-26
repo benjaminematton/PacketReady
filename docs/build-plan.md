@@ -285,7 +285,7 @@ These are not in scope for the demo. If anything below feels tempting, that's th
 - [x] Phase 2 — closed 2026-05-22, harness end-to-end, 5 packets at `evals/dataset/`, baseline.json committed with `stub: true`. See [phase-2-eval-harness.md](./impl/phase-2-eval-harness.md).
 - [x] Phase 3 — closed 2026-05-25, all 8 DoD gates green via [`apps/api/Tests/gate-walk/phase-3.sh`](../apps/api/Tests/gate-walk/phase-3.sh). Document store + blob + prompts + four Sonnet extractors + Haiku classifier + Path B intake + aggregator + score-path rewire + citation drill-in shipped across 10 slices. Eval baseline at 100% per-field across all 5 packets × 22 fields. ~$0.90 in Anthropic credits total (slice-6 baseline flip + slice-10 gate walk). See [phase-3-extractors.md](./impl/phase-3-extractors.md).
 - [ ] Phase 4 — plan written + review-fixed (commits `626fe8c` → `b79f995`), not started. See [phase-4-scale-and-llm-validators.md](./impl/phase-4-scale-and-llm-validators.md).
-- [ ] Phase 5
+- [x] Phase 5 — closed 2026-05-26, DoD 10/11 green across 10 P5 commits (`1e47930` → `37240fa`). Full §6 lifecycle runs end-to-end: IntakeSession FSM + AddIntake migration · outbound_messages aggregate + MockSmtpSender · StartIntake command + magic-link portal endpoints · IntakeAgent runtime with 5-tool surface + system prompt · IntakeTurnJob + OutboxDispatcherJob on Hangfire (split queues, row lock) · Next.js portal with extraction cards · per-transition audit spans · `Provider.IntakeBudgetTurns` per-provider cap. Suite at 583/0/10. Deferred: 3 staged demo providers + 90-second loom (item 10, operator work) and per-field inline edit on the portal (item 5 partial — Phase 6 polish). See [phase-5-intake-agent.md](./impl/phase-5-intake-agent.md).
 - [ ] Phase 6
 
 ---

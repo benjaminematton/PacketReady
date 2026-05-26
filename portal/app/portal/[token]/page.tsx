@@ -1,12 +1,32 @@
 import { fetchPortalState, type MagicLinkInvalidReason } from "@/lib/api";
 import { ExtractionCard } from "@/components/extraction-card";
 import { submitAction } from "./actions";
+import { SubmitButton } from "./SubmitButton";
 
 type Props = {
   params: Promise<{ token: string }>;
 };
 
 export const dynamic = "force-dynamic"; // every visit re-fetches state
+
+// Pinned, server-deterministic expiry rendering. Without an explicit
+// locale + timeZone, `toLocaleString` runs in Node's default locale and
+// the container's timezone — typically UTC in prod — and a provider in
+// PT sees a wall time that doesn't match their inbox. PacketReady is
+// single-region (US/Pacific) for now; revisit when there are providers
+// outside it.
+const EXPIRY_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  // Spec forbids combining `timeZoneName` with `dateStyle`/`timeStyle`,
+  // so expand the components manually. Keeps the rendered string
+  // unambiguous about which clock it's quoted in.
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  timeZone: "America/Los_Angeles",
+  timeZoneName: "short",
+});
 
 export default async function PortalPage({ params }: Props) {
   const { token } = await params;
@@ -31,22 +51,21 @@ export default async function PortalPage({ params }: Props) {
   }
 
   const greeting = state.providerFullName ?? "there";
-  const expiresAt = new Date(state.linkExpiresAt);
+  const expiresAt = EXPIRY_FORMATTER.format(new Date(state.linkExpiresAt));
 
-  // The session can be Pending (invitation just queued; dispatcher
-  // hasn't moved it to AwaitingProvider yet), AwaitingProvider (normal
-  // case), AgentProcessing (a previous submit is being worked — usually
-  // they shouldn't see this page mid-turn), Complete or Escalated
-  // (terminal — submit is a no-op). Surface a per-state message but
-  // always render the submit button at AwaitingProvider / Pending.
-  const canSubmit =
-    state.sessionState === "AwaitingProvider" ||
-    state.sessionState === "Pending";
+  // Submit is gated strictly on AwaitingProvider. `Pending` means the
+  // outbox dispatcher hasn't fired `NotifyInvitationSent` yet —
+  // submitting there races the dispatcher: `BeginAgentTurn` requires
+  // `AwaitingProvider` (IntakeSession.cs:114), so the IntakeTurnJob
+  // enqueued by the submit will throw if it runs before the transition
+  // lands. AgentProcessing / Complete / Escalated are terminal-ish for
+  // this surface — show a per-state message instead.
+  const canSubmit = state.sessionState === "AwaitingProvider";
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-16">
       <h1 className="text-3xl font-semibold tracking-tight">
-        Hi{state.providerFullName ? `, ${greeting}` : ""}.
+        Hi, {greeting}.
       </h1>
       <p className="mt-4 text-[color:var(--foreground)]">
         Welcome to PacketReady's credentialing intake. We've started a
@@ -60,12 +79,7 @@ export default async function PortalPage({ params }: Props) {
           <dt className="text-[color:var(--muted)]">Session state</dt>
           <dd className="font-mono">{state.sessionState}</dd>
           <dt className="text-[color:var(--muted)]">Link expires</dt>
-          <dd>
-            {expiresAt.toLocaleDateString()}{" "}
-            <span className="text-[color:var(--muted)]">
-              {expiresAt.toLocaleTimeString()}
-            </span>
-          </dd>
+          <dd>{expiresAt}</dd>
         </dl>
       </section>
 
@@ -96,12 +110,7 @@ export default async function PortalPage({ params }: Props) {
           action={submitAction.bind(null, token)}
           className="mt-10 space-y-3"
         >
-          <button
-            type="submit"
-            className="rounded-md bg-neutral-900 px-6 py-3 text-sm font-medium text-white transition hover:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300 dark:focus:ring-neutral-100"
-          >
-            Submit my intake
-          </button>
+          <SubmitButton />
           <p className="text-sm text-[color:var(--muted)]">
             Single-use — submitting consumes this link. If you need to
             come back later, ask the admin to re-issue one.
@@ -120,8 +129,10 @@ export default async function PortalPage({ params }: Props) {
 
 // Provider-facing copy for each reason. Pinned strings rather than a
 // generic ".toLowerCase()" so future enum additions surface as
-// "Link invalid: <new>" loud-enough to notice during a demo.
-function formatReason(reason: MagicLinkInvalidReason): string {
+// "Link invalid: <new>" loud-enough to notice during a demo. The `string`
+// arm matches an unknown reason from a future API rev — `MagicLinkInvalidReason`
+// is the closed enum of today's known values.
+function formatReason(reason: MagicLinkInvalidReason | (string & {})): string {
   switch (reason) {
     case "Expired":
       return "This link has expired.";
@@ -139,6 +150,10 @@ function formatReason(reason: MagicLinkInvalidReason): string {
 
 function messageForState(state: string): string {
   switch (state) {
+    case "Pending":
+      // Narrow race window between StartIntake and the outbox dispatcher
+      // moving us to AwaitingProvider. Reload usually clears it.
+      return "We're still setting up your session. Reload this page in a few seconds.";
     case "AgentProcessing":
       return "Your previous submission is being reviewed. Check back in a few minutes — you'll get an email when there's something for you.";
     case "Complete":

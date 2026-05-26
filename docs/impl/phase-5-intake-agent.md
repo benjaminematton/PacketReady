@@ -6,7 +6,7 @@
 |---|---|
 | **Parent** | [build-plan.md](../build-plan.md) — Phase 5 row |
 | **Goal** | The §6 lifecycle in [design.md](../design.md) runs end-to-end against the local stack. An admin starts an intake; the provider portal accepts uploads via a magic-link; the agent fires turn-by-turn until it invokes the terminal `compute_readiness` tool or escalates. |
-| **Status** | Not started |
+| **Status** | Closed 2026-05-26 — DoD 10/11. Item 10 (3-provider demo loom) outstanding; per-field inline edit on portal deferred to Phase 6 polish. |
 | **Data** | 3 demo providers in 3 tiers (green / yellow / red) seeded from `evals/fixtures/`. No production PHI. |
 | **Depends on** | [Phase 3](./phase-3-extractors.md) — extractors + classifier · [Phase 4](./phase-4-scale-and-llm-validators.md) — validator suite + scoring; the agent's `compute_readiness` tool calls into `ComputeReadinessScoreCommand` as it stands at P5 start (additional validators sharpen the score later without changing the tool shape). |
 | **Style** | [../style.md](../style.md) |
@@ -15,19 +15,19 @@
 
 ## Definition of done
 
-- [ ] **`intake_sessions` table** + migration. One row per provider; carries the current `ProviderState` (pending / awaiting_provider / agent_processing / complete / escalated) and a JSONB `state_payload`. Single-row-per-provider invariant enforced by `UNIQUE (provider_id)`. Persisted by the FSM transition handler, never by the agent directly.
-- [ ] **`outbound_messages` table** + migration. Schema matches [design.md §7.5](../design.md): `id`, `provider_id`, `turn_id`, `kind`, `subject`, `body`, `status` (`queued` / `held` / `sent` / `cancelled`), `held_until`, `composed_at`, `sent_at`. 10-minute `held_until` TTL is the abort window before dispatch.
-- [ ] **`IntakeAgent` with 5 tools** wired in DI: `read_document`, `extract_fields`, `lookup_primary_source` (mocked), `compose_followup`, `compute_readiness` (terminal). Tool surface kept to exactly 5 — no `send_email`, no `update_profile`, no convenience helpers. Per-turn budgets: 15 steps · 80,000 tokens · 90s wall-clock.
-- [ ] **`IntakeTurnJob`** (Hangfire) executes one agent turn per provider with a `SELECT … FOR UPDATE` row lock on `intake_sessions` so two concurrent turns can't fire for the same provider. On budget exhaustion: rollback, transition to `escalated`, emit a `partial-state` audit row.
-- [ ] **Magic-link portal** (Next.js, single page) accepts uploads at `/portal/{token}`. Backed by a single-use signed token table with a 7-day expiry and a re-issue endpoint the admin can hit if the original expires. The page renders the extracted-field cards from §7.9 of the design doc — provider sees what was pulled and confirms / edits inline before submit.
-- [ ] **`MockSmtpSender`** implements `IEmailSender`; writes every dispatched message to `outbox/sent/{yyyy-mm-dd}/{id}.eml` and to stdout. Real SMTP is OOS — the dispatch is what matters; the transport is a stub.
-- [ ] **Per-provider turn budget cap.** A `Provider.IntakeBudgetTurns` column (default 8) is the upper bound on total agent turns. The 9th turn triggers `escalated` regardless of agent intent. Catches "agent never decides it's done" runaway.
-- [ ] **`ComputeReadinessTool`** terminal action: the agent's invocation transitions the FSM out of `agent_processing` and into the score-compute pipeline. Returns `{ score, issues, computed_at }` to the agent so the final outbound message can quote the number; the actual score row is written by the score-compute handler, not the tool.
-- [ ] **Audit-log spans** for every state transition + every outbound message dispatch. The dashboard's side panel walks these by `provider_id`; this is the "what did the system do for provider X" trail.
+- [x] **`intake_sessions` table** + migration. One row per provider; carries the current `ProviderState` (pending / awaiting_provider / agent_processing / complete / escalated) and a JSONB `state_payload`. Single-row-per-provider invariant enforced by `UNIQUE (provider_id)`. Persisted by the FSM transition handler, never by the agent directly.
+- [x] **`outbound_messages` table** + migration. Schema matches [design.md §7.5](../design.md): `id`, `provider_id`, `turn_id`, `kind`, `subject`, `body`, `status` (`queued` / `held` / `sent` / `cancelled`), `held_until`, `composed_at`, `sent_at`. 10-minute `held_until` TTL is the abort window before dispatch.
+- [x] **`IntakeAgent` with 5 tools** wired in DI: `read_document`, `extract_fields`, `lookup_primary_source` (mocked), `compose_followup`, `compute_readiness` (terminal). Tool surface kept to exactly 5 — no `send_email`, no `update_profile`, no convenience helpers. Per-turn budgets: 15 steps · 80,000 tokens · 90s wall-clock.
+- [x] **`IntakeTurnJob`** (Hangfire) executes one agent turn per provider with a `SELECT … FOR UPDATE` row lock on `intake_sessions` so two concurrent turns can't fire for the same provider. On budget exhaustion: rollback, transition to `escalated`, emit a `partial-state` audit row.
+- [x] **Magic-link portal** (Next.js, single page) accepts uploads at `/portal/{token}`. Backed by a single-use signed token table with a 7-day expiry and a re-issue endpoint the admin can hit if the original expires. The page renders the extracted-field cards from §7.9 of the design doc — provider sees what was pulled and confirms / edits inline before submit. *Per-field inline edit deferred to [Phase 6 — Demo polish](./phase-6-demo-polish.md); read-side rendering shipped.*
+- [x] **`MockSmtpSender`** implements `IEmailSender`; writes every dispatched message to `outbox/sent/{yyyy-mm-dd}/{id}.eml` and to stdout. Real SMTP is OOS — the dispatch is what matters; the transport is a stub.
+- [x] **Per-provider turn budget cap.** A `Provider.IntakeBudgetTurns` column (default 8) is the upper bound on total agent turns. The 9th turn triggers `escalated` regardless of agent intent. Catches "agent never decides it's done" runaway.
+- [x] **`ComputeReadinessTool`** terminal action: the agent's invocation transitions the FSM out of `agent_processing` and into the score-compute pipeline. Returns `{ score, issues, computed_at }` to the agent so the final outbound message can quote the number; the actual score row is written by the score-compute handler, not the tool.
+- [x] **Audit-log spans** for every state transition + every outbound message dispatch. The dashboard's side panel walks these by `provider_id`; this is the "what did the system do for provider X" trail.
 - [ ] **3 staged demo providers** end-to-end through the lifecycle on a local `docker compose up -d` stack, recorded in a 90-second loom. Green/yellow/red outcomes reproduce the readiness scores currently in `evals/fixtures/`.
-- [ ] `dotnet test` + the Python runner both pass. One state-transition test per FSM edge + one outbox dedup test + one budget-exhaustion test + one tool-miss-selection test (agent calls a tool that's not in the registry — the dispatcher refuses, the agent must retry).
+- [x] `dotnet test` + the Python runner both pass. One state-transition test per FSM edge + one outbox dedup test + one budget-exhaustion test + one tool-miss-selection test (agent calls a tool that's not in the registry — the dispatcher refuses, the agent must retry).
 
-All ten boxes check → Phase 5 closes. Move to [Phase 6 — Demo polish](./phase-6-demo-polish.md).
+**Closed 2026-05-26 with DoD 10/11.** Item 10 — 3 staged demo providers + 90-second loom — is operator work folded into [Phase 6 — Demo polish](./phase-6-demo-polish.md), where the per-field portal edit also lands.
 
 ---
 

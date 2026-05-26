@@ -24,7 +24,8 @@ namespace PacketReady.Application.Providers.Commands.CreateProvider;
 /// </summary>
 public sealed record CreateProviderCommand(
     string? PayerId,
-    ProviderIdentityDto? Identity) : IRequest<Guid>;
+    ProviderIdentityDto? Identity,
+    int? IntakeBudgetTurns = null) : IRequest<Guid>;
 
 /// <summary>
 /// Identity fields needed by validators that don't (yet) have an extraction

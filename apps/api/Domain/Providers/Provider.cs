@@ -47,11 +47,13 @@ public class Provider
     public string PayerId { get; private set; } = DefaultPayerId;
 
     /// <summary>
-    /// Per-provider cap on total agent turns in this intake. Snapshotted
-    /// onto <c>IntakeSession.TurnBudget</c> at session start, so a
-    /// mid-intake bump here doesn't extend an already-running session.
-    /// Defaults to <see cref="DefaultIntakeBudgetTurns"/>; admin override
-    /// at provider-create time only.
+    /// Per-provider cap on total agent turns in this intake. Set at
+    /// <see cref="Create"/> time (admin-supplied or
+    /// <see cref="DefaultIntakeBudgetTurns"/>) and immutable thereafter
+    /// — no mutator is exposed today. The value is copied into
+    /// <see cref="IntakeSession.TurnBudget"/> at session start; the
+    /// snapshot is a forward guarantee so that if a setter is added
+    /// later, running intakes won't see a moving target.
     /// </summary>
     public int IntakeBudgetTurns { get; private set; } = DefaultIntakeBudgetTurns;
 

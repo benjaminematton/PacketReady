@@ -111,8 +111,8 @@ public sealed class IntakeTurnJob
             _logger.LogInformation(
                 "Intake budget exhausted for provider {ProviderId} ({Consumed}/{Budget}); escalating.",
                 providerId, session.TurnsConsumed, session.TurnBudget);
-            session.Escalate("turn-budget-exhausted", nowUtc);
-            StageEscalated(session, turnId: null, "turn-budget-exhausted", nowUtc);
+            session.Escalate(IntakeEscalationReason.TurnBudgetExhausted, nowUtc);
+            StageEscalated(session, turnId: null, IntakeEscalationReason.TurnBudgetExhausted, nowUtc);
             await _db.SaveChangesAsync(ct);
             return;
         }
@@ -148,26 +148,32 @@ public sealed class IntakeTurnJob
             var transitionAt = _clock.GetUtcNow();
             var effect = _transitioner.Apply(session, result, toAddress, transitionAt);
 
-            // The per-turn telemetry summary lands on every successful
-            // run; the per-transition event (Completed / FollowupQueued /
-            // Escalated) lands alongside so the audit walk can branch
-            // by FSM transition without re-deriving it from the summary.
-            _audit.Stage(AuditEvent.Create(
-                eventType: AuditEventType.IntakeTurnCompleted,
-                payloadJson: new IntakeTurnCompletedPayload(
-                    ProviderId: providerId,
-                    TurnId: turnId,
-                    IsTerminal: result.IsTerminal,
-                    CompletedReadinessScoreId: result.CompletedReadinessScoreId,
-                    QueuedOutboundMessageId: effect.QueuedOutboundMessageId,
-                    NewMagicLinkId: effect.NewMagicLinkId,
-                    Steps: result.StepsConsumed,
-                    InputTokens: result.InputTokensConsumed,
-                    OutputTokens: result.OutputTokensConsumed,
-                    WallClockMs: (int)result.WallClockConsumed.TotalMilliseconds).ToJson(),
-                providerId: providerId,
-                turnId: turnId,
-                occurredAt: transitionAt));
+            // The per-turn telemetry summary lands on the two success
+            // outcomes (terminal / followup-queued); empty-turn skips it
+            // and lets IntakeEscalated stand alone, matching the
+            // budget-exhausted and agent-error paths. The transition
+            // event (Completed / FollowupQueued / Escalated) lands
+            // alongside so the audit walk can branch by FSM transition
+            // without re-deriving it from the summary.
+            if (result.IsTerminal || result.HasProposedFollowup)
+            {
+                _audit.Stage(AuditEvent.Create(
+                    eventType: AuditEventType.IntakeTurnCompleted,
+                    payloadJson: new IntakeTurnCompletedPayload(
+                        ProviderId: providerId,
+                        TurnId: turnId,
+                        IsTerminal: result.IsTerminal,
+                        CompletedReadinessScoreId: result.CompletedReadinessScoreId,
+                        QueuedOutboundMessageId: effect.QueuedOutboundMessageId,
+                        NewMagicLinkId: effect.NewMagicLinkId,
+                        Steps: result.StepsConsumed,
+                        InputTokens: result.InputTokensConsumed,
+                        OutputTokens: result.OutputTokensConsumed,
+                        WallClockMs: (int)result.WallClockConsumed.TotalMilliseconds).ToJson(),
+                    providerId: providerId,
+                    turnId: turnId,
+                    occurredAt: transitionAt));
+            }
 
             StageTransitionEvent(session, turnId, result, effect, transitionAt);
 
@@ -185,7 +191,7 @@ public sealed class IntakeTurnJob
                 providerId, ex.Axis);
 
             var escalatedAt = _clock.GetUtcNow();
-            var reason = $"budget:{ex.Axis}";
+            var reason = IntakeEscalationReason.Budget(ex.Axis);
             session.Escalate(reason, escalatedAt);
             StageEscalated(session, turnId, reason, escalatedAt);
             await _db.SaveChangesAsync(ct);
@@ -213,7 +219,7 @@ public sealed class IntakeTurnJob
                 providerId, turnId, ex.GetType().Name);
 
             var escalatedAt = _clock.GetUtcNow();
-            var reason = $"agent-error:{ex.GetType().Name}";
+            var reason = IntakeEscalationReason.AgentError(ex.GetType().Name);
             session.Escalate(reason, escalatedAt);
             StageEscalated(session, turnId, reason, escalatedAt);
             await _db.SaveChangesAsync(ct);
@@ -235,8 +241,18 @@ public sealed class IntakeTurnJob
         IntakeStateTransitioner.TransitionEffect effect,
         DateTimeOffset occurredAt)
     {
-        if (result.IsTerminal && result.CompletedReadinessScoreId is { } scoreId)
+        if (result.IsTerminal)
         {
+            // Paired invariant with IntakeStateTransitioner.Apply — the
+            // transitioner refuses IsTerminal + null score and throws,
+            // so reaching here with a null score means the contract has
+            // drifted. Fail loud rather than silently routing to the
+            // empty-turn fallback and stamping a wrong event type.
+            if (result.CompletedReadinessScoreId is not { } scoreId)
+                throw new InvalidOperationException(
+                    "AgentTurnResult.IsTerminal but CompletedReadinessScoreId is null; "
+                    + "IntakeStateTransitioner should have rejected this turn earlier.");
+
             _audit.Stage(AuditEvent.Create(
                 eventType: AuditEventType.IntakeCompleted,
                 payloadJson: new IntakeCompletedPayload(
@@ -272,7 +288,7 @@ public sealed class IntakeTurnJob
         // an empty turn. Audit it the same way as the explicit-escalate
         // paths so the dashboard sees a single event type for every
         // escalation.
-        StageEscalated(session, turnId, "agent-empty-turn", occurredAt);
+        StageEscalated(session, turnId, IntakeEscalationReason.AgentEmptyTurn, occurredAt);
     }
 
     private void StageEscalated(

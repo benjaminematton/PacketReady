@@ -81,6 +81,45 @@ public sealed class CreateProviderCommandHandlerTests
     }
 
     [Fact]
+    public async Task ExplicitIntakeBudgetTurns_PersistsOnProvider()
+    {
+        // The wire/endpoint path passes IntakeBudgetTurns through the
+        // command to Provider.Create. The endpoint rejects <= 0 with a
+        // 400; Provider.Create has the same floor at the domain
+        // boundary. This test pins the happy path: a positive value
+        // lands on the row.
+        var factory = new InMemoryContextFactory(Guid.NewGuid().ToString());
+        var handler = Build(factory);
+
+        var id = await handler.Handle(
+            new CreateProviderCommand(PayerId: null, Identity: null, IntakeBudgetTurns: 12),
+            default);
+
+        await using var read = factory.CreateDbContext();
+        var saved = await read.Providers.FindAsync([id], default);
+        Assert.NotNull(saved);
+        Assert.Equal(12, saved!.IntakeBudgetTurns);
+    }
+
+    [Fact]
+    public async Task NonPositiveIntakeBudgetTurns_PropagatesAsArgumentOutOfRange()
+    {
+        // Endpoint rejects with 400 (see ProviderEndpoints); a
+        // mediator-only caller (in-process test, future internal job)
+        // still hits the domain floor via Provider.Create.
+        var factory = new InMemoryContextFactory(Guid.NewGuid().ToString());
+        var handler = Build(factory);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            handler.Handle(
+                new CreateProviderCommand(PayerId: null, Identity: null, IntakeBudgetTurns: 0),
+                default));
+
+        await using var read = factory.CreateDbContext();
+        Assert.Empty(read.Providers);
+    }
+
+    [Fact]
     public async Task BlankPayerId_PropagatesAsArgumentException()
     {
         // Whitespace-only PayerId is operator bug shape. The endpoint

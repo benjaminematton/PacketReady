@@ -68,6 +68,13 @@ public static class ProviderEndpoints
             if (body?.PayerId is { } payerId && string.IsNullOrWhiteSpace(payerId))
                 violations.Add("payerId must be omitted (to use the default) or a non-blank string.");
 
+            // Provider.Create throws ArgumentOutOfRangeException on <= 0,
+            // and the providers.intake_budget_turns CHECK pins the floor
+            // at the schema; surface a 400 with the violations list
+            // rather than a 500 for the wire-supplied non-positive case.
+            if (body?.IntakeBudgetTurns is { } budgetTurns && budgetTurns < 1)
+                violations.Add("intakeBudgetTurns must be omitted (to use the default) or >= 1.");
+
             var identity = body?.Identity;
             if (identity is not null)
             {
@@ -81,7 +88,11 @@ public static class ProviderEndpoints
             try
             {
                 var id = await mediator.Send(
-                    new CreateProviderCommand(body?.PayerId, identity), ct);
+                    new CreateProviderCommand(
+                        body?.PayerId,
+                        identity,
+                        body?.IntakeBudgetTurns),
+                    ct);
                 return Results.Created(
                     uri: $"/api/providers/{id}",
                     value: new CreateProviderResponse(id));
@@ -110,14 +121,14 @@ public static class ProviderEndpoints
                 if (providerId == Guid.Empty)
                     return ProblemResults.EmptyProviderId();
 
-                var effectiveLimit = limit ?? ListProviderAuditQuery.DefaultLimit;
-                if (effectiveLimit < ListProviderAuditQuery.MinLimit ||
-                    effectiveLimit > ListProviderAuditQuery.MaxLimit)
+                var effectiveLimit = limit ?? ListProviderAuditLimits.Default;
+                if (effectiveLimit < ListProviderAuditLimits.Min ||
+                    effectiveLimit > ListProviderAuditLimits.Max)
                 {
                     return ProblemResults.InvalidLimit(
                         effectiveLimit,
-                        ListProviderAuditQuery.MinLimit,
-                        ListProviderAuditQuery.MaxLimit);
+                        ListProviderAuditLimits.Min,
+                        ListProviderAuditLimits.Max);
                 }
 
                 var rows = await mediator.Send(
@@ -140,7 +151,10 @@ public static class ProviderEndpoints
 /// adding <c>adminInitiatedBy</c> in P5) doesn't drag the mediator
 /// contract along.
 /// </summary>
-public sealed record CreateProviderRequest(string? PayerId, ProviderIdentityDto? Identity);
+public sealed record CreateProviderRequest(
+    string? PayerId,
+    ProviderIdentityDto? Identity,
+    int? IntakeBudgetTurns = null);
 
 /// <summary>
 /// Response shape for the create endpoint. <see cref="Id"/>-only by design;

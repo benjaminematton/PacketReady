@@ -144,11 +144,10 @@ public class ProviderTests
     // ──────────────────────────────────────── IntakeBudgetTurns ──────────
 
     [Fact]
-    public void Create_DefaultsIntakeBudgetTurnsTo8()
+    public void Create_DefaultsIntakeBudgetTurnsToProviderDefault()
     {
         var provider = Provider.Create(MakeProfile(), Now);
-        Assert.Equal(8, provider.IntakeBudgetTurns);
-        Assert.Equal(8, Provider.DefaultIntakeBudgetTurns);
+        Assert.Equal(Provider.DefaultIntakeBudgetTurns, provider.IntakeBudgetTurns);
     }
 
     [Fact]

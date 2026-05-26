@@ -59,16 +59,20 @@ public sealed class StartIntakeCommandHandler : IRequestHandler<StartIntakeComma
         // this pre-check surfaces the typed exception instead of letting
         // Npgsql's 23505 bubble as 500.
         //
-        // IntakeBudgetTurns is snapshotted onto the IntakeSession at
-        // start time, so a mid-intake bump on the Provider row doesn't
-        // extend an already-running session. New providers get whatever
-        // the admin set at create time (default 8 per
+        // IntakeBudgetTurns is copied onto the IntakeSession at start.
+        // The property is immutable today (set only at Provider.Create);
+        // the copy is a forward guarantee so a future setter can't
+        // retroactively extend a running session. New providers get
+        // whatever admin supplied at create time (or
         // Provider.DefaultIntakeBudgetTurns).
+        //
+        // FirstOrDefaultAsync (not Single) because Id is the PK —
+        // uniqueness is schema-enforced, no LIMIT 2 sanity probe needed.
         var providerSnapshot = await _db.Providers
             .AsNoTracking()
             .Where(p => p.Id == request.ProviderId)
             .Select(p => new { p.IntakeBudgetTurns })
-            .SingleOrDefaultAsync(ct);
+            .FirstOrDefaultAsync(ct);
         if (providerSnapshot is null)
             throw new ProviderNotFoundException(request.ProviderId);
 

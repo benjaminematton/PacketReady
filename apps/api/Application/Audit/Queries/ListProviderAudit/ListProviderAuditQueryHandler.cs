@@ -20,8 +20,8 @@ public sealed class ListProviderAuditQueryHandler
         // so we can't be OOMed by an internal caller asking for a million rows.
         var limit = Math.Clamp(
             request.Limit,
-            ListProviderAuditQuery.MinLimit,
-            ListProviderAuditQuery.MaxLimit);
+            ListProviderAuditLimits.Min,
+            ListProviderAuditLimits.Max);
 
         var rows = await _db.AuditEvents
             .AsNoTracking()

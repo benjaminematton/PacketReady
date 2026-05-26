@@ -275,6 +275,8 @@ public class IntakeTurnJobTests : IDisposable
         // followup proposal. The transitioner escalates internally; the
         // job's audit code stages IntakeEscalated with reason
         // "agent-empty-turn" via the StageTransitionEvent fallback.
+        // No IntakeTurnCompleted — that event is reserved for the two
+        // success outcomes (matches the budget / agent-error paths).
         await SeedSessionAwaitingProviderAsync();
         _agent
             .Setup(a => a.RunTurnAsync(ProviderId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
@@ -296,7 +298,7 @@ public class IntakeTurnJobTests : IDisposable
 
         var events = await ProviderAuditEventsAsync();
         Assert.Contains(events, e => e.EventType == AuditEventType.IntakeTurnStarted);
-        Assert.Contains(events, e => e.EventType == AuditEventType.IntakeTurnCompleted);
+        Assert.DoesNotContain(events, e => e.EventType == AuditEventType.IntakeTurnCompleted);
         Assert.Contains(events, e => e.EventType == AuditEventType.IntakeEscalated
             && e.Payload.Contains("agent-empty-turn"));
     }
@@ -336,7 +338,7 @@ public class IntakeTurnJobTests : IDisposable
         // throws InvalidOperationException — which the outer
         // generic-exception branch catches and escalates so the session
         // doesn't stick.
-        var session = IntakeSession.Start(ProviderId, IntakeSession.DefaultTurnBudget, T0);
+        var session = IntakeSession.Start(ProviderId, Provider.DefaultIntakeBudgetTurns, T0);
         session.NotifyInvitationSent(Guid.NewGuid(), T0.AddSeconds(1));
         _db.IntakeSessions.Add(session);
         await _db.SaveChangesAsync();
