@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+/* Modest dev-mode reset. Tailwind v4 includes its own preflight; this
+   block only sets the page background + foreground tokens the
+   credentialing UI references. */
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.18 0 0);
+  --muted: oklch(0.55 0 0);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: oklch(0.16 0 0);
+    --foreground: oklch(0.96 0 0);
+    --muted: oklch(0.70 0 0);
+  }
+}
+
+html {
+  color-scheme: light dark;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
