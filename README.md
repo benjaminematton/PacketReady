@@ -1,93 +1,105 @@
 # PacketReady
 
-Pre-CAQH credentialing intake agent. Drop a provider's PDF packet in; the
-system classifies each document, extracts the structured fields with Sonnet,
-runs eight cross-document validators (4 rule-based, 2 LLM, 2 payer-aware),
-and emits a single readiness score with per-issue citations back to the
-source PDF region.
-
-## Demo
-
-26-second walkthrough — operator opens the worst-first provider
-list, drills into a Yellow at score 62, opens the top Critical issue's
-panel (PDF preview with bounding-box highlight), then switches to the
-per-provider audit timeline.
+Hi Jake — this is the take-home from our conversation. Built solo
+over 5 days. The 26-second demo below is the fastest way in; the
+eval numbers further down are the honest answer to "does it work."
 
 ![demo](docs/assets/demo.gif)
 
-For a higher-fidelity recording with audio-grade pacing, grab the
+Higher-fidelity recordings:
 [mp4](https://github.com/benjaminematton/PacketReady/releases/download/demo-v1/demo.mp4)
-or visit the
-[release page](https://github.com/benjaminematton/PacketReady/releases/tag/demo-v1)
-(mp4 + source webm attached). Recorded by
-[`tools/demo-tour/demo-tour.spec.ts`](tools/demo-tour/demo-tour.spec.ts)
-against the live API + dashboard stack — `npm run tour` from
-[`tools/demo-tour/`](tools/demo-tour/) re-runs it deterministically.
+or the [release page](https://github.com/benjaminematton/PacketReady/releases/tag/demo-v1)
+(mp4 + source webm attached). Re-record locally with `npm run tour`
+from [tools/demo-tour/](tools/demo-tour/).
 
-## Why it's interesting
+Two companion artifacts to read alongside this README:
 
-- **Eval-driven, not vibes-driven.** 50-packet synthetic dataset with
-  planted conflicts. Weighted Cohen's κ = 0.68 against a 20-packet
-  hand-labeled subset — substantial agreement on the Landis-Koch scale,
-  above the κ ≥ 0.50 DoD floor. 0% false-positive rate on the
-  IdentityCoherence prompt across 30 conflict-free packets.
-- **Operator-first surface.** Every Critical / Major / Minor issue is one
-  click from the literal PDF region the validator cited (page + bbox
-  overlay rendered with react-pdf) and the full per-provider audit
-  timeline, reconstructed from an append-only event log.
-- **Payer-aware by configuration, not by code.** Validator behavior
-  reconfigures from per-payer YAML — board-cert required, malpractice
-  minimums, sanctions-check policy. Onboarding a new payer is a file,
-  not a deploy.
-- **Production patterns, not a demo hack.** Confidence-guard downgrades
-  Critical → Minor on low-confidence extractions; schema-versioned
-  extraction rows; idempotent extraction persistence behind a Postgres
-  advisory lock; Hangfire-driven intake agent with budgeted turns;
-  Langfuse OTel traces across the whole pipeline; multi-binary DI split
-  so the seed CLI doesn't drag the Anthropic SDK.
+- **[docs/design.md](docs/design.md)** — full design, decision tree,
+  alternatives rejected, row-by-row competitor verification.
+- **[docs/build-plan.md](docs/build-plan.md)** — phase-by-phase build
+  log (phases 0–4 closed; phase 5 designed, not built).
 
-Designed and built solo. Full design rationale in
-[docs/design.md](docs/design.md); phase-by-phase build log in
-[docs/build-plan.md](docs/build-plan.md); Phase 0 walking-skeleton notes in
-[docs/impl/phase-0-walking-skeleton.md](docs/impl/phase-0-walking-skeleton.md).
+## Why this build
 
-## Status
+The brief was open-ended, so the most important decision was scope.
+Here's how I narrowed it.
 
-**Phase 4 (scale + LLM validators)** — closed (2026-05-26). Phases 0–3
-closed; the 50-packet eval set runs end-to-end through the orchestrator
-(P4 task 18, [`evals/results/baseline.json`](evals/results/baseline.json));
-both LLM validators (`IdentityCoherenceValidator`,
-`NpiTaxonomyMatchValidator`) emit against the live extraction
-pipeline; the payer-aware validator suite (malpractice currency,
-required documents, board certification extension, payer-config
-sanctions suppression) is wired; 20 packets hand-labeled at
-[`evals/labels/human_tiers.json`](evals/labels/human_tiers.json)
-producing weighted Cohen's κ = 0.68 (n=20) locked into the baseline.
-All 10 DoD boxes checked in
-[phase-4-scale-and-llm-validators.md](docs/impl/phase-4-scale-and-llm-validators.md).
-Next: [Phase 5 — Intake agent + outbox](docs/impl/phase-5-intake-agent.md).
+Atano's homepage promises five primitives — document intelligence,
+primary source verification, payer auto-fill, real-time reporting, and
+smart follow-ups — plus the bottom-line claim that providers get
+"approved the first time, every time." The seam I picked is that
+promise. The five primitives are all collection-side or
+post-credentialing surfaces; none of them is *cross-document validation
+against payer-readiness criteria before submission*. That's where
+first-time denials get prevented, and it's the part of Atano's pitch
+that doesn't have a marketed feature behind it yet.
 
-| Phase | State |
-|---|---|
-| 0 — Walking skeleton (ping + audit + trace) | ✓ closed |
-| 1 — Score from clean input (rule-based validators) | ✓ closed |
-| 2 — Eval harness + 5 hand-crafted packets | ✓ closed |
-| 3 — Per-doc-type Sonnet extractors + aggregator | ✓ closed |
-| 4 — 50-packet eval + LLM validators + payer-aware validators | ✓ closed |
+A few alternatives I considered and rejected:
+
+- **A better document triage classifier than your filename regex.**
+  Rejected because you told me regex is fine for that — building a
+  fancier version is solving a problem you don't think you have.
+- **An end-to-end provider intake portal.** Rejected because Verifiable
+  ships this (their Provider Intake module + CredAgent's 150-step
+  pipeline), Medallion ships this, Assured ships this. A weekend MVP
+  in a crowded lane.
+- **An eval harness for your existing extraction pipeline.** Rejected
+  as standalone because it's a measurement tool, not a product slice
+  — though I built one as part of this anyway.
+
+PacketReady picks up after extraction and before submission. The
+intake half exists to feed the score half realistic noisy data; the
+score half is the differentiated product.
+
+## What's actually shipped
+
+- Sonnet-based per-doc extractors (license / DEA / malpractice / board
+  cert) with confidence-weighted outputs and bbox-level citations.
+- Eight cross-document validators (4 rule-based, 2 LLM-augmented,
+  2 payer-aware via per-payer YAML config).
+- 0–100 readiness score with Critical / Major / Minor breakdown and
+  per-issue remediation pointing back to the source PDF region.
+- Operator dashboard with worst-first triage and per-provider audit
+  timeline reconstructed from append-only events.
+- Full Langfuse observability across classification, extraction,
+  validation, score synthesis.
+- 50-packet synthetic eval set, run end-to-end through the
+  orchestrator, with weighted Cohen's κ = 0.68 against 20 hand-labeled
+  tier judgments.
+
+## What's deliberately out of v1
+
+- **The intake agent itself.** The state machine, magic-link portal,
+  and Postmark-style outbox are designed in
+  [docs/design.md](docs/design.md) but stubbed for v1 — admin uploads
+  documents directly on the provider's behalf, and multi-turn loops are
+  simulated. Full intake is the natural Phase 5 build; design is locked.
+- **Real CAQH ProView, NPPES, OIG, SAM, state board integrations.**
+  Mocked behind a `lookup_primary_source` contract; live PSV is a
+  separate uplift.
+- **Browser-driven payer portal submission.** Atano markets this; not
+  the differentiator.
+- **Production authn/authz.** Magic-link only.
+- **HIPAA-compliant deployment.** Synthetic data only.
+
+If I were joining and shipped this from day one, the first 30 days
+would be: real CAQH integration, the Postmark outbox + magic-link
+intake (the Phase 5 path), and a second labeler on the eval set to
+move κ from a self-consistency upper bound to a real one.
 
 ## Accuracy
 
 Two complementary number sets live here. The **full-pipeline baseline**
-(P4 task 18) measures the system end-to-end against the 50-packet
-dataset — every PDF goes through classification, extraction, validators,
-and score synthesis as it would for a real submission. The
-**prompt-isolated tuning** numbers (P4 task 8–9) measure individual
-LLM-validator prompts against `golden.json` inputs directly, bypassing
-extraction. The first answers "does the system work"; the second
-isolates "is the prompt right." Both belong in the README; comparing
-the two diagnoses where any gap lives (extraction vs validator).
+measures the system end-to-end against the 50-packet dataset — every
+PDF goes through classification, extraction, validators, and score
+synthesis as it would for a real submission. The **prompt-isolated
+tuning** numbers measure individual LLM-validator prompts against
+`golden.json` inputs directly, bypassing extraction. The first answers
+"does the system work"; the second isolates "is the prompt right."
+Both belong in the README; comparing the two diagnoses where any gap
+lives (extraction vs validator).
 
-### Full-pipeline baseline (P4 task 18)
+### Full-pipeline baseline
 
 [`evals/results/baseline.json`](evals/results/baseline.json), 50 packets,
 ~520 seconds wall-clock at concurrency=3.
@@ -129,7 +141,7 @@ non-degenerate. Labeler tier distribution: 8 Green, 2 Yellow, 10 Red.
 
 | Metric                              | Value      | Floor                                          |
 |---|---:|---|
-| Weighted Cohen's κ (quadratic)      | **0.6786** | Landis-Koch substantial 0.61; P4 DoD 0.50      |
+| Weighted Cohen's κ (quadratic)      | **0.6786** | Landis-Koch substantial 0.61; target 0.50      |
 | Raw agreement                       | 0.55       | 11 / 20 exact matches                          |
 | Spearman ρ (score vs ordinal tier)  | 0.7455     | continuous footnote, not headline              |
 
@@ -147,22 +159,21 @@ human-Green case, and never Green for a human-Red. The κ holds at
 0.68 only because off-by-one slips dominate over catastrophic swaps
 under quadratic weighting. A reader interpreting the score should
 know: *the system underreaches on critical blockers relative to a
-human labeler*. The fix is rubric reweighting on Critical issues
-— out of P4 scope, named for the post-launch follow-on.
+human labeler*. The fix is rubric reweighting on Critical issues —
+named for the post-launch follow-on.
 
 **Why some "clean" buckets read Red.** The dataset generator anchors
 every packet's dates to `_NEW_PACKET_ANCHOR = 2026-05-25`. When the
-per-packet RNG draws `rng=3` on the DEA-issue offset, the DEA
-expires exactly on the anchor date — yesterday from the perspective
-of any `today > 2026-05-25`. Hits ~1/3 of clean / scanned packets
-(Hall, Flores, Rice, Tucker in the n=20 subset). Treated as a
-feature, not a bug: it gives the eval Red samples outside the
-planted-conflict buckets, which is what keeps κ from going
-degenerate. Documented in
-[`phase-4-scale-and-llm-validators.md`](docs/impl/phase-4-scale-and-llm-validators.md)
+per-packet RNG draws `rng=3` on the DEA-issue offset, the DEA expires
+exactly on the anchor date — yesterday from the perspective of any
+`today > 2026-05-25`. Hits ~1/3 of clean / scanned packets (Hall,
+Flores, Rice, Tucker in the n=20 subset). Treated as a feature, not a
+bug: it gives the eval Red samples outside the planted-conflict
+buckets, which is what keeps κ from going degenerate. Documented in
+[`docs/impl/phase-4-scale-and-llm-validators.md`](docs/impl/phase-4-scale-and-llm-validators.md)
 under risks/open.
 
-**Tuning surfaces (real, named in the baseline):**
+**Tuning surfaces:**
 
 - `name_variant` recall ceiling at 0.667 with FP=0 means the prompt is
   conservatively-tuned — 3 must-flag planted shapes pass without
@@ -170,21 +181,21 @@ under risks/open.
   subset to prioritize FP discipline; the held-out 3 misses are the
   expected cost. Bumping recall here is the next tuning loop, not a
   bug.
-- `taxonomy_specialty_mismatch` precision 0.73 reflects 3 LLM
-  judgments that flag legitimate specialty/taxonomy synonymies as
-  mismatches. P5+ tuning surface — the NUCC compare prompt is a v1
-  ship.
+- `taxonomy_specialty_mismatch` precision 0.73 reflects 3 LLM judgments
+  that flag legitimate specialty/taxonomy synonymies as mismatches.
+  Follow-on tuning surface — the NUCC compare prompt is a v1 ship.
 
-### IdentityCoherence prompt-isolated tuning (P4 task 8–9)
+### IdentityCoherence prompt-isolated tuning
 
-These numbers measure the IdentityCoherence prompt against `golden.json`
-fullName values directly via `tools/TuneIdentityCoherence` — no PDFs,
-no classifier, no Sonnet extractor. They tell you whether the prompt
-would catch a disagreement *given* a correctly-extracted name set; the
-full-pipeline baseline above tells you what happens when extraction is
-in the loop. Recall on the full pipeline (0.667) sits below the
-prompt-isolated number (100%) — the gap measures extraction noise +
-provenance routing, not prompt quality. Source data:
+These numbers measure the IdentityCoherence prompt against
+`golden.json` fullName values directly via
+`tools/TuneIdentityCoherence` — no PDFs, no classifier, no Sonnet
+extractor. They tell you whether the prompt would catch a disagreement
+*given* a correctly-extracted name set; the full-pipeline baseline
+above tells you what happens when extraction is in the loop. Recall on
+the full pipeline (0.667) sits below the prompt-isolated number (100%)
+— the gap measures extraction noise + provenance routing, not prompt
+quality. Source data:
 [`evals/tuning-runs/iter-100__*.json`](evals/tuning-runs/), prompt SHA
 `48322ce7`, 50 packets × 3 runs, worst-of.
 
@@ -205,26 +216,26 @@ Recall by planted name-disagreement shape (must-flag totals across the 50-packet
 | SURNAME_TYPO        | 0 / 2  | One-letter typo — correctly **not flagged** (don't-flag shape) |
 | **Total must-flag** | **9 / 9 (100%)** |  |
 
-Tuning converged in two instruction-level iterations from baseline FP=16.7% /
-recall=75% to FP=0% / recall=100% on the tuning subset. The
+Tuning converged in two instruction-level iterations from baseline
+FP=16.7% / recall=75% to FP=0% / recall=100% on the tuning subset. The
 [full iteration log](evals/tuning-runs/) and the
-[per-iteration failures TSV](evals/tuning-runs/iter-00__failures.tsv) record
-exactly which rule changes moved which category. Held-out 10 (disjoint from
-the tuning subset, drawn from the 50 with `seed=9999`) ran 3 times and
-matched the in-sample numbers — no overfit.
+[per-iteration failures TSV](evals/tuning-runs/iter-00__failures.tsv)
+record exactly which rule changes moved which category. Held-out 10
+(disjoint from the tuning subset, drawn from the 50 with `seed=9999`)
+ran 3 times and matched the in-sample numbers — no overfit.
 
 ### Bias caveat (read this before citing the numbers)
 
 The hand-labeled fixtures, the IdentityCoherence and NpiTaxonomyMatch
 prompts' do-flag / don't-flag rules, the iteration decisions during
-prompt tuning, and (once it lands) the 20-packet Red/Yellow/Green tier
-labeling were all made by the same person. The published numbers
-measure how well the system reproduces that one person's credentialing
-judgment, not how well it tracks an independent ground truth.
+prompt tuning, and the 20-packet Red/Yellow/Green tier labeling were
+all made by the same person. The published numbers measure how well
+the system reproduces that one person's credentialing judgment, not
+how well it tracks an independent ground truth.
 
 A second labeler — and a second prompt reviewer — would push the bound
-on these from upper to honest. Both are post-launch asks, not P4 gates.
-Honest readings:
+on these from upper to honest. Both are post-launch asks. Honest
+readings:
 
 - **`name_variant` precision 1.0, recall 0.667** — "the validator emits
   only the disagreements the prompt-author would have called out, and
@@ -251,95 +262,19 @@ Honest readings:
 
 ### Competitor positioning
 
-The defensible column intersection — pre-CAQH intake +
-cross-document validation + a published readiness score + a cited
-audit trail + published accuracy numbers — is shipped by **no single
-competitor** as of the 2026-05 marketing-surface verification in
+The defensible column intersection — pre-CAQH intake + cross-document
+validation + a published readiness score + a cited audit trail +
+published accuracy numbers — is shipped by **no single competitor** as
+of the 2026-05 marketing-surface verification in
 [docs/design.md §Appendix A](docs/design.md#appendix-a--comparison-to-competitors).
 That appendix carries the row-by-row verification (each "✓" or
 "partial" sourced to a competitor's homepage) and a per-row reading
 notes block documenting what every "—" represents. The full table is
 narrower than the marketing copy suggests for several competitors —
-deliberately so, per the "Better no claim than a wrong one" gate in
-the P4 review.
+deliberately so.
 
-## Local bring-up (Phase 0)
+## Local setup
 
-Prerequisites: Docker, .NET 10 SDK, an Anthropic API key.
-
-```bash
-# 1. Start Postgres + self-hosted Langfuse
-docker compose up -d
-
-# 2. Configure secrets — copy and fill in
-cp .env.example .env
-#    - ANTHROPIC_API_KEY (sk-ant-...)
-#    - LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY: create account at
-#      http://localhost:3000, generate a project, copy keys from the UI.
-
-# 3. Load env vars into the shell
-set -a; source .env; set +a
-
-# 4. Apply EF migrations
-dotnet ef database update \
-  --project apps/api/Infrastructure/Infrastructure.csproj \
-  --startup-project apps/api/Api/Api.csproj
-
-# 5. Run the API
-dotnet run --project apps/api/Api/Api.csproj
-
-# 6. Smoke test (in another shell)
-curl -X POST http://localhost:5xxx/api/ping \
-  -H 'Content-Type: application/json' \
-  -d '{"message":"hello"}'
-```
-
-Port `5xxx` — check the `dotnet run` output for the actual port (typically 5066 HTTPS / 5065 HTTP). The endpoint accepts plain HTTP in dev.
-
-## Phase 0 gate
-
-A `POST /api/ping` returns a JSON payload with `reply`, `model`, `audit_event_id`, `trace_id`, token counts, and cost. Verify:
-
-- [ ] Audit row in Postgres: `select * from audit_events;` shows one row with `event_type = 'PingExecuted'`.
-- [ ] Trace at `http://localhost:3000` shows a `ping.invoke` span with model + cost rendered.
-- [ ] Killing Postgres → API returns 500.
-- [ ] Killing Langfuse → API still returns 200 (telemetry is fire-and-forget).
-
-## Repo layout
-
-```
-PacketReady/
-├── docker-compose.yml       # Postgres (5433) + Langfuse (3000)
-├── .env.example             # Copy to .env, fill in keys
-├── docs/
-│   ├── design.md
-│   ├── build-plan.md
-│   └── impl/phase-0-walking-skeleton.md
-└── apps/api/                # .NET 10 backend
-    ├── PacketReady.slnx
-    ├── Domain/              # entities, no external deps
-    ├── Application/         # MediatR commands, interfaces, prompts
-    ├── Infrastructure/      # EF Core, Anthropic.SDK, Langfuse/OTel
-    ├── Api/                 # ASP.NET Core minimal API
-    └── Tests/               # xUnit
-```
-
-## Common commands
-
-```bash
-# Build
-dotnet build apps/api/PacketReady.slnx
-
-# Test
-dotnet test apps/api/Tests/Tests.csproj
-
-# Add a migration
-dotnet ef migrations add <Name> \
-  --project apps/api/Infrastructure/Infrastructure.csproj \
-  --startup-project apps/api/Api/Api.csproj \
-  --output-dir Persistence/Migrations
-
-# Tear down
-docker compose down              # keeps volumes
-docker compose down -v           # wipes volumes (Langfuse account + DB data lost)
-```
+See [docs/local-setup.md](docs/local-setup.md) for prerequisites,
+bring-up steps, the Phase 0 smoke-test gate, repo layout, and common
+dev commands.
