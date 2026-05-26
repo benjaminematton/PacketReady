@@ -22,6 +22,12 @@ public static class DependencyInjection
         services.AddScoped<IValidator, DeaStatusValidator>();
         services.AddScoped<IValidator, BoardCertificationValidator>();
         services.AddScoped<IValidator, SanctionsCheckValidator>();
+        // P4 task 8 — first LLM validator. Takes IChatClient + IPromptLoader,
+        // pinned to claude-sonnet-4-6 inside the class. Prompt tuning happens
+        // on the 10-packet subset (see evals/runners/runners/tuning_subsets.py
+        // and P4 task 9); the regression gate's FP/recall numbers in
+        // baseline.json are tied to (this prompt × this model id).
+        services.AddScoped<IValidator, IdentityCoherenceValidator>();
 
         // TimeProvider.System is the default for production. Validator unit tests
         // construct validators directly with FakeTimeProvider, bypassing this

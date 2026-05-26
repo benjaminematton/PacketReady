@@ -1,6 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.AI;
-using PacketReady.Infrastructure.Extraction;
+using PacketReady.Application.Llm;
 using PacketReady.Infrastructure.Extraction.SonnetExtractors;
 using Xunit;
 

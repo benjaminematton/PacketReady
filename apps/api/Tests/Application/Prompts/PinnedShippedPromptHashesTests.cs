@@ -34,6 +34,9 @@ public class PinnedShippedPromptHashesTests
         "683828d87da17ffb3b227339ca2126ca55da9e658d1510d7459aa332b9398bc4";
     private const string MalpracticeExtractionHash =
         "45b8b2a202ea0cf894bcdec44f36b7059d0e794cb57477f45db4a2b239cbe19f";
+    // P4 task 8 — IdentityCoherenceValidator. Editing the prompt bumps to v2.md.
+    private const string IdentityCoherenceHash =
+        "d23dd984218bd73070153063067c982de2c589485fe3f6a2857abbb729b1c468";
 
     private static readonly IReadOnlyDictionary<string, string> Pinned =
         new Dictionary<string, string>
@@ -43,6 +46,7 @@ public class PinnedShippedPromptHashesTests
             [PromptKeys.DeaExtraction]         = DeaExtractionHash,
             [PromptKeys.BoardCertExtraction]   = BoardCertExtractionHash,
             [PromptKeys.MalpracticeExtraction] = MalpracticeExtractionHash,
+            [PromptKeys.IdentityCoherence]     = IdentityCoherenceHash,
         };
 
     public static IEnumerable<object[]> PinnedPromptHashes =>

@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using PacketReady.Application.Extraction.Classify;
+using PacketReady.Application.Llm;
 using PacketReady.Application.Prompts;
 using PacketReady.Domain.Documents;
 

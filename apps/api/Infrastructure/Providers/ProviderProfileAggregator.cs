@@ -287,10 +287,11 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
         var issueDate = DateOnlyOrNull(fields, "issueDate");
         var expiryDate = DateOnlyOrNull(fields, "expiryDate");
         var status = ParseEnum<LicenseStatus>(StringOrNull(fields, "status"));
+        var fullName = StringOrNull(fields, "fullName") ?? "";
 
         if (number is null || state is null || issueDate is null || expiryDate is null)
             return null;
-        return new LicenseInfo(number, state, issueDate.Value, expiryDate.Value, status);
+        return new LicenseInfo(number, state, issueDate.Value, expiryDate.Value, status, fullName);
     }
 
     private static DeaInfo? ParseDea(JsonElement fields)
@@ -298,6 +299,7 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
         var number = StringOrNull(fields, "deaNumber");
         var expiryDate = DateOnlyOrNull(fields, "expiryDate");
         var status = ParseEnum<DeaStatus>(StringOrNull(fields, "status"));
+        var fullName = StringOrNull(fields, "fullName") ?? "";
 
         var schedules = new List<DeaSchedule>();
         if (fields.TryGetProperty("schedules", out var schedEl)
@@ -315,7 +317,7 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
 
         if (number is null || expiryDate is null)
             return null;
-        return new DeaInfo(number, expiryDate.Value, status, schedules);
+        return new DeaInfo(number, expiryDate.Value, status, schedules, fullName);
     }
 
     private static BoardCertInfo? ParseBoardCert(JsonElement fields)
@@ -325,10 +327,11 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
         var issueDate = DateOnlyOrNull(fields, "issueDate");
         var expiryDate = DateOnlyOrNull(fields, "expiryDate");
         var status = ParseEnum<BoardCertStatus>(StringOrNull(fields, "status"));
+        var fullName = StringOrNull(fields, "fullName") ?? "";
 
         if (board is null || specialty is null || issueDate is null || expiryDate is null)
             return null;
-        return new BoardCertInfo(board, specialty, issueDate.Value, expiryDate.Value, status);
+        return new BoardCertInfo(board, specialty, issueDate.Value, expiryDate.Value, status, fullName);
     }
 
     // === Provenance map ================================================

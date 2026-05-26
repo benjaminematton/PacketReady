@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>PacketReady.TuneIdentityCoherence</RootNamespace>
+    <AssemblyName>TuneIdentityCoherence</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- No Infrastructure reference: this CLI doesn't touch the DB. It needs
+         only Application (IdentityCoherenceValidator + IPromptLoader + the
+         response parser) and Domain (ProviderProfile + sub-records). The
+         Anthropic SDK comes via direct package ref because the slim DI graph
+         registers IChatClient by hand without going through AddInfrastructure. -->
+    <ProjectReference Include="..\..\apps\api\Domain\Domain.csproj" />
+    <ProjectReference Include="..\..\apps\api\Application\Application.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.8" />
+    <PackageReference Include="Microsoft.Extensions.AI" Version="10.3.0" />
+    <PackageReference Include="Anthropic.SDK" Version="5.10.0" />
+  </ItemGroup>
+
+</Project>

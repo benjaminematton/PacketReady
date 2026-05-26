@@ -13,7 +13,10 @@ public sealed record DeaInfo(
     string Number,
     DateOnly ExpiryDate,
     DeaStatus Status,
-    IReadOnlyList<DeaSchedule> Schedules);
+    IReadOnlyList<DeaSchedule> Schedules,
+    // Per-doc full name extracted off the DEA PDF; consumed by the P4
+    // identity-coherence validator. Default "" lets pre-P4 callers stay as-is.
+    string FullName = "");
 
 public enum DeaStatus { Unknown = 0, Active = 1, Inactive = 2, Expired = 3 }
 

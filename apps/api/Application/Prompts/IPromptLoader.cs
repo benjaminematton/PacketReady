@@ -45,6 +45,9 @@ public static class PromptKeys
     public const string DeaExtraction = "DeaExtractionPrompt.v1.md";
     public const string BoardCertExtraction = "BoardCertExtractionPrompt.v1.md";
     public const string MalpracticeExtraction = "MalpracticeExtractionPrompt.v1.md";
+
+    // Phase 4 — LLM validators.
+    public const string IdentityCoherence = "IdentityCoherencePrompt.v1.md";
 }
 
 public sealed class PromptNotFoundException : Exception

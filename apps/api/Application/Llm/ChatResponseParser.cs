@@ -1,26 +1,24 @@
 using System.Text.Json;
 using Microsoft.Extensions.AI;
 
-namespace PacketReady.Infrastructure.Extraction;
+namespace PacketReady.Application.Llm;
 
 /// <summary>
-/// Shared <see cref="ChatResponse"/> handling for the LLM-backed Infrastructure
-/// types (classifier + Sonnet extractors). Lives outside both class hierarchies
-/// because <see cref="ChatResponseFormat.ForJsonSchema"/> is implemented as a
-/// forced tool call by the Anthropic adapter, and pulling the JSON out of that
-/// response is identical for every caller — keep one implementation.
+/// Shared <see cref="ChatResponse"/> handling for every LLM-backed caller
+/// across both layers — Infrastructure's extractors and classifier, and
+/// Application's P4 LLM validators (<c>IdentityCoherenceValidator</c>,
+/// <c>NpiTaxonomyMatchValidator</c>). Lives in Application so validators
+/// don't have to invert the layer relationship to reuse it.
+///
+/// <para><see cref="ChatResponseFormat.ForJsonSchema"/> is implemented as a
+/// forced tool call on the Anthropic adapter, so <see cref="FunctionCallContent"/>
+/// is the load-bearing path. <see cref="ChatResponse.Text"/> is a fallback
+/// for adapter versions that surface the JSON as plain text — and for
+/// versions that emit both (text wrapper + tool call), the function call
+/// wins so we never feed the wrapper into <c>JsonDocument.Parse</c>.</para>
 /// </summary>
-internal static class ChatResponseParser
+public static class ChatResponseParser
 {
-    /// <summary>
-    /// Pulls the structured JSON out of an M.E.AI <see cref="ChatResponse"/>.
-    /// <c>ChatResponseFormat.ForJsonSchema</c> is implemented as a forced tool
-    /// call on the Anthropic adapter, so <see cref="FunctionCallContent"/> is
-    /// the load-bearing path. <see cref="ChatResponse.Text"/> is a fallback
-    /// for adapter versions that surface the JSON as plain text — and for
-    /// versions that emit both (text wrapper + tool call), the function call
-    /// wins so we never feed the wrapper into <c>JsonDocument.Parse</c>.
-    /// </summary>
     public static string ExtractStructuredJson(ChatResponse response)
     {
         // First non-empty FunctionCallContent wins. The schema enforces a single
