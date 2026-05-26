@@ -95,6 +95,13 @@ public static class DependencyInjection
         var nuccPath = Path.Combine(AppContext.BaseDirectory, "Nucc", "nucc-taxonomy-25.1.csv");
         services.AddSingleton<INuccTaxonomyLookup>(new NuccTaxonomyLookup(nuccPath));
 
+        // ProviderProfileAggregator rebuilds ProviderProfile from extraction
+        // rows + the Provider's hand-curated basics. Only depends on the
+        // scoped DbContext + ILogger — no LLM client — so it belongs in the
+        // persistence slice. The seed CLI's MediatR-driven score compute
+        // resolves it through here without dragging in AddInfrastructure.
+        services.AddScoped<IProviderProfileAggregator, ProviderProfileAggregator>();
+
         return services;
     }
 
@@ -134,7 +141,9 @@ public static class DependencyInjection
 
         // ExtractionPersister depends on the scoped DbContext, so itself scoped.
         services.AddScoped<IExtractionPersister, ExtractionPersister>();
-        services.AddScoped<IProviderProfileAggregator, ProviderProfileAggregator>();
+        // IProviderProfileAggregator moved to AddPersistence — DB-only deps,
+        // and the seed CLI's ComputeReadinessScoreCommandHandler resolves it
+        // through there.
 
         // P5 intake agent. The 5 tools are scoped because they touch the
         // scoped DbContext / IMediator / ComposeFollowupHandler; the agent

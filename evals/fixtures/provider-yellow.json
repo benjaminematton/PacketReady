@@ -28,6 +28,15 @@
       "expiryDate": "{today+6y}",
       "status": "Active"
     },
+    "malpractice": {
+      "carrier": "MedMal Mutual",
+      "policyNumber": "MP-MY-45211",
+      "expiryDate": "{today+1y}",
+      "status": "Active",
+      "fullName": "Dr. Marcus Yellow",
+      "perOccurrence": 1000000,
+      "aggregate": 3000000
+    },
     "sanctions": {
       "oigClean": true,
       "samClean": true,
