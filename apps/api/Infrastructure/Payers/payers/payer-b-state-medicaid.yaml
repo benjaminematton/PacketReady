@@ -1,0 +1,27 @@
+# Payer B — State Medicaid. Diverges from payer-a on the load-bearing
+# branches the payer-aware validators exercise:
+#   - boardCertRequired: false   → BoardCertificationValidator suppresses
+#     the missing-cert Critical (Medicaid plans accept non-board-certified
+#     providers).
+#   - lower malpractice minimums  → MalpracticeCurrencyValidator's coverage
+#     check fires at a different threshold.
+#   - longer renewal windows      → renewal-warning Minor emits earlier.
+#   - boardCert omitted from requiredDocuments → RequiredDocumentsValidator
+#     never asks for it on payer-b providers.
+#
+# acceptedBoards is empty because boardCertRequired=false; the loader
+# accepts this combination but rejects the inverse (true + empty).
+id: payer-b-state-medicaid
+name: Payer B — State Medicaid
+malpractice:
+  minimumPerOccurrence: 500000    # $500k
+  minimumAggregate: 1500000       # $1.5M
+requiredDocuments:
+  - license
+  - dea
+  - malpractice
+boardCertRequired: false
+acceptedBoards: []
+windowDays:
+  malpracticeRenewal: 60
+  licenseRenewal: 60

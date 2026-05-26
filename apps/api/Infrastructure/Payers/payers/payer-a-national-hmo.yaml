@@ -1,0 +1,24 @@
+# Payer A — National HMO. Defaults to the universal-4 required-doc set
+# (license/dea/boardCert/malpractice) with $1M/$3M malpractice minimums and
+# the ABMS umbrella as the only accepted board family. Matches what most
+# commercial payers ask for in a credentialing packet.
+#
+# Schema: see PayerRequirement.cs. The loader's ValidateShape() enforces
+# every required key — adding/removing fields here must happen alongside
+# a record edit.
+id: payer-a-national-hmo
+name: Payer A — National HMO
+malpractice:
+  minimumPerOccurrence: 1000000   # $1M
+  minimumAggregate: 3000000       # $3M
+requiredDocuments:
+  - license
+  - dea
+  - boardCert
+  - malpractice
+boardCertRequired: true
+acceptedBoards:
+  - ABMS
+windowDays:
+  malpracticeRenewal: 30
+  licenseRenewal: 30

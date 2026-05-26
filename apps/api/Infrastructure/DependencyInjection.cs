@@ -17,6 +17,7 @@ using PacketReady.Infrastructure.Blob;
 using PacketReady.Infrastructure.Extraction;
 using PacketReady.Infrastructure.Extraction.Classifier;
 using PacketReady.Infrastructure.Extraction.SonnetExtractors;
+using PacketReady.Infrastructure.Payers;
 using PacketReady.Infrastructure.Persistence;
 using PacketReady.Infrastructure.Providers;
 
@@ -54,6 +55,17 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<PacketReadyDbContext>());
 
         services.AddScoped<IAuditWriter, AuditWriter>();
+
+        // Per-payer requirements. Loaded once at startup and held as a
+        // singleton dictionary keyed by payer id. PayerRequirementLoader fails
+        // loud on schema violation so the app refuses to start with a broken
+        // YAML — better than a NullReferenceException mid-request. Registered
+        // in AddPersistence (not AddInfrastructure) so the seed CLI and any
+        // future LLM-free binary can resolve PayerRequirement without
+        // dragging in the Anthropic SDK.
+        var payerDir = Path.Combine(AppContext.BaseDirectory, "Payers", "payers");
+        services.AddSingleton<IReadOnlyDictionary<string, PayerRequirement>>(
+            PayerRequirementLoader.LoadAll(payerDir));
 
         return services;
     }

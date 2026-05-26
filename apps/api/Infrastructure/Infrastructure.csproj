@@ -21,6 +21,20 @@
          signal) and to count pages on intake. The NuGet id is `PdfPig`; the
          GitHub project is UglyToad/PdfPig. -->
     <PackageReference Include="PdfPig" Version="0.1.14" />
+    <!-- YamlDotNet — .NET-native YAML parser for the per-payer requirement
+         files in Payers/payers/*.yaml. Loaded at startup by
+         PayerRequirementLoader; fails loud on schema violation. -->
+    <PackageReference Include="YamlDotNet" Version="16.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Payer requirement YAMLs ship next to the Infrastructure assembly so
+         PayerRequirementLoader can read them from AppContext.BaseDirectory at
+         startup. PreserveNewest copies on rebuild; the loader's fail-loud
+         shape validation catches schema drift before app start. -->
+    <Content Include="Payers\payers\*.yaml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <PropertyGroup>
