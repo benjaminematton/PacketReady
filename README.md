@@ -1,8 +1,49 @@
 # PacketReady
 
-Pre-CAQH provider intake agent that ends in a cross-document packet readiness score.
+Pre-CAQH credentialing intake agent. Drop a provider's PDF packet in; the
+system classifies each document, extracts the structured fields with Sonnet,
+runs eight cross-document validators (4 rule-based, 2 LLM, 2 payer-aware),
+and emits a single readiness score with per-issue citations back to the
+source PDF region.
 
-See [docs/design.md](docs/design.md) for the full design and [docs/build-plan.md](docs/build-plan.md) for the build roadmap. Phase 0 details are in [docs/impl/phase-0-walking-skeleton.md](docs/impl/phase-0-walking-skeleton.md).
+## Demo
+
+[26-second walkthrough](DEMO_URL_TBD) — operator opens the worst-first
+provider list, drills into a Yellow at score 62, opens the top Critical
+issue's panel (PDF preview with bounding-box highlight), then switches to
+the per-provider audit timeline.
+
+<!-- Local copy at tools/demo-tour/demo.mp4 (H.264, 295 KB, recorded by
+tools/demo-tour/demo-tour.spec.ts against a live stack). To get a shareable
+URL: drag the mp4 into a new GitHub issue comment on this repo; GitHub
+uploads it to user-images.githubusercontent.com and returns a CDN link. -->
+
+## Why it's interesting
+
+- **Eval-driven, not vibes-driven.** 50-packet synthetic dataset with
+  planted conflicts. Weighted Cohen's κ = 0.68 against a 20-packet
+  hand-labeled subset — substantial agreement on the Landis-Koch scale,
+  above the κ ≥ 0.50 DoD floor. 0% false-positive rate on the
+  IdentityCoherence prompt across 30 conflict-free packets.
+- **Operator-first surface.** Every Critical / Major / Minor issue is one
+  click from the literal PDF region the validator cited (page + bbox
+  overlay rendered with react-pdf) and the full per-provider audit
+  timeline, reconstructed from an append-only event log.
+- **Payer-aware by configuration, not by code.** Validator behavior
+  reconfigures from per-payer YAML — board-cert required, malpractice
+  minimums, sanctions-check policy. Onboarding a new payer is a file,
+  not a deploy.
+- **Production patterns, not a demo hack.** Confidence-guard downgrades
+  Critical → Minor on low-confidence extractions; schema-versioned
+  extraction rows; idempotent extraction persistence behind a Postgres
+  advisory lock; Hangfire-driven intake agent with budgeted turns;
+  Langfuse OTel traces across the whole pipeline; multi-binary DI split
+  so the seed CLI doesn't drag the Anthropic SDK.
+
+Designed and built solo. Full design rationale in
+[docs/design.md](docs/design.md); phase-by-phase build log in
+[docs/build-plan.md](docs/build-plan.md); Phase 0 walking-skeleton notes in
+[docs/impl/phase-0-walking-skeleton.md](docs/impl/phase-0-walking-skeleton.md).
 
 ## Status
 
