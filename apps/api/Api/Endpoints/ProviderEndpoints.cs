@@ -1,4 +1,5 @@
 using MediatR;
+using PacketReady.Application.Audit.Queries.ListProviderAudit;
 using PacketReady.Application.Payers;
 using PacketReady.Application.Providers.Commands.CreateProvider;
 using PacketReady.Application.Providers.Queries.GetProviderDetail;
@@ -95,6 +96,38 @@ public static class ProviderEndpoints
             .Produces<CreateProviderResponse>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
+
+        // P6 task 6 — audit-chain read for the dashboard's "Why we flagged this"
+        // tab. Returns audit_events scoped to one provider, oldest-first, capped
+        // at `limit` (default 100, max 500). The dashboard fetches once at page
+        // load and passes the slice down to each Issue's drill-in panel.
+        app.MapGet("/api/providers/{providerId:guid}/audit", async (
+                Guid providerId,
+                int? limit,
+                IMediator mediator,
+                CancellationToken ct) =>
+            {
+                if (providerId == Guid.Empty)
+                    return ProblemResults.EmptyProviderId();
+
+                var effectiveLimit = limit ?? ListProviderAuditQuery.DefaultLimit;
+                if (effectiveLimit < ListProviderAuditQuery.MinLimit ||
+                    effectiveLimit > ListProviderAuditQuery.MaxLimit)
+                {
+                    return ProblemResults.InvalidLimit(
+                        effectiveLimit,
+                        ListProviderAuditQuery.MinLimit,
+                        ListProviderAuditQuery.MaxLimit);
+                }
+
+                var rows = await mediator.Send(
+                    new ListProviderAuditQuery(providerId, effectiveLimit), ct);
+                return Results.Ok(rows);
+            })
+            .WithName("ListProviderAudit")
+            .WithTags("Providers")
+            .Produces<IReadOnlyList<AuditEventDto>>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status400BadRequest);
 
         return app;
     }

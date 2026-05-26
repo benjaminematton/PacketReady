@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "./env";
 import type {
+  AuditEventDto,
   ProblemDetails,
   ProviderDetail,
   ProviderListItem,
@@ -162,5 +163,20 @@ export const api = {
     const path = `/api/providers/${encodeURIComponent(providerId)}/scores`;
     const data = await request<unknown>(path, { method: "POST" });
     return assertJsonObject<ReadinessScore>(data, path);
+  },
+
+  /**
+   * Audit chain for one provider — backs the dashboard's "Why we flagged this"
+   * tab. Returns `[]` (not null) when the provider has no audit rows yet; a
+   * brand-new provider without a computed score has nothing to show, which
+   * the panel renders as an empty-state placeholder.
+   */
+  async getProviderAudit(
+    providerId: string,
+    limit = 100,
+  ): Promise<AuditEventDto[]> {
+    const path = `/api/providers/${encodeURIComponent(providerId)}/audit?limit=${limit}`;
+    const data = await request<unknown>(path);
+    return assertJsonArray<AuditEventDto[]>(data, path);
   },
 };

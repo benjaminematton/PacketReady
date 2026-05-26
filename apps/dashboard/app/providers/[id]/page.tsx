@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { api } from "@/lib/api";
-import type { Issue, Severity } from "@/lib/types";
+import type { AuditEventDto, Issue, Severity } from "@/lib/types";
 import { ScoreBadge } from "@/components/score-badge";
 import { IssueCard } from "@/components/issue-card";
 
@@ -30,7 +30,16 @@ export default async function ProviderDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const provider = await api.getProviderDetail(id);
+
+  // Fetch detail + audit chain in parallel — the audit query only needs the
+  // route id, not the resolved provider, so there's no dependency between them.
+  // The audit fetch is best-effort: if it fails, the "Why we flagged this" tab
+  // inside every IssueCard renders an empty state, but the score view still
+  // loads. The detail fetch is load-bearing and is allowed to throw.
+  const [provider, auditEvents] = await Promise.all([
+    api.getProviderDetail(id),
+    api.getProviderAudit(id).catch((): AuditEventDto[] => []),
+  ]);
   if (provider === null) notFound();
 
   const score = provider.latestScore;
@@ -80,14 +89,20 @@ export default async function ProviderDetailPage({
               minor={score.minorCount}
             />
           )}
-          <IssuesList issues={score.issues} />
+          <IssuesList issues={score.issues} auditEvents={auditEvents} />
         </section>
       )}
     </main>
   );
 }
 
-function IssuesList({ issues }: { issues: Issue[] }) {
+function IssuesList({
+  issues,
+  auditEvents,
+}: {
+  issues: Issue[];
+  auditEvents: AuditEventDto[];
+}) {
   if (issues.length === 0) {
     return (
       <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-4 dark:border-emerald-900 dark:bg-emerald-950">
@@ -107,7 +122,7 @@ function IssuesList({ issues }: { issues: Issue[] }) {
         // No stable Issue id from the API; (validator, index) is unique within
         // a sorted, deterministic list and stable across re-renders of the same DTO.
         <li key={`${issue.validator}-${idx}`}>
-          <IssueCard issue={issue} />
+          <IssueCard issue={issue} auditEvents={auditEvents} />
         </li>
       ))}
     </ul>

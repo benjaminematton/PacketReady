@@ -25,6 +25,7 @@ internal static class ProblemResults
     private const string MagicLinkInvalidType         = "urn:packetready:error:magic_link_invalid";
     private const string InvalidIntakeStartType       = "urn:packetready:error:invalid_intake_start";
     private const string PortalEnqueueFailedType      = "urn:packetready:error:portal_enqueue_failed";
+    private const string InvalidLimitType             = "urn:packetready:error:invalid_limit";
 
     public static IResult ProviderNotFound(Guid providerId) =>
         Results.Problem(
@@ -210,6 +211,25 @@ internal static class ProblemResults
     /// Hangfire dashboard or a watchdog over stale post-consume sessions
     /// is the manual recovery path.
     /// </summary>
+    /// <summary>
+    /// Pagination <c>limit</c> query param was provided but out of the accepted
+    /// range. Reject explicitly rather than silently clamping so a caller asking
+    /// for <c>limit=9999</c> doesn't think they got a full result set when the
+    /// handler quietly capped them.
+    /// </summary>
+    public static IResult InvalidLimit(int requested, int min, int max) =>
+        Results.Problem(
+            type: InvalidLimitType,
+            title: $"limit must be between {min} and {max}.",
+            detail: $"Requested limit was {requested}.",
+            statusCode: StatusCodes.Status400BadRequest,
+            extensions: new Dictionary<string, object?>
+            {
+                ["requested"] = requested,
+                ["min"] = min,
+                ["max"] = max,
+            });
+
     public static IResult PortalEnqueueFailed(Guid providerId) =>
         Results.Problem(
             type: PortalEnqueueFailedType,

@@ -1,7 +1,10 @@
 "use client";
 
-import type { Citation, Issue, Severity } from "@/lib/types";
+import type { AuditEventDto, Citation, Issue, Severity } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { blobUrl } from "@/lib/blob-url";
+import { PdfPreview } from "@/components/pdf-preview";
+import { AuditTrail } from "@/components/audit-trail";
 import {
   Sheet,
   SheetContent,
@@ -10,6 +13,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 /**
  * A single Issue. Card on the page, full detail in a side panel on click.
@@ -24,7 +28,19 @@ import {
  * preview. The sheet shows full remediation, validator name, and citations
  * (extracted_value strings in P1; document/page/bbox links in P3).</para>
  */
-export function IssueCard({ issue }: { issue: Issue }) {
+export function IssueCard({
+  issue,
+  auditEvents = [],
+}: {
+  issue: Issue;
+  /**
+   * Provider-scoped audit chain, fetched once by the parent server component
+   * and shared across every IssueCard on the page. Defaults to `[]` so
+   * call-sites that haven't been updated still render — the "Why we flagged
+   * this" tab just shows the empty-state placeholder.
+   */
+  auditEvents?: AuditEventDto[];
+}) {
   return (
     <Sheet>
       <SheetTrigger
@@ -64,57 +80,71 @@ export function IssueCard({ issue }: { issue: Issue }) {
           </SheetDescription>
         </SheetHeader>
 
-        <div className="space-y-6 px-6 pt-2 pb-6">
-          {issue.isLowConfidenceInput && (
-            <Section title="Downgraded from Critical">
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                One or more cited fields had extractor confidence below 0.85.
-                ConfidenceGuard downgraded this Issue from Critical to Minor —
-                the underlying signal is real but the input is noisy enough
-                that it shouldn't gate readiness on its own.
+        {/*
+          Two-tab split (P6 task 7). Drill-in carries the immediate why
+          (remediation + citations with PDF previews); the audit tab shows
+          the chain of system events behind the score this Issue lives in.
+          Tab state is local to the Sheet — closing resets to Drill-in.
+        */}
+        <Tabs defaultValue="drill-in" className="px-6 pt-2 pb-6">
+          <TabsList className="w-full">
+            <TabsTrigger value="drill-in" className="flex-1">
+              Drill-in
+            </TabsTrigger>
+            <TabsTrigger value="audit" className="flex-1">
+              Why we flagged this
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="drill-in" className="space-y-6 pt-4">
+            {issue.isLowConfidenceInput && (
+              <Section title="Downgraded from Critical">
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  One or more cited fields had extractor confidence below 0.85.
+                  ConfidenceGuard downgraded this Issue from Critical to Minor —
+                  the underlying signal is real but the input is noisy enough
+                  that it shouldn&apos;t gate readiness on its own.
+                </p>
+              </Section>
+            )}
+
+            <Section title="Remediation">
+              <p className="text-sm leading-relaxed text-foreground/80">
+                {issue.remediation}
               </p>
             </Section>
-          )}
 
-          <Section title="Remediation">
-            <p className="text-sm leading-relaxed text-foreground/80">
-              {issue.remediation}
-            </p>
-          </Section>
+            <Section
+              title={
+                issue.citations.length === 1
+                  ? "Citation"
+                  : `Citations (${issue.citations.length})`
+              }
+            >
+              {issue.citations.length === 0 ? (
+                <p className="text-xs italic text-muted-foreground">
+                  No citations on this issue — typically a &quot;missing
+                  data&quot; finding where there&apos;s nothing to cite.
+                </p>
+              ) : (
+                <ul className="space-y-2">
+                  {issue.citations.map((c, idx) => (
+                    <li
+                      key={`${c.sourceValidator}-${idx}`}
+                      className="rounded border bg-muted/40 p-3"
+                    >
+                      <CitationBody citation={c} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Section>
+          </TabsContent>
 
-          <Section
-            title={
-              issue.citations.length === 1
-                ? "Citation"
-                : `Citations (${issue.citations.length})`
-            }
-          >
-            {issue.citations.length === 0 ? (
-              <p className="text-xs italic text-muted-foreground">
-                No citations on this issue — typically a "missing data" finding
-                where there's nothing to cite.
-              </p>
-            ) : (
-              <ul className="space-y-2">
-                {issue.citations.map((c, idx) => (
-                  <li
-                    key={`${c.sourceValidator}-${idx}`}
-                    className="rounded border bg-muted/40 p-3"
-                  >
-                    <CitationBody citation={c} />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Section>
-
-          <Section title="Why we flagged this">
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              Source-document highlighting lands in Phase 3 — the citation will
-              link to the exact PDF page and bounding box of the extracted value.
-            </p>
-          </Section>
-        </div>
+          <TabsContent value="audit" className="pt-4">
+            <AuditTrail events={auditEvents} />
+          </TabsContent>
+        </Tabs>
       </SheetContent>
     </Sheet>
   );
@@ -122,6 +152,16 @@ export function IssueCard({ issue }: { issue: Issue }) {
 
 function CitationBody({ citation }: { citation: Citation }) {
   const docRef = formatDocRef(citation);
+  // Embed the source PDF page + bbox highlight when the citation carries
+  // doc-ref fields (P3 extractor citations); pure-validator citations from
+  // pre-extraction paths (Sanctions, etc.) just show the extracted-value text.
+  // Building a narrowed shape here (instead of `documentId!` at the call site)
+  // lets TypeScript prove the guard for us.
+  const preview =
+    citation.documentId !== null && citation.page !== null
+      ? { documentId: citation.documentId, page: citation.page }
+      : null;
+
   return (
     <>
       <div className="flex items-center gap-2">
@@ -135,6 +175,16 @@ function CitationBody({ citation }: { citation: Citation }) {
       </p>
       {docRef !== null && (
         <p className="mt-2 text-[11px] text-muted-foreground">{docRef}</p>
+      )}
+      {preview !== null && (
+        <div className="mt-3">
+          <PdfPreview
+            blobUrl={blobUrl(preview.documentId)}
+            page={preview.page}
+            bbox={citation.bbox}
+            width={360}
+          />
+        </div>
       )}
     </>
   );

@@ -100,6 +100,21 @@ export interface ProviderDetail {
 }
 
 /**
+ * Wire shape of an audit_events row. `payload` is the raw JSONB string the
+ * row carries — per-event-type schema (a `ScoreComputed` payload has fields
+ * a `DocumentUploaded` payload doesn't), so the dashboard parses lazily at
+ * the read site rather than enumerating every shape here.
+ */
+export interface AuditEventDto {
+  id: string;
+  eventType: string;
+  occurredAt: string;
+  payload: string;
+  turnId: string | null;
+  correlationId: string | null;
+}
+
+/**
  * RFC 7807 ProblemDetails. The API emits machine-readable URN `type` values
  * (e.g. "urn:packetready:error:provider_not_found"); branch on those, not
  * on `title` or status code. The index signature carries per-error extensions
@@ -117,6 +132,7 @@ export interface ProblemDetails {
 export const ProblemTypes = {
   ProviderNotFound: "urn:packetready:error:provider_not_found",
   EmptyProviderId: "urn:packetready:error:empty_provider_id",
+  InvalidLimit: "urn:packetready:error:invalid_limit",
 } as const;
 
 export type ProblemType = (typeof ProblemTypes)[keyof typeof ProblemTypes];

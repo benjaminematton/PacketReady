@@ -51,6 +51,21 @@ builder.Services.AddSingleton<TimeProvider>(new FixedClock(nowUtc));
 using var host = builder.Build();
 var ct = CancellationToken.None;
 
+// `--demo` mode (P6 task 2): stage exactly 3 providers at fixed Guids so the
+// demo script's URLs never change between rehearsals. Without the flag the
+// seed walks every fixture in `evals/fixtures/` and assigns fresh Guids.
+var isDemo = args.Contains("--demo");
+
+// Fixed Guids for the three demo providers. Map keyed by fixture filename so
+// the existing per-fixture loop stays the single code path. Touching these
+// breaks the demo script — coordinate with `docs/demo-script.md`.
+var demoIds = new Dictionary<string, Guid>(StringComparer.Ordinal)
+{
+    ["provider-green.json"]  = new("11111111-1111-1111-1111-111111111111"),
+    ["provider-yellow.json"] = new("22222222-2222-2222-2222-222222222222"),
+    ["provider-red.json"]    = new("33333333-3333-3333-3333-333333333333"),
+};
+
 // Fixtures are looked up relative to the Seed binary's working dir. By default
 // `dotnet run --project tools/Seed` runs from the repo root, so this resolves.
 var fixturesDir = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "evals", "fixtures"));
@@ -58,8 +73,24 @@ if (!Directory.Exists(fixturesDir))
     throw new DirectoryNotFoundException(
         $"Fixtures dir not found at {fixturesDir}. Run from repo root.");
 
-var fixtureFiles = Directory.GetFiles(fixturesDir, "provider-*.json").OrderBy(p => p).ToList();
-Console.WriteLine($"Found {fixtureFiles.Count} fixture(s) under {fixturesDir}");
+var fixtureFiles = Directory.GetFiles(fixturesDir, "provider-*.json")
+    .OrderBy(p => p, StringComparer.Ordinal)
+    .Where(p => !isDemo || demoIds.ContainsKey(Path.GetFileName(p)))
+    .ToList();
+
+if (isDemo && fixtureFiles.Count != demoIds.Count)
+{
+    var missing = demoIds.Keys
+        .Except(fixtureFiles.Select(Path.GetFileName))
+        .ToList();
+    throw new InvalidOperationException(
+        $"Demo mode expected {demoIds.Count} fixtures, found {fixtureFiles.Count}. " +
+        $"Missing: {string.Join(", ", missing)}");
+}
+
+Console.WriteLine(isDemo
+    ? $"Demo mode: staging {fixtureFiles.Count} fixed-Guid provider(s) under {fixturesDir}"
+    : $"Found {fixtureFiles.Count} fixture(s) under {fixturesDir}");
 
 // One scope for the whole seed. Wipe + insert + per-fixture compute all share it.
 using var scope = host.Services.CreateScope();
@@ -92,7 +123,14 @@ foreach (var path in fixtureFiles)
     // (or DefaultPayerId when omitted) flows in here; P4 task 5's 50-packet
     // generator will start emitting fixtures with explicit payerId for ~50/50
     // balance across the two committed payer YAMLs.
-    var provider = Provider.Create(fixture.Profile, nowUtc, fixture.PayerId);
+    //
+    // Demo mode (P6 task 2) routes through Provider.CreateForTesting so the
+    // 3 demo providers land at fixed Guids — the demo script's URLs depend
+    // on these never changing.
+    var provider = isDemo
+        ? Provider.CreateForTesting(
+            demoIds[Path.GetFileName(path)], fixture.Profile, nowUtc, fixture.PayerId)
+        : Provider.Create(fixture.Profile, nowUtc, fixture.PayerId);
     db.Providers.Add(provider);
     await db.SaveChangesAsync(ct);
 
@@ -125,6 +163,17 @@ if (failed > 0)
 }
 
 Console.WriteLine($"All {results.Count} fixtures matched expected scores. ✓");
+
+if (isDemo)
+{
+    Console.WriteLine();
+    Console.WriteLine("Demo URLs (paste into the recording browser):");
+    foreach (var (filename, id) in demoIds.OrderBy(kv => kv.Value))
+    {
+        var label = Path.GetFileNameWithoutExtension(filename).Replace("provider-", "");
+        Console.WriteLine($"  {label,-7} → http://localhost:3001/providers/{id}");
+    }
+}
 
 static bool IsLocalConnection(string connStr)
 {
