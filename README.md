@@ -8,7 +8,7 @@ source PDF region.
 
 ## Demo
 
-26-second silent walkthrough — operator opens the worst-first provider
+26-second walkthrough — operator opens the worst-first provider
 list, drills into a Yellow at score 62, opens the top Critical issue's
 panel (PDF preview with bounding-box highlight), then switches to the
 per-provider audit timeline.
