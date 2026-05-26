@@ -1,0 +1,28 @@
+{
+  "_method": "Read each packet's PDFs without looking at PacketReady's computed score or golden.json. Rate readiness as Red / Yellow / Green per the rubric (critical blocker / significant issue / ready). Today = 2026-05-26 for expiry judgment.",
+  "_labeler": "Ben (solo for P4 — see README caveat)",
+  "_biasNote": "The labeler is also the designer of the validator suite. The agreement number this set produces measures self-consistency between the rules-in-the-validators and the rules-in-the-labeler's-head — NOT ground truth. A reader looking for 'does this system match an independent expert' should treat the κ as an upper-bound estimate. The README's accuracy section names this in plain language.",
+  "_date": "2026-05-26",
+  "labels": {
+    "packet-001-clean-anderson": "Green",
+    "packet-005-scanned-anderson": "Green",
+    "packet-006-clean-perry": "Green",
+    "packet-008-clean-lopez": "Green",
+    "packet-010-clean-berry": "Green",
+    "packet-014-clean-barker": "Green",
+    "packet-015-clean-hall": "Red",
+    "packet-017-clean-flores": "Red",
+    "packet-019-clean-conflict-name-foster": "Yellow",
+    "packet-021-clean-conflict-name-guzman": "Red",
+    "packet-023-clean-conflict-name-cummings": "Red",
+    "packet-025-clean-conflict-name-bartlett": "Green",
+    "packet-026-clean-conflict-taxonomy-calhoun": "Red",
+    "packet-028-clean-conflict-taxonomy-wade": "Red",
+    "packet-030-clean-conflict-taxonomy-oliver": "Yellow",
+    "packet-033-scanned-rice": "Red",
+    "packet-035-scanned-ferguson": "Green",
+    "packet-040-scanned-tucker": "Red",
+    "packet-046-scanned-conflict-name-blanchard": "Red",
+    "packet-048-scanned-conflict-name-patel": "Red"
+  }
+}
