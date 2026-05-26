@@ -12,6 +12,7 @@ using PacketReady.Application.Extraction.Persist;
 using PacketReady.Application.Prompts;
 using PacketReady.Application.Providers.Aggregation;
 using PacketReady.Domain.Documents;
+using PacketReady.Application.Intake.Outbox;
 using PacketReady.Infrastructure.Audit;
 using PacketReady.Infrastructure.Blob;
 using PacketReady.Infrastructure.Extraction;
@@ -20,6 +21,7 @@ using PacketReady.Infrastructure.Extraction.SonnetExtractors;
 using PacketReady.Application.Nucc;
 using PacketReady.Application.Payers;
 using PacketReady.Infrastructure.Nucc;
+using PacketReady.Infrastructure.Outbox;
 using PacketReady.Infrastructure.Payers;
 using PacketReady.Infrastructure.Persistence;
 using PacketReady.Infrastructure.Providers;
@@ -140,6 +142,25 @@ public static class DependencyInjection
 
         services.AddSingleton(new BlobStoreOptions { RootPath = rootPath });
         services.AddSingleton<IBlobStore, LocalFileBlobStore>();
+        return services;
+    }
+
+    /// <summary>
+    /// File-writing mock SMTP for the P5 demo. Same shape as
+    /// <see cref="AddBlobStorage"/> — caller resolves the absolute root path
+    /// from the API content root + an env-var override
+    /// (<c>MOCK_SMTP_ROOT</c>). P6+ swaps this registration for a real
+    /// <see cref="IEmailSender"/> impl; consumers stay on the port.
+    /// </summary>
+    public static IServiceCollection AddMockSmtp(
+        this IServiceCollection services,
+        string rootPath)
+    {
+        if (string.IsNullOrWhiteSpace(rootPath))
+            throw new ArgumentException("Mock SMTP root path is required.", nameof(rootPath));
+
+        services.AddSingleton(new MockSmtpOptions { RootPath = rootPath });
+        services.AddSingleton<IEmailSender, MockSmtpSender>();
         return services;
     }
 }

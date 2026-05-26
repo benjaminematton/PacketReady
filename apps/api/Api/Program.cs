@@ -31,6 +31,17 @@ var blobStoreAbsolutePath = string.IsNullOrWhiteSpace(blobStoreRoot)
         ? blobStoreRoot
         : Path.Combine(builder.Environment.ContentRootPath, blobStoreRoot);
 builder.Services.AddBlobStorage(blobStoreAbsolutePath);
+
+// P5 outbox transport: file-writing mock SMTP. Same resolution rule as the
+// blob store — env-var override, relative paths anchored at content root —
+// so the demo loom's `.eml` files always land somewhere predictable.
+var mockSmtpRoot = builder.Configuration["MOCK_SMTP_ROOT"];
+var mockSmtpAbsolutePath = string.IsNullOrWhiteSpace(mockSmtpRoot)
+    ? Path.Combine(builder.Environment.ContentRootPath, "outbox")
+    : Path.IsPathRooted(mockSmtpRoot)
+        ? mockSmtpRoot
+        : Path.Combine(builder.Environment.ContentRootPath, mockSmtpRoot);
+builder.Services.AddMockSmtp(mockSmtpAbsolutePath);
 builder.Services.AddMediatR(cfg =>
     cfg.RegisterServicesFromAssembly(typeof(PingCommand).Assembly));
 builder.Services.AddHostedService<PromptResourceValidator>();
