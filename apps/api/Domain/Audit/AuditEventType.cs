@@ -14,4 +14,7 @@ public static class AuditEventType
 
     // Phase 3
     public const string DocumentUploaded = "DocumentUploaded";
+
+    // Phase 5
+    public const string IntakeStarted = "IntakeStarted";
 }

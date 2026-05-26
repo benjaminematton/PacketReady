@@ -3,6 +3,8 @@ using MediatR;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using PacketReady.Api.Endpoints;
+using PacketReady.Api.Endpoints.Intake;
+using PacketReady.Api.Endpoints.Portal;
 using PacketReady.Application;
 using PacketReady.Application.Ping;
 using PacketReady.Application.Prompts;
@@ -34,7 +36,7 @@ builder.Services.AddBlobStorage(blobStoreAbsolutePath);
 
 // P5 outbox transport: file-writing mock SMTP. Same resolution rule as the
 // blob store — env-var override, relative paths anchored at content root —
-// so the demo loom's `.eml` files always land somewhere predictable.
+// so the demo loop's `.eml` files always land somewhere predictable.
 var mockSmtpRoot = builder.Configuration["MOCK_SMTP_ROOT"];
 var mockSmtpAbsolutePath = string.IsNullOrWhiteSpace(mockSmtpRoot)
     ? Path.Combine(builder.Environment.ContentRootPath, "outbox")
@@ -42,6 +44,18 @@ var mockSmtpAbsolutePath = string.IsNullOrWhiteSpace(mockSmtpRoot)
         ? mockSmtpRoot
         : Path.Combine(builder.Environment.ContentRootPath, mockSmtpRoot);
 builder.Services.AddMockSmtp(mockSmtpAbsolutePath);
+
+// P5 magic-link signer. Secret is mandatory in every environment — the
+// issuer throws at construction if it's missing. Dev secrets ride on
+// `dotnet user-secrets` against the same UserSecretsId as
+// ANTHROPIC_API_KEY; ops sets MAGIC_LINK_SIGNING_KEY env var in prod.
+// Rotating this key invalidates outstanding links (phase-5-intake-agent.md
+// "Risks").
+var magicLinkSigningKey = builder.Configuration["MAGIC_LINK_SIGNING_KEY"]
+    ?? throw new InvalidOperationException(
+        "MAGIC_LINK_SIGNING_KEY is not configured; set it via env var or user-secrets.");
+builder.Services.AddMagicLinks(magicLinkSigningKey);
+
 builder.Services.AddMediatR(cfg =>
     cfg.RegisterServicesFromAssembly(typeof(PingCommand).Assembly));
 builder.Services.AddHostedService<PromptResourceValidator>();
@@ -110,6 +124,8 @@ app.MapProviderEndpoints();
 app.MapScoreEndpoints();
 app.MapExtractEndpoint();
 app.MapDocumentEndpoints();
+app.MapStartIntakeEndpoint();
+app.MapPortalEndpoints();
 app.Run();
 
 public partial class Program;

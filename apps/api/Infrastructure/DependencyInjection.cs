@@ -12,6 +12,7 @@ using PacketReady.Application.Extraction.Persist;
 using PacketReady.Application.Prompts;
 using PacketReady.Application.Providers.Aggregation;
 using PacketReady.Domain.Documents;
+using PacketReady.Application.Intake.MagicLinks;
 using PacketReady.Application.Intake.Outbox;
 using PacketReady.Infrastructure.Audit;
 using PacketReady.Infrastructure.Blob;
@@ -20,6 +21,7 @@ using PacketReady.Infrastructure.Extraction.Classifier;
 using PacketReady.Infrastructure.Extraction.SonnetExtractors;
 using PacketReady.Application.Nucc;
 using PacketReady.Application.Payers;
+using PacketReady.Infrastructure.MagicLinks;
 using PacketReady.Infrastructure.Nucc;
 using PacketReady.Infrastructure.Outbox;
 using PacketReady.Infrastructure.Payers;
@@ -161,6 +163,29 @@ public static class DependencyInjection
 
         services.AddSingleton(new MockSmtpOptions { RootPath = rootPath });
         services.AddSingleton<IEmailSender, MockSmtpSender>();
+        return services;
+    }
+
+    /// <summary>
+    /// Magic-link signer + validator. Caller passes the HMAC signing key
+    /// — typically <c>config["MAGIC_LINK_SIGNING_KEY"]</c> from
+    /// <c>Program.cs</c>. The issuer is scoped because it holds the
+    /// scoped <c>IAppDbContext</c>; the secret rides on the options
+    /// singleton.
+    ///
+    /// <para>Rotating the signing key invalidates outstanding magic
+    /// links — flagged in phase-5-intake-agent.md "Risks / open."</para>
+    /// </summary>
+    public static IServiceCollection AddMagicLinks(
+        this IServiceCollection services,
+        string signingKey)
+    {
+        if (string.IsNullOrWhiteSpace(signingKey))
+            throw new ArgumentException(
+                "MAGIC_LINK_SIGNING_KEY is required.", nameof(signingKey));
+
+        services.AddSingleton(new MagicLinkOptions { SigningKey = signingKey });
+        services.AddScoped<IMagicLinkAuthority, MagicLinkIssuer>();
         return services;
     }
 }
