@@ -2,6 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using PacketReady.Application.Abstractions;
 using PacketReady.Domain.Audit;
 using PacketReady.Domain.Documents;
+using PacketReady.Domain.Intake;
+using PacketReady.Domain.MagicLinks;
+using PacketReady.Domain.Messaging;
 using PacketReady.Domain.Providers;
 using PacketReady.Domain.Scoring;
 
@@ -16,6 +19,9 @@ public sealed class PacketReadyDbContext : DbContext, IAppDbContext
     public DbSet<ReadinessScore> ReadinessScores => Set<ReadinessScore>();
     public DbSet<Document> Documents => Set<Document>();
     public DbSet<DocumentExtraction> DocumentExtractions => Set<DocumentExtraction>();
+    public DbSet<IntakeSession> IntakeSessions => Set<IntakeSession>();
+    public DbSet<OutboundMessage> OutboundMessages => Set<OutboundMessage>();
+    public DbSet<MagicLink> MagicLinks => Set<MagicLink>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
