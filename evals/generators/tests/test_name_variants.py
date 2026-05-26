@@ -37,13 +37,9 @@ def _planted_shape(spec) -> str | None:
 
 
 def _clean_pattern(spec) -> str:
-    # Pattern is recorded in the notes block by `_spec_from_profile`.
-    # Surface the substring rather than re-deriving from the per-doc names —
-    # the latter would test names_for_clean_pattern via its own output.
-    for token in spec.notes.split():
-        if token.startswith("clean_pattern="):
-            return token.split("=", 1)[1].rstrip(",.)")
-    raise AssertionError(f"no clean_pattern in spec.notes for {spec.id}")
+    if spec.clean_pattern is None:
+        raise AssertionError(f"no clean_pattern set on {spec.id}")
+    return spec.clean_pattern.name
 
 
 def test_every_clean_pattern_appears_across_new_packets() -> None:

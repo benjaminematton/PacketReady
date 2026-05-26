@@ -35,7 +35,7 @@ import argparse
 import csv
 import re
 import sys
-from collections import Counter, OrderedDict
+from collections import Counter
 from pathlib import Path
 
 

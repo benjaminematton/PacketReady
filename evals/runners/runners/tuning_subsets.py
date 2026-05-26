@@ -29,6 +29,8 @@ validator lands; the same diversity + disjointness assertions apply.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from random import Random
 
 # Importing from packetready_eval pins the subset definitions to the canonical
@@ -47,14 +49,11 @@ from packetready_eval.packets import PACKET_SPECS, build_new_packets
 _HELDOUT_SEED: int = 9999
 _HELDOUT_SIZE: int = 10
 
-
-def _all_packet_ids() -> tuple[str, ...]:
-    """All packet ids across the P2 hand-crafted PACKET_SPECS and the
-    programmatic build_new_packets(), sorted for stable ordering."""
-    return tuple(sorted(s.id for s in [*PACKET_SPECS, *build_new_packets()]))
-
-
-_ALL_PACKET_IDS: tuple[str, ...] = _all_packet_ids()
+# build_new_packets() runs the full Faker + NPPES sampling pipeline — cache
+# its result at module load so heldout/tuning derivation + variant coverage
+# don't re-pay it on every reference.
+_ALL_SPECS = (*PACKET_SPECS, *build_new_packets())
+_ALL_PACKET_IDS: tuple[str, ...] = tuple(sorted(s.id for s in _ALL_SPECS))
 
 IDENTITY_COHERENCE_HELDOUT: tuple[str, ...] = tuple(sorted(
     Random(_HELDOUT_SEED).sample(_ALL_PACKET_IDS, _HELDOUT_SIZE)
@@ -122,18 +121,18 @@ def _variant_coverage_check() -> None:
     ConflictShape. Run at import; raises AssertionError with a precise diff
     if a pattern/shape is missing. Re-pick the absent IDs from the canonical
     generator state and update the tuple above."""
-    specs_by_id = {s.id: s for s in [*PACKET_SPECS, *build_new_packets()]}
+    specs_by_id = {s.id: s for s in _ALL_SPECS}
     tuning_specs = [specs_by_id[i] for i in IDENTITY_COHERENCE_TUNING]
 
-    clean_patterns_present = set()
-    conflict_shapes_present = set()
-    for spec in tuning_specs:
-        for tok in spec.notes.split():
-            if tok.startswith("clean_pattern="):
-                clean_patterns_present.add(tok.split("=", 1)[1].rstrip(",.)"))
-        for marker in spec.planted_conflicts:
-            if marker.get("kind") == "name_variant" and "shape" in marker:
-                conflict_shapes_present.add(marker["shape"])
+    clean_patterns_present = {
+        spec.clean_pattern.name for spec in tuning_specs if spec.clean_pattern is not None
+    }
+    conflict_shapes_present = {
+        marker["shape"]
+        for spec in tuning_specs
+        for marker in spec.planted_conflicts
+        if marker.get("kind") == "name_variant" and "shape" in marker
+    }
 
     missing_patterns = {p.name for p in CleanNamePattern} - clean_patterns_present
     missing_shapes = {s.name for s in ConflictShape} - conflict_shapes_present
@@ -146,3 +145,89 @@ def _variant_coverage_check() -> None:
 
 
 _variant_coverage_check()
+
+
+# ---------------------------------------------------------------------------
+# Shared manifest: this Python module is the source of truth; the C# tuning
+# CLI reads `evals/tuning_subsets.json` at startup. Keeping the C# side as a
+# read-from-disk consumer (rather than a duplicate hardcoded list) means any
+# future re-pick of the tuning subset propagates without a manual edit on the
+# .NET side.
+# ---------------------------------------------------------------------------
+
+MANIFEST_RELATIVE_PATH = Path("evals") / "tuning_subsets.json"
+
+
+def manifest_dict() -> dict[str, list[str]]:
+    """The on-disk JSON shape that both Python and C# consume."""
+    return {
+        "identityCoherenceTuning": list(IDENTITY_COHERENCE_TUNING),
+        "identityCoherenceHeldout": list(IDENTITY_COHERENCE_HELDOUT),
+    }
+
+
+def write_manifest(repo_root: Path) -> Path:
+    """Writes `evals/tuning_subsets.json` under `repo_root`. Called by the
+    packet-regen CLI so artifacts stay in lockstep."""
+    path = repo_root / MANIFEST_RELATIVE_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(manifest_dict(), indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _repo_root_from_here() -> Path:
+    # tuning_subsets.py lives at <repo>/evals/runners/runners/.
+    return Path(__file__).resolve().parents[3]
+
+
+def _assert_on_disk_manifest_matches() -> None:
+    """If the JSON manifest exists on disk, assert it agrees with what this
+    module computed. Drift means someone added a packet without re-running
+    `python -m packetready_eval.packets evals/dataset/` — fail loudly so the
+    C# CLI doesn't run against a stale subset."""
+    path = _repo_root_from_here() / MANIFEST_RELATIVE_PATH
+    if not path.exists():
+        return
+    try:
+        on_disk = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise AssertionError(f"{path} is not valid JSON: {exc}") from exc
+    expected = manifest_dict()
+    if on_disk != expected:
+        raise AssertionError(
+            f"On-disk {path.name} is out of sync with this module's tuples. "
+            f"Re-run `python -m packetready_eval.packets evals/dataset/` "
+            f"(or `python -m runners.tuning_subsets --write`) to refresh it.\n"
+            f"  on-disk:  {on_disk}\n"
+            f"  expected: {expected}"
+        )
+
+
+_assert_on_disk_manifest_matches()
+
+
+def _main(argv: list[str] | None = None) -> int:
+    import argparse
+    parser = argparse.ArgumentParser(
+        description="Manage the tuning_subsets.json manifest read by the C# tuning CLI."
+    )
+    parser.add_argument(
+        "--write",
+        action="store_true",
+        help="Write the manifest under <repo>/evals/tuning_subsets.json.",
+    )
+    args = parser.parse_args(argv)
+    if args.write:
+        path = write_manifest(_repo_root_from_here())
+        print(f"wrote {path}")
+        return 0
+    parser.print_help()
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(_main())

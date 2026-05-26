@@ -44,9 +44,18 @@ class PacketSpec:
     dea_fields: DeaFields
     board_cert_fields: BoardCertFields
     malpractice_fields: MalpracticeFields
-    planted_conflicts: list[dict[str, Any]] = field(default_factory=list)
+    # Tuple (not list) so the frozen contract extends to the conflict markers
+    # themselves — `replace(spec, planted_conflicts=(*spec.planted_conflicts, m))`
+    # is the only mutation path. dict elements stay mutable for forward-compat;
+    # callers MUST NOT in-place mutate them.
+    planted_conflicts: tuple[dict[str, Any], ...] = field(default_factory=tuple)
     notes: str = ""
     scanned: bool = False        # P005 only — rasterize+degrade after rendering
+    # Which CleanNamePattern this packet's per-doc names render. Set by the
+    # programmatic builder; P2 hand-crafted packets leave it None (they're
+    # canonical baselines, not pattern coverage). Persisted into golden.json
+    # under metadata.cleanPattern so the C# CLI can break FPs down per-pattern.
+    clean_pattern: CleanNamePattern | None = None
 
 
 # --- Anderson canonical fields, shared by packets 001 and 005 ----------------
@@ -182,7 +191,7 @@ PACKET_SPECS: list[PacketSpec] = [
             licensee_license_number="MD-NY-44210",
             licensee_license_expiry="2027-06-30",
         ),
-        planted_conflicts=[
+        planted_conflicts=(
             {
                 "kind": "name_variant",
                 "shape": "HYPHENATED_SUFFIX",  # hand-coded predecessor of the planter's HYPHENATED_SUFFIX
@@ -192,7 +201,7 @@ PACKET_SPECS: list[PacketSpec] = [
                 "expectedSeverity": "Critical",
                 "expected_to_flag": True,
             },
-        ],
+        ),
         notes="Per-doc extraction must read each PDF's literal name. Cross-doc validator (P4) surfaces the variant.",
     ),
 
@@ -233,7 +242,7 @@ PACKET_SPECS: list[PacketSpec] = [
             licensee_license_number="036-IL-58031",
             licensee_license_expiry="2027-09-30",  # Malpractice footer disagrees
         ),
-        planted_conflicts=[
+        planted_conflicts=(
             {
                 "kind": "expiry_mismatch",
                 "field": "license.expiryDate",
@@ -245,7 +254,7 @@ PACKET_SPECS: list[PacketSpec] = [
                 # for marker-schema uniformity.
                 "expected_to_flag": False,
             },
-        ],
+        ),
         notes="Per-doc extraction reads each PDF accurately. P4 cross-doc validator catches the disagreement.",
     ),
 
@@ -316,7 +325,11 @@ def golden_for(spec: PacketSpec) -> dict[str, Any]:
     Exposed (not underscored) because the schema-invariant test loads it
     directly without invoking the PDF renderers.
     """
-    return {
+    metadata: dict[str, Any] = {}
+    if spec.clean_pattern is not None:
+        metadata["cleanPattern"] = spec.clean_pattern.name
+
+    out: dict[str, Any] = {
         "packetId": spec.id,
         "label": spec.label,
         "documents": [
@@ -325,9 +338,12 @@ def golden_for(spec: PacketSpec) -> dict[str, Any]:
             {"type": BOARD_CERT,  "filename": DOC_FILENAMES[BOARD_CERT],  "fields": _board_cert_json(spec.board_cert_fields)},
             {"type": MALPRACTICE, "filename": DOC_FILENAMES[MALPRACTICE], "fields": _malpractice_json(spec.malpractice_fields)},
         ],
-        "plantedConflicts": spec.planted_conflicts,
+        "plantedConflicts": list(spec.planted_conflicts),
         "notes": spec.notes,
     }
+    if metadata:
+        out["metadata"] = metadata
+    return out
 
 
 # --- packet write loop --------------------------------------------------------
@@ -544,8 +560,9 @@ def _spec_from_profile(idx: int, profile: SampledProfile, faker: Faker, rng: Ran
             licensee_license_number=license_number,
             licensee_license_expiry=_date_str(license_expiry),
         ),
+        clean_pattern=clean_pattern,
         notes=(
-            f"P4 programmatic ({tag}, clean_pattern={clean_pattern.name}). "
+            f"P4 programmatic ({tag}). "
             f"NPPES taxonomy {profile.taxonomy_code} / {profile.primary_specialty}."
         ),
     )
@@ -609,9 +626,35 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         help="Directory to write packets into (e.g. evals/dataset/).",
     )
+    parser.add_argument(
+        "--no-manifest",
+        action="store_true",
+        help="Skip writing evals/tuning_subsets.json. Use only for dataset-only "
+             "experiments where the runners/ module isn't on the path.",
+    )
     args = parser.parse_args(argv)
     generate_all(args.output_root)
     print(f"wrote {len(all_specs())} packets into {args.output_root}")
+
+    if not args.no_manifest:
+        # Late import to break the runners/ ↔ packetready_eval/ cycle.
+        # tuning_subsets re-derives the tuples on import, so this works the
+        # moment we've written the dataset.
+        try:
+            from runners.tuning_subsets import write_manifest
+        except ImportError:
+            print(
+                "  (skipping tuning_subsets.json — runners/ not on sys.path; "
+                "run `pip install -e evals/runners` or invoke "
+                "`python -m runners.tuning_subsets --write` separately)"
+            )
+        else:
+            # output_root is conventionally `<repo>/evals/dataset/`; the
+            # repo root is two levels up. Resolve before stepping so symlinks
+            # and trailing slashes don't trip the parents lookup.
+            repo_root = args.output_root.resolve().parents[1]
+            manifest_path = write_manifest(repo_root)
+            print(f"wrote {manifest_path}")
     return 0
 
 

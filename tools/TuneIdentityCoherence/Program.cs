@@ -51,7 +51,12 @@ IPromptLoader promptLoader = opts.PromptPath is null
 builder.Services.AddSingleton(promptLoader);
 
 builder.Services.AddSingleton(_ => new AnthropicClient(apiKey));
-builder.Services.AddSingleton<IChatClient>(sp => sp.GetRequiredService<AnthropicClient>().Messages);
+// Wrap the underlying chat client in a counting decorator so the iteration
+// log can quote real token usage. The validator sees the decorator's
+// IChatClient interface and stays oblivious — no change to Application/.
+builder.Services.AddSingleton<CountingChatClient>(sp =>
+    new CountingChatClient(sp.GetRequiredService<AnthropicClient>().Messages));
+builder.Services.AddSingleton<IChatClient>(sp => sp.GetRequiredService<CountingChatClient>());
 
 builder.Services.AddSingleton<IdentityCoherenceValidator>();
 
@@ -89,14 +94,15 @@ else
 var promptSha = Convert.ToHexStringLower(SHA256.HashData(promptBytes));
 
 // ============================================================================
-// Held-out enforcement. The held-out IDs are hard-coded here for portability
-// (no Python import); evals/runners/runners/tuning_subsets.py is the source
-// of truth — re-pin via a fresh draw with seed=9999 when the canonical
-// 50-packet set changes. Cross-checked by Sanity.Heldout below.
+// Tuning + held-out subsets come from `evals/tuning_subsets.json`, which the
+// Python regen pipeline writes from `runners/tuning_subsets.py` (the canonical
+// source). One file means C# can't drift from Python — adding a packet and
+// re-running regen updates both ends atomically.
 // ============================================================================
 
-var packets = opts.Packets ?? Sanity.DefaultTuningSubset;
-var heldoutIntersect = packets.Intersect(Sanity.Heldout).ToList();
+var manifest = TuningSubsetsManifest.Load(repoRoot);
+var packets = opts.Packets ?? manifest.Tuning;
+var heldoutIntersect = packets.Intersect(manifest.Heldout).ToList();
 if (heldoutIntersect.Count > 0 && !opts.AllowHeldout)
     throw new InvalidOperationException(
         $"Refusing to run on held-out packet(s): {string.Join(", ", heldoutIntersect)}. " +
@@ -109,6 +115,7 @@ if (heldoutIntersect.Count > 0 && !opts.AllowHeldout)
 // ============================================================================
 
 var validator = host.Services.GetRequiredService<IdentityCoherenceValidator>();
+var chatCounter = host.Services.GetRequiredService<CountingChatClient>();
 var emptyProvenance = (IReadOnlyDictionary<string, FieldProvenance>)
     new Dictionary<string, FieldProvenance>();
 
@@ -129,14 +136,25 @@ for (var run = 1; run <= opts.Runs; run++)
         var profile = PacketGoldenLoader.LoadProfile(dir);
         var planted = PacketGoldenLoader.LoadPlantedConflicts(dir);
 
+        var callsBefore = chatCounter.Calls.Count;
         var sw = Stopwatch.StartNew();
         var issues = await validator.RunAsync(profile, emptyProvenance, CancellationToken.None);
         sw.Stop();
+        // The validator short-circuits to zero LLM calls when <2 names are
+        // present; sum what landed on the counter since the call started.
+        long packetInTokens = 0, packetOutTokens = 0;
+        for (var c = callsBefore; c < chatCounter.Calls.Count; c++)
+        {
+            packetInTokens += chatCounter.Calls[c].InputTokens;
+            packetOutTokens += chatCounter.Calls[c].OutputTokens;
+        }
 
         runResults.Add(new PacketRunResult(
-            packetId, planted, issues, sw.ElapsedMilliseconds));
+            packetId, planted, issues, sw.ElapsedMilliseconds,
+            packetInTokens, packetOutTokens));
         Console.WriteLine(
-            $"  {packetId,-50} planted={planted.Count} emitted={issues.Count} ({sw.ElapsedMilliseconds}ms)");
+            $"  {packetId,-50} planted={planted.Count} emitted={issues.Count} " +
+            $"tokens=in:{packetInTokens}/out:{packetOutTokens} ({sw.ElapsedMilliseconds}ms)");
         foreach (var i in issues)
             Console.WriteLine($"      → [{i.Severity}] {i.Message}");
     }
@@ -157,19 +175,16 @@ var finalResults = worstRunResults!;
 var finalMetrics = worstRunMetrics!;
 
 // ============================================================================
-// Aggregate tokens + estimated cost (claude-sonnet-4-6 list pricing as of
-// 2026-Q2 per Anthropic public pricing). Cost is "estimated" because cached
-// reads aren't separated in M.E.AI's Usage; treat as a ceiling.
+// Aggregate tokens + estimated cost. Pricing is claude-sonnet-4-6 public
+// list pricing (USD per million tokens). Cached reads aren't separated in
+// M.E.AI's Usage shape, so treat the figure as a ceiling on actual billed
+// cost — fine for trend tracking, not for finance reconciliation.
 // ============================================================================
 
-const double InputCostPerMillion = 3.00;   // USD per million input tokens
-const double OutputCostPerMillion = 15.00; // USD per million output tokens
-var totalIn = finalResults.Sum(r => r.Issues.Sum(_ => 0L));  // M.E.AI doesn't surface per-call usage on this path
-var totalOut = 0L;
-// NOTE: token usage on the IChatClient response isn't easy to thread through
-// here without modifying IdentityCoherenceValidator's return shape. For task
-// 9's iteration loop the wall-time + planted/emitted counts are the load-bearing
-// numbers; token-accurate cost lands when ChatResponse.Usage is plumbed out.
+const double InputCostPerMillion = 3.00;
+const double OutputCostPerMillion = 15.00;
+var totalIn = finalResults.Sum(r => r.InputTokens);
+var totalOut = finalResults.Sum(r => r.OutputTokens);
 var estimatedCost = (totalIn / 1_000_000.0 * InputCostPerMillion)
                   + (totalOut / 1_000_000.0 * OutputCostPerMillion);
 
@@ -195,8 +210,8 @@ var log = new IterationLog(
             Message: i.Message,
             Remediation: i.Remediation,
             Sources: i.Citations.Select(c => c.ExtractedValue).ToList())).ToList(),
-        InputTokens: 0,
-        OutputTokens: 0,
+        InputTokens: r.InputTokens,
+        OutputTokens: r.OutputTokens,
         WallTimeMs: r.WallTimeMs)).ToList(),
     Metrics: finalMetrics,
     TotalInputTokens: totalIn,
@@ -341,7 +356,9 @@ internal sealed record PacketRunResult(
     string PacketId,
     IReadOnlyList<PlantedMarker> Planted,
     IReadOnlyList<Issue> Issues,
-    long WallTimeMs);
+    long WallTimeMs,
+    long InputTokens,
+    long OutputTokens);
 
 internal sealed class CliOptions
 {
@@ -443,41 +460,50 @@ internal sealed class CliOptions
 }
 
 /// <summary>
-/// Hardcoded packet IDs mirrored from
-/// <c>evals/runners/runners/tuning_subsets.py</c>. Python is the source of
-/// truth; this CLI is the consumer. Re-pin both when the canonical 50-packet
-/// set changes. <see cref="PacketReady.TuneIdentityCoherence.Tests"/> (when
-/// added) asserts these match the Python tuples.
+/// Loads `evals/tuning_subsets.json`, the manifest written by
+/// <c>evals/runners/runners/tuning_subsets.py</c>. The Python module is the
+/// source of truth; this loader is the consumer. Missing/malformed manifest
+/// fails loud with a one-line remediation pointing at the regen command —
+/// running on stale or stub data would be worse than refusing to start.
 /// </summary>
-internal static class Sanity
+internal sealed record TuningSubsetsManifest(
+    IReadOnlyList<string> Tuning,
+    IReadOnlyList<string> Heldout)
 {
-    public static readonly IReadOnlyList<string> DefaultTuningSubset =
-    [
-        "packet-010-clean-berry",                       // CREDENTIAL_MD
-        "packet-006-clean-perry",                       // CREDENTIAL_PERIODS
-        "packet-018-clean-rogers",                      // HYPHENATED_ALREADY
-        "packet-007-clean-myers",                       // MIDDLE_INITIAL
-        "packet-014-clean-barker",                      // WHITESPACE_VARIANT
-        "packet-003-conflict-name",                     // HYPHENATED_SUFFIX
-        "packet-025-clean-conflict-name-bartlett",      // MIDDLE_NAME_ADDED
-        "packet-021-clean-conflict-name-guzman",        // NICKNAME
-        "packet-022-clean-conflict-name-alexander",     // SURNAME_TYPO (don't-flag)
-        "packet-023-clean-conflict-name-cummings",      // SURNAME_SWAP
-    ];
+    public static TuningSubsetsManifest Load(string repoRoot)
+    {
+        var path = Path.Combine(repoRoot, "evals", "tuning_subsets.json");
+        if (!File.Exists(path))
+            throw new FileNotFoundException(
+                $"Tuning-subsets manifest not found at {path}. " +
+                "Run `python -m packetready_eval.packets evals/dataset/` " +
+                "(or `python -m runners.tuning_subsets --write`) to write it.",
+                path);
 
-    public static readonly IReadOnlyList<string> Heldout =
-    [
-        "packet-005-scanned-anderson",
-        "packet-008-clean-lopez",
-        "packet-009-clean-cervantes",
-        "packet-011-clean-wilson",
-        "packet-013-clean-jackson",
-        "packet-019-clean-conflict-name-foster",
-        "packet-020-clean-conflict-name-parker",
-        "packet-038-scanned-ray",
-        "packet-039-scanned-king",
-        "packet-046-scanned-conflict-name-blanchard",
-    ];
+        using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+        var root = doc.RootElement;
+        return new TuningSubsetsManifest(
+            Tuning: ReadStringArray(root, "identityCoherenceTuning", path),
+            Heldout: ReadStringArray(root, "identityCoherenceHeldout", path));
+    }
+
+    private static IReadOnlyList<string> ReadStringArray(
+        System.Text.Json.JsonElement root, string property, string path)
+    {
+        if (!root.TryGetProperty(property, out var arr)
+            || arr.ValueKind != System.Text.Json.JsonValueKind.Array)
+            throw new InvalidOperationException(
+                $"Manifest at {path} is missing required string array '{property}'.");
+        var list = new List<string>(arr.GetArrayLength());
+        foreach (var item in arr.EnumerateArray())
+        {
+            if (item.ValueKind != System.Text.Json.JsonValueKind.String)
+                throw new InvalidOperationException(
+                    $"Manifest at {path} has a non-string element in '{property}'.");
+            list.Add(item.GetString()!);
+        }
+        return list;
+    }
 }
 
 /// <summary>

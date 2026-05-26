@@ -1,0 +1,26 @@
+{
+  "identityCoherenceTuning": [
+    "packet-010-clean-berry",
+    "packet-006-clean-perry",
+    "packet-018-clean-rogers",
+    "packet-007-clean-myers",
+    "packet-014-clean-barker",
+    "packet-003-conflict-name",
+    "packet-025-clean-conflict-name-bartlett",
+    "packet-021-clean-conflict-name-guzman",
+    "packet-022-clean-conflict-name-alexander",
+    "packet-023-clean-conflict-name-cummings"
+  ],
+  "identityCoherenceHeldout": [
+    "packet-005-scanned-anderson",
+    "packet-008-clean-lopez",
+    "packet-009-clean-cervantes",
+    "packet-011-clean-wilson",
+    "packet-013-clean-jackson",
+    "packet-019-clean-conflict-name-foster",
+    "packet-020-clean-conflict-name-parker",
+    "packet-038-scanned-ray",
+    "packet-039-scanned-king",
+    "packet-046-scanned-conflict-name-blanchard"
+  ]
+}

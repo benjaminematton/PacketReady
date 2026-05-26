@@ -95,7 +95,7 @@ def plant_name_variant(
     return replace(
         spec,
         malpractice_fields=replace(spec.malpractice_fields, full_name=variant),
-        planted_conflicts=[
+        planted_conflicts=(
             *spec.planted_conflicts,
             {
                 "kind": "name_variant",
@@ -106,7 +106,7 @@ def plant_name_variant(
                 "expectedSeverity": "Critical",
                 "expected_to_flag": EXPECTED_TO_FLAG[shape],
             },
-        ],
+        ),
     )
 
 
@@ -134,7 +134,7 @@ def plant_taxonomy_specialty_mismatch(spec: "PacketSpec", rng: Random) -> "Packe
             specialty=b_name,
             board=b_info.board_acronym,
         ),
-        planted_conflicts=[
+        planted_conflicts=(
             *spec.planted_conflicts,
             {
                 "kind": "taxonomy_specialty_mismatch",
@@ -147,7 +147,7 @@ def plant_taxonomy_specialty_mismatch(spec: "PacketSpec", rng: Random) -> "Packe
                 "expectedSeverity": "Critical",
                 "expected_to_flag": True,
             },
-        ],
+        ),
     )
 
 

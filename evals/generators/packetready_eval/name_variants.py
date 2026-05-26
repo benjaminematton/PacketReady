@@ -55,9 +55,11 @@ class CleanNamePattern(Enum):
     # "Henry Anderson-Jones, MD" on every doc — the hyphen-already case.
     # If the LLM flags hyphenation as a conflict, it'll fire here too.
     HYPHENATED_ALREADY = auto()
-    # "Henry Anderson, MD" on three docs; "Henry  Anderson, MD" (double
-    # space) on board cert — the whitespace-collapse case.
-    WHITESPACE_VARIANT = auto()
+    # "Henry Anderson, MD" on three docs; "HENRY ANDERSON" on the DEA
+    # certificate — the all-caps DEA-print case. Vision extractors preserve
+    # case reliably, so this exercises the LLM's case-normalization (unlike
+    # double-space variants which vision tends to collapse upstream).
+    CASE_VARIANT = auto()
 
 
 @dataclass(frozen=True)
@@ -106,11 +108,10 @@ def names_for_clean_pattern(
         full = f"{first} {last}-Jones, MD"
         dea = f"{first} {last}-Jones"
         return DocNames(license=full, dea=dea, board_cert=full, malpractice=full)
-    if pattern is CleanNamePattern.WHITESPACE_VARIANT:
+    if pattern is CleanNamePattern.CASE_VARIANT:
         normal = f"{first} {last}, MD"
-        doubled = f"{first}  {last}, MD"  # two spaces between first and last
-        bare = f"{first} {last}"
-        return DocNames(license=normal, dea=bare, board_cert=doubled, malpractice=normal)
+        all_caps = f"{first.upper()} {last.upper()}"  # DEA prints uppercased + bare
+        return DocNames(license=normal, dea=all_caps, board_cert=normal, malpractice=normal)
     raise ValueError(f"Unhandled CleanNamePattern: {pattern}")
 
 
@@ -219,20 +220,21 @@ def malpractice_variant_for_shape(
         return f"{nick} {last}{license_suffix}"
 
     if shape is ConflictShape.SURNAME_TYPO:
-        if len(last) < 3:
-            # Can't safely typo a two-letter surname — swap last two letters
-            # would still produce a "real" disagreement. Pin to a fixed typo.
-            typo = last + "x"
-        else:
-            # Replace the penultimate letter with its neighbor in the alphabet.
-            # Deterministic per (last, rng) and shape-preserving (length stays
-            # the same, only one letter differs).
-            idx = len(last) - 2
-            ch = last[idx]
-            shifted = chr(((ord(ch.lower()) - ord('a') + 1) % 26) + ord('a'))
-            if ch.isupper():
-                shifted = shifted.upper()
-            typo = last[:idx] + shifted + last[idx + 1:]
+        # Find the rightmost alphabetic position (skipping hyphens / apostrophes)
+        # and shift it by one letter. Length-preserving and shape-preserving
+        # regardless of input — works on "Li", "O'Brien", "Smith-Jones". Refuses
+        # on a surname with zero letters (catches a fixture bug rather than
+        # producing a meaningless variant).
+        letter_positions = [i for i, ch in enumerate(last) if ch.isalpha()]
+        if not letter_positions:
+            raise ValueError(
+                f"SURNAME_TYPO requires at least one alphabetic character in surname; got {last!r}")
+        idx = letter_positions[-1] if len(letter_positions) == 1 else letter_positions[-2]
+        ch = last[idx]
+        shifted = chr(((ord(ch.lower()) - ord('a') + 1) % 26) + ord('a'))
+        if ch.isupper():
+            shifted = shifted.upper()
+        typo = last[:idx] + shifted + last[idx + 1:]
         return f"{first} {typo}{license_suffix}"
 
     if shape is ConflictShape.SURNAME_SWAP:
