@@ -35,10 +35,14 @@ public class PinnedShippedPromptHashesTests
     private const string MalpracticeExtractionHash =
         "45b8b2a202ea0cf894bcdec44f36b7059d0e794cb57477f45db4a2b239cbe19f";
     // P4 task 8 — IdentityCoherenceValidator. Editing the prompt bumps to v2.md.
-    // Re-pinned in task 9 prep: malpractice source added before any extraction
-    // row referenced the v1 hash, so no audit migration needed.
+    // Re-pinned during task 9 iteration loop. The IdentityCoherence prompt is
+    // actively tuned in this phase; each iteration's hash lands here once
+    // converged. The validator's hash isn't referenced by any document_extractions
+    // row (validators don't produce extractions), so per-iteration churn here is
+    // safe — the audit-trail "promote to v2.md" rule only applies to extractor
+    // prompts. Iter 1: surname_typo_overreact rule strengthened.
     private const string IdentityCoherenceHash =
-        "aeb3e6a30cfd2051a7bc6cc2165a80413238b620407bf3e5ac6e3fb95738d8ce";
+        "48322ce74b3586a737a2b2f56e516154103b557f4c18edb647d1e703f92943a4";
 
     private static readonly IReadOnlyDictionary<string, string> Pinned =
         new Dictionary<string, string>

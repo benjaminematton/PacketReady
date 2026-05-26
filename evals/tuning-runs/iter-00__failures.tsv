@@ -1,0 +1,3 @@
+iteration	packet_id	failure_type	llm_message	category
+0	packet-025-clean-conflict-name-bartlett	missed_should_flag		middle_name_miss
+0	packet-022-clean-conflict-name-alexander	fp_on_dont_flag	Malpractice records 'Todd Alexandfr, MD' while license, DEA, and board certification all record 'Todd J. Alexander' — the surname appears to contain a typo ('Alexandfr' vs 'Alexander').	surname_typo_overreact

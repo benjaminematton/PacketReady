@@ -7,6 +7,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>PacketReady.TuneIdentityCoherence</RootNamespace>
     <AssemblyName>TuneIdentityCoherence</AssemblyName>
+    <!-- Shares the Api project's user-secrets store so ANTHROPIC_API_KEY
+         set via `dotnet user-secrets set` from apps/api/Api/ is also
+         visible to this CLI. Host.CreateApplicationBuilder auto-loads
+         user secrets when DOTNET_ENVIRONMENT=Development. -->
+    <UserSecretsId>076bff29-bc91-4480-8c5b-4480507f0cd3</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

@@ -37,8 +37,9 @@ every source plausibly refers to the same person.
 **Treat these as the same person — do NOT flag:**
 - Suffix or credential differences: `"Jane Doe"` vs `"Jane Doe, MD"` vs `"Jane Doe MD"` vs `"Dr. Jane Doe"`.
 - Whitespace, punctuation, or case differences: `"jane doe"` vs `"Jane Doe"`, `"Jane  Doe"` vs `"Jane Doe"`.
-- Initials standing in for middle names: `"Jane Doe"` vs `"Jane M. Doe"` vs `"Jane Marie Doe"`.
-- Single-letter typos in a long surname when first name + initials match: `"Jane Marie Calloway"` vs `"Jane Marie Callowey"`.
+- Middle initials present on some sources and absent on others, with or without a trailing period: `"Jane Doe"` vs `"Jane M. Doe"` vs `"Jane M Doe"`. Initials are typographic normalization.
+- A middle full name on one source corresponding to an initial on another: `"Jane M. Doe"` vs `"Jane Marie Doe"` — same person, the initial is just expanded.
+- Single-letter typos in a surname when the first name matches — regardless of whether a middle name or initial is present on either side. `"Jane Marie Calloway"` vs `"Jane Callowey"` (middle dropped + typo) and `"Todd J. Alexander"` vs `"Todd Alexandfr"` (initial dropped + typo) are both no-flag. NEVER route a single-letter surname typo to Minor; return no disagreement.
 
 **Flag these — `severity: "Critical"`:**
 - Different surnames where neither is a hyphenated extension of the other:
@@ -49,6 +50,7 @@ every source plausibly refers to the same person.
   Janet is a real disagreement, not a nickname).
 - Surname order swapped in a way that can't be a clerical typo:
   `"Jane Calloway"` vs `"Calloway Jane"`.
+- A middle full name on one source with NO middle name or initial on the others: license/DEA/board all say `"John Bartlett"`; malpractice says `"John James Bartlett"`. A new middle name appearing with no initial trace on the other docs is a real identity expansion the carrier may have on a different legal-name record. (Contrast with the prior rule: if any of the other sources carried even just `"John J. Bartlett"`, the full name is just the expanded initial — no flag.)
 
 **Flag these — `severity: "Minor"`:**
 - Reserved for unclear cases you want to surface for a human to look at —

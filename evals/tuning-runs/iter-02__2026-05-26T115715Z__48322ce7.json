@@ -1,0 +1,210 @@
+{
+  "iteration": 2,
+  "recordedAt": "2026-05-26T11:57:15.224603+00:00",
+  "promptPath": "embedded:IdentityCoherencePrompt.v1.md",
+  "promptSha256": "48322ce74b3586a737a2b2f56e516154103b557f4c18edb647d1e703f92943a4",
+  "modelId": "claude-sonnet-4-6",
+  "notes": "middle_name_miss: instruction-level \u2014 split don\u0027t-flag (initials) from flag (full middle name with no initial trace), per planter\u0027s intent",
+  "packetIds": [
+    "packet-010-clean-berry",
+    "packet-006-clean-perry",
+    "packet-018-clean-rogers",
+    "packet-007-clean-myers",
+    "packet-014-clean-barker",
+    "packet-003-conflict-name",
+    "packet-025-clean-conflict-name-bartlett",
+    "packet-021-clean-conflict-name-guzman",
+    "packet-022-clean-conflict-name-alexander",
+    "packet-023-clean-conflict-name-cummings"
+  ],
+  "packetResults": [
+    {
+      "packetId": "packet-010-clean-berry",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1759,
+      "outputTokens": 9,
+      "wallTimeMs": 1933
+    },
+    {
+      "packetId": "packet-006-clean-perry",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1768,
+      "outputTokens": 9,
+      "wallTimeMs": 2069
+    },
+    {
+      "packetId": "packet-018-clean-rogers",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1767,
+      "outputTokens": 9,
+      "wallTimeMs": 1372
+    },
+    {
+      "packetId": "packet-007-clean-myers",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1766,
+      "outputTokens": 9,
+      "wallTimeMs": 1498
+    },
+    {
+      "packetId": "packet-014-clean-barker",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1768,
+      "outputTokens": 9,
+      "wallTimeMs": 1599
+    },
+    {
+      "packetId": "packet-003-conflict-name",
+      "plantedKinds": [
+        "name_variant"
+      ],
+      "plantedShape": "HYPHENATED_SUFFIX",
+      "expectedToFlag": true,
+      "emittedIssues": [
+        {
+          "severity": "Critical",
+          "message": "License, DEA, and board certification record \u0027Jane Calloway\u0027 while malpractice records \u0027Jane C. Calloway-Smith, MD\u0027, indicating a hyphenated/married-name surname disagreement.",
+          "remediation": "Confirm the provider\u0027s current legal name and obtain a name-change record or updated documentation reconciling \u0027Calloway\u0027 with \u0027Calloway-Smith\u0027 across all credentialing sources.",
+          "sources": [
+            "Jane Calloway, MD",
+            "Jane Calloway",
+            "Jane Calloway, MD",
+            "Jane C. Calloway-Smith, MD"
+          ]
+        }
+      ],
+      "inputTokens": 1771,
+      "outputTokens": 134,
+      "wallTimeMs": 3110
+    },
+    {
+      "packetId": "packet-025-clean-conflict-name-bartlett",
+      "plantedKinds": [
+        "name_variant"
+      ],
+      "plantedShape": "MIDDLE_NAME_ADDED",
+      "expectedToFlag": true,
+      "emittedIssues": [
+        {
+          "severity": "Critical",
+          "message": "License, DEA, and board certification record \u0027Cheryl Bartlett\u0027 (with no middle name or initial), while malpractice records \u0027Cheryl Joseph Bartlett, MD\u0027, introducing a middle name with no initial trace on any other document.",
+          "remediation": "Confirm the provider\u0027s current legal name and request documentation explaining the middle name \u0027Joseph\u0027, such as a legal name record or clarification from the malpractice carrier.",
+          "sources": [
+            "Cheryl Bartlett, MD",
+            "Cheryl Bartlett",
+            "Cheryl Bartlett, MD",
+            "Cheryl Joseph Bartlett, MD"
+          ]
+        }
+      ],
+      "inputTokens": 1776,
+      "outputTokens": 137,
+      "wallTimeMs": 3351
+    },
+    {
+      "packetId": "packet-021-clean-conflict-name-guzman",
+      "plantedKinds": [
+        "name_variant"
+      ],
+      "plantedShape": "NICKNAME",
+      "expectedToFlag": true,
+      "emittedIssues": [
+        {
+          "severity": "Critical",
+          "message": "License, DEA, and board certification record \u0027Gary Guzman\u0027 while malpractice records \u0027Chris Guzman, M.D.\u0027 \u2014 the first names \u0027Gary\u0027 and \u0027Chris\u0027 differ.",
+          "remediation": "Confirm the provider\u0027s legal first name and obtain a corrected malpractice certificate or documentation explaining the name discrepancy.",
+          "sources": [
+            "Gary Guzman, M.D.",
+            "Gary Guzman",
+            "Gary Guzman, M.D.",
+            "Chris Guzman, M.D."
+          ]
+        }
+      ],
+      "inputTokens": 1780,
+      "outputTokens": 121,
+      "wallTimeMs": 5954
+    },
+    {
+      "packetId": "packet-022-clean-conflict-name-alexander",
+      "plantedKinds": [
+        "name_variant"
+      ],
+      "plantedShape": "SURNAME_TYPO",
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1767,
+      "outputTokens": 9,
+      "wallTimeMs": 1432
+    },
+    {
+      "packetId": "packet-023-clean-conflict-name-cummings",
+      "plantedKinds": [
+        "name_variant"
+      ],
+      "plantedShape": "SURNAME_SWAP",
+      "expectedToFlag": true,
+      "emittedIssues": [
+        {
+          "severity": "Critical",
+          "message": "License, DEA, and board certification record the surname as \u0027Cummings-Jones\u0027, while malpractice records \u0027Voss\u0027 (full values: \u0027Lisa Cummings-Jones, MD\u0027 / \u0027Lisa Cummings-Jones\u0027 / \u0027Lisa Cummings-Jones, MD\u0027 vs \u0027Lisa Voss, MD\u0027).",
+          "remediation": "Confirm the provider\u0027s current legal surname with supporting documentation (e.g., marriage certificate or name-change record) and ensure all credentialing documents reflect the same legal name.",
+          "sources": [
+            "Lisa Cummings-Jones, MD",
+            "Lisa Cummings-Jones",
+            "Lisa Cummings-Jones, MD",
+            "Lisa Voss, MD"
+          ]
+        }
+      ],
+      "inputTokens": 1776,
+      "outputTokens": 164,
+      "wallTimeMs": 3990
+    }
+  ],
+  "metrics": {
+    "fpRate": 0,
+    "recall": 1,
+    "fpOnCleanCount": 0,
+    "fpOnDontFlagCount": 0,
+    "missedShouldFlagCount": 0,
+    "cleanPacketCount": 5,
+    "shouldFlagPacketCount": 4,
+    "dontFlagPacketCount": 1,
+    "perShape": {
+      "HYPHENATED_SUFFIX": {
+        "planted": 1,
+        "flagged": 1
+      },
+      "MIDDLE_NAME_ADDED": {
+        "planted": 1,
+        "flagged": 1
+      },
+      "NICKNAME": {
+        "planted": 1,
+        "flagged": 1
+      },
+      "SURNAME_TYPO": {
+        "planted": 1,
+        "flagged": 0
+      },
+      "SURNAME_SWAP": {
+        "planted": 1,
+        "flagged": 1
+      }
+    }
+  },
+  "totalInputTokens": 17698,
+  "totalOutputTokens": 610,
+  "estimatedCostUsd": 0.062243999999999994
+}

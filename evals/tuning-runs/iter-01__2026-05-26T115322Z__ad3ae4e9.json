@@ -1,0 +1,198 @@
+{
+  "iteration": 1,
+  "recordedAt": "2026-05-26T11:53:22.509391+00:00",
+  "promptPath": "embedded:IdentityCoherencePrompt.v1.md",
+  "promptSha256": "ad3ae4e92fe5f39e2b75b3fafed1e2f85882f308960bf4ad3ccea083f1c9e4c3",
+  "modelId": "claude-sonnet-4-6",
+  "notes": "surname_typo_overreact: instruction-level \u2014 strengthen typo don\u0027t-flag rule to allow asymmetric middle-name presence \u002B explicit no-Minor",
+  "packetIds": [
+    "packet-010-clean-berry",
+    "packet-006-clean-perry",
+    "packet-018-clean-rogers",
+    "packet-007-clean-myers",
+    "packet-014-clean-barker",
+    "packet-003-conflict-name",
+    "packet-025-clean-conflict-name-bartlett",
+    "packet-021-clean-conflict-name-guzman",
+    "packet-022-clean-conflict-name-alexander",
+    "packet-023-clean-conflict-name-cummings"
+  ],
+  "packetResults": [
+    {
+      "packetId": "packet-010-clean-berry",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1578,
+      "outputTokens": 9,
+      "wallTimeMs": 2080
+    },
+    {
+      "packetId": "packet-006-clean-perry",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1587,
+      "outputTokens": 9,
+      "wallTimeMs": 1659
+    },
+    {
+      "packetId": "packet-018-clean-rogers",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1586,
+      "outputTokens": 9,
+      "wallTimeMs": 1836
+    },
+    {
+      "packetId": "packet-007-clean-myers",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1585,
+      "outputTokens": 9,
+      "wallTimeMs": 1849
+    },
+    {
+      "packetId": "packet-014-clean-barker",
+      "plantedKinds": [],
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1587,
+      "outputTokens": 9,
+      "wallTimeMs": 2038
+    },
+    {
+      "packetId": "packet-003-conflict-name",
+      "plantedKinds": [
+        "name_variant"
+      ],
+      "plantedShape": "HYPHENATED_SUFFIX",
+      "expectedToFlag": true,
+      "emittedIssues": [
+        {
+          "severity": "Critical",
+          "message": "License records \u0027Jane Calloway, MD\u0027, DEA records \u0027Jane Calloway\u0027, and board certification records \u0027Jane Calloway, MD\u0027; malpractice records \u0027Jane C. Calloway-Smith, MD\u0027, indicating a hyphenated/married-name surname disagreement.",
+          "remediation": "Confirm the provider\u0027s current legal name and obtain matching documentation, or request a name-change record explaining the addition of the hyphenated surname \u0027Calloway-Smith\u0027.",
+          "sources": [
+            "Jane Calloway, MD",
+            "Jane Calloway",
+            "Jane Calloway, MD",
+            "Jane C. Calloway-Smith, MD"
+          ]
+        }
+      ],
+      "inputTokens": 1590,
+      "outputTokens": 146,
+      "wallTimeMs": 3785
+    },
+    {
+      "packetId": "packet-025-clean-conflict-name-bartlett",
+      "plantedKinds": [
+        "name_variant"
+      ],
+      "plantedShape": "MIDDLE_NAME_ADDED",
+      "expectedToFlag": true,
+      "emittedIssues": [],
+      "inputTokens": 1595,
+      "outputTokens": 9,
+      "wallTimeMs": 1848
+    },
+    {
+      "packetId": "packet-021-clean-conflict-name-guzman",
+      "plantedKinds": [
+        "name_variant"
+      ],
+      "plantedShape": "NICKNAME",
+      "expectedToFlag": true,
+      "emittedIssues": [
+        {
+          "severity": "Critical",
+          "message": "License, DEA, and board certification record \u0027Gary Guzman\u0027 while malpractice records \u0027Chris Guzman, M.D.\u0027 \u2014 the first names Gary and Chris differ.",
+          "remediation": "Confirm the provider\u0027s legal first name and obtain a corrected malpractice certificate or documentation explaining the discrepancy.",
+          "sources": [
+            "Gary Guzman, M.D.",
+            "Gary Guzman",
+            "Gary Guzman, M.D.",
+            "Chris Guzman, M.D."
+          ]
+        }
+      ],
+      "inputTokens": 1599,
+      "outputTokens": 114,
+      "wallTimeMs": 3675
+    },
+    {
+      "packetId": "packet-022-clean-conflict-name-alexander",
+      "plantedKinds": [
+        "name_variant"
+      ],
+      "plantedShape": "SURNAME_TYPO",
+      "expectedToFlag": false,
+      "emittedIssues": [],
+      "inputTokens": 1586,
+      "outputTokens": 9,
+      "wallTimeMs": 3399
+    },
+    {
+      "packetId": "packet-023-clean-conflict-name-cummings",
+      "plantedKinds": [
+        "name_variant"
+      ],
+      "plantedShape": "SURNAME_SWAP",
+      "expectedToFlag": true,
+      "emittedIssues": [
+        {
+          "severity": "Critical",
+          "message": "License, DEA, and board certification record \u0027Lisa Cummings-Jones\u0027 while malpractice records \u0027Lisa Voss, MD\u0027, indicating a different surname.",
+          "remediation": "Confirm the provider\u0027s current legal name and obtain documentation explaining the surname discrepancy, such as a marriage certificate or name-change record, to reconcile \u0027Cummings-Jones\u0027 with \u0027Voss\u0027.",
+          "sources": [
+            "Lisa Cummings-Jones, MD",
+            "Lisa Cummings-Jones",
+            "Lisa Cummings-Jones, MD",
+            "Lisa Voss, MD"
+          ]
+        }
+      ],
+      "inputTokens": 1595,
+      "outputTokens": 131,
+      "wallTimeMs": 3449
+    }
+  ],
+  "metrics": {
+    "fpRate": 0,
+    "recall": 0.75,
+    "fpOnCleanCount": 0,
+    "fpOnDontFlagCount": 0,
+    "missedShouldFlagCount": 1,
+    "cleanPacketCount": 5,
+    "shouldFlagPacketCount": 4,
+    "dontFlagPacketCount": 1,
+    "perShape": {
+      "HYPHENATED_SUFFIX": {
+        "planted": 1,
+        "flagged": 1
+      },
+      "MIDDLE_NAME_ADDED": {
+        "planted": 1,
+        "flagged": 0
+      },
+      "NICKNAME": {
+        "planted": 1,
+        "flagged": 1
+      },
+      "SURNAME_TYPO": {
+        "planted": 1,
+        "flagged": 0
+      },
+      "SURNAME_SWAP": {
+        "planted": 1,
+        "flagged": 1
+      }
+    }
+  },
+  "totalInputTokens": 15888,
+  "totalOutputTokens": 454,
+  "estimatedCostUsd": 0.054473999999999995
+}
