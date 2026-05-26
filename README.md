@@ -1,9 +1,7 @@
 # PacketReady
 
 Pre-CAQH credentialing readiness score. PDFs in, 0–100 score out,
-every issue cited back to its source PDF region. The 26-second demo
-below is the fastest way to get a feel for it; the eval numbers
-further down are the honest answer to whether it works.
+every issue cited back to its source PDF region.
 
 ![demo](docs/assets/demo.gif)
 
@@ -13,46 +11,14 @@ or the [release page](https://github.com/benjaminematton/PacketReady/releases/ta
 (mp4 + source webm attached). Re-record locally with `npm run tour`
 from [tools/demo-tour/](tools/demo-tour/).
 
-Two companion artifacts to read alongside this README:
+Companion docs:
 
 - **[docs/design.md](docs/design.md)** — full design, decision tree,
   alternatives rejected, row-by-row competitor verification.
 - **[docs/build-plan.md](docs/build-plan.md)** — phase-by-phase build
   log (phases 0–5 closed; phase 6 demo polish + this README).
 
-## Why this build
-
-Open-ended brief, so the real call was scope. Three days isn't long
-enough to ship something general; it's long enough to ship one slice
-that actually works. Here's how I picked the slice.
-
-Atano's homepage promises five things — document intelligence,
-primary source verification, payer auto-fill, real-time reporting,
-smart follow-ups — under the bigger promise that providers get
-"approved the first time, every time." I went after that bigger
-promise. The five primitives are all collection-side or
-post-credentialing work; none of them is *cross-document validation
-against payer-readiness criteria before submission*. That's where
-first-time denials actually get prevented, and it's the part of the
-pitch I couldn't find a shipped feature behind.
-
-A few things I considered and didn't build:
-
-- **A better document triage classifier than Atano's filename regex.**
-  Their team told me regex is fine for triage. No point building a
-  fancier version of something that isn't broken.
-- **An end-to-end provider intake portal.** Verifiable ships this
-  (Provider Intake + CredAgent's 150-step pipeline), Medallion ships
-  this, Assured ships this. A weekend MVP in a crowded lane.
-- **An eval harness for Atano's existing extraction pipeline.** Useful,
-  but it's a measurement tool, not a product. I built one anyway, just
-  as part of this.
-
-So PacketReady picks up after extraction and before submission. The
-intake half exists to feed the score half realistic noisy data; the
-score half is where the differentiation lives.
-
-## What's actually shipped
+## What's shipped
 
 End-to-end, not "framework with TODOs":
 
@@ -83,10 +49,9 @@ End-to-end, not "framework with TODOs":
 
 ## What's mocked (and where the real swap goes)
 
-A few places need a live integration that doesn't make sense to build
-in a take-home. In each case the interface is production-shape and the
-calling code doesn't change when you swap the implementation — the
-mock just stands in for the network call.
+In each case the interface is production-shape and the calling code
+doesn't change when you swap the implementation — the mock just stands
+in for the network call.
 
 - **Primary-source verification.** `IPrimarySourceLookup`
   ([`Application/Intake/PrimarySources/`](apps/api/Application/Intake/PrimarySources/))
@@ -102,30 +67,18 @@ mock just stands in for the network call.
 
 ## What's out of scope
 
-- **Browser-driven payer portal submission.** Atano already does this;
-  not the differentiator.
+- **Browser-driven payer portal submission.** Atano already does this.
 - **Production authn/authz.** Magic-link is the only auth surface, no
   org or role model.
 - **HIPAA-compliant deployment posture.** Synthetic data only.
 
-If I were joining and shipping this from day one, the first 30 days
-would be three things. Wire real CAQH, NPPES, OIG, and SAM behind
-`IPrimarySourceLookup`. Swap `MockSmtpSender` for a real provider —
-Postmark fits the current shape closest. Bring in a second labeler on
-the eval set so κ moves from a self-consistency upper bound to a real
-one.
-
 ## Accuracy
 
-Two complementary number sets live here. The **full-pipeline baseline**
-measures the system end-to-end against the 50-packet dataset — every
-PDF goes through classification, extraction, validators, and score
-synthesis as it would for a real submission. The **prompt-isolated
-tuning** numbers measure individual LLM-validator prompts against
-`golden.json` inputs directly, bypassing extraction. The first answers
-"does the system work"; the second isolates "is the prompt right."
-Both belong in the README; comparing the two diagnoses where any gap
-lives (extraction vs validator).
+Two number sets. **Full-pipeline baseline** runs the 50-packet dataset
+end-to-end through classification, extraction, validators, and score
+synthesis. **Prompt-isolated tuning** measures individual LLM-validator
+prompts against `golden.json` inputs directly, bypassing extraction.
+Comparing the two locates any gap (extraction vs validator).
 
 ### Full-pipeline baseline
 
@@ -143,9 +96,7 @@ A planted conflict is "caught" iff all three predicates hold against
 at least one emitted Issue: (1) the Issue's `validator` matches the
 expected validator for the kind, (2) the Issue's citations name at
 least one planted source via documentId→docType resolution, and (3)
-the Issue's `field` discriminator matches the planter's field. The
-3-predicate check rules out "right validator, wrong finding" from
-counting — see
+the Issue's `field` discriminator matches the planter's field. See
 [`evals/runners/runners/conflict_metrics.py`](evals/runners/runners/conflict_metrics.py).
 
 **Score / tier distribution:**
@@ -164,8 +115,8 @@ Mean score 80.3, range 22–100 across 50 successful packets (0 errors).
 [`evals/labels/human_tiers.json`](evals/labels/human_tiers.json) and
 run through [`agreement.py`](evals/runners/runners/agreement.py).
 Stratified across all four base buckets (clean, scanned,
-name-variant, taxonomy-mismatch) to keep the confusion matrix
-non-degenerate. Labeler tier distribution: 8 Green, 2 Yellow, 10 Red.
+name-variant, taxonomy-mismatch). Labeler tier distribution: 8 Green,
+2 Yellow, 10 Red.
 
 | Metric                              | Value      | Floor                                          |
 |---|---:|---|
@@ -181,49 +132,36 @@ non-degenerate. Labeler tier distribution: 8 Green, 2 Yellow, 10 Red.
 | **Yellow** | 0 | 2 | 0 |
 | **Green**  | 0 | 1 | 7 |
 
-**System trends conservative on Red.** 8 of 10 human-Red packets
-came back system-Yellow; the system never returned Red for a
-human-Green case, and never Green for a human-Red. The κ holds at
-0.68 only because off-by-one slips dominate over catastrophic swaps
-under quadratic weighting. A reader interpreting the score should
-know: *the system underreaches on critical blockers relative to a
-human labeler*. The fix is rubric reweighting on Critical issues —
-named for the post-launch follow-on.
+The system trends conservative on Red: 8 of 10 human-Red packets came
+back system-Yellow. Never returned Red for a human-Green case, never
+Green for a human-Red. The κ holds at 0.68 because off-by-one slips
+dominate over catastrophic swaps under quadratic weighting. Fix is
+rubric reweighting on Critical issues.
 
-**Why some "clean" buckets read Red.** The dataset generator anchors
-every packet's dates to `_NEW_PACKET_ANCHOR = 2026-05-25`. When the
-per-packet RNG draws `rng=3` on the DEA-issue offset, the DEA expires
-exactly on the anchor date — yesterday from the perspective of any
-`today > 2026-05-25`. Hits ~1/3 of clean / scanned packets (Hall,
-Flores, Rice, Tucker in the n=20 subset). Treated as a feature, not a
-bug: it gives the eval Red samples outside the planted-conflict
-buckets, which is what keeps κ from going degenerate. Documented in
-[`docs/impl/phase-4-scale-and-llm-validators.md`](docs/impl/phase-4-scale-and-llm-validators.md)
-under risks/open.
+The dataset generator anchors every packet's dates to
+`_NEW_PACKET_ANCHOR = 2026-05-25`. When the per-packet RNG draws
+`rng=3` on the DEA-issue offset, the DEA expires exactly on the anchor
+date. Hits ~1/3 of clean / scanned packets (Hall, Flores, Rice, Tucker
+in the n=20 subset). Kept as-is: gives the eval Red samples outside
+the planted-conflict buckets, which keeps κ from going degenerate.
+Documented in
+[`docs/impl/phase-4-scale-and-llm-validators.md`](docs/impl/phase-4-scale-and-llm-validators.md).
 
-**Tuning surfaces:**
+Tuning surfaces:
 
 - `name_variant` recall ceiling at 0.667 with FP=0 means the prompt is
-  conservatively-tuned — 3 must-flag planted shapes pass without
-  emission. The IdentityCoherence v1 prompt was tuned on the 10-packet
-  subset to prioritize FP discipline; the held-out 3 misses are the
-  expected cost. Bumping recall here is the next tuning loop, not a
-  bug.
+  conservatively-tuned. The IdentityCoherence v1 prompt was tuned on
+  the 10-packet subset to prioritize FP discipline; the held-out 3
+  misses are the expected cost.
 - `taxonomy_specialty_mismatch` precision 0.73 reflects 3 LLM judgments
   that flag legitimate specialty/taxonomy synonymies as mismatches.
-  Follow-on tuning surface — the NUCC compare prompt is a v1 ship.
+  NUCC compare prompt is a v1 ship.
 
 ### IdentityCoherence prompt-isolated tuning
 
-These numbers measure the IdentityCoherence prompt against
-`golden.json` fullName values directly via
-`tools/TuneIdentityCoherence` — no PDFs, no classifier, no Sonnet
-extractor. They tell you whether the prompt would catch a disagreement
-*given* a correctly-extracted name set; the full-pipeline baseline
-above tells you what happens when extraction is in the loop. Recall on
-the full pipeline (0.667) sits below the prompt-isolated number (100%)
-— the gap measures extraction noise + provenance routing, not prompt
-quality. Source data:
+Measures the IdentityCoherence prompt against `golden.json` fullName
+values directly via `tools/TuneIdentityCoherence` — no PDFs, no
+classifier, no Sonnet extractor. Source data:
 [`evals/tuning-runs/iter-100__*.json`](evals/tuning-runs/), prompt SHA
 `48322ce7`, 50 packets × 3 runs, worst-of.
 
@@ -245,14 +183,13 @@ Recall by planted name-disagreement shape (must-flag totals across the 50-packet
 | **Total must-flag** | **9 / 9 (100%)** |  |
 
 Tuning converged in two instruction-level iterations from baseline
-FP=16.7% / recall=75% to FP=0% / recall=100% on the tuning subset. The
-[full iteration log](evals/tuning-runs/) and the
-[per-iteration failures TSV](evals/tuning-runs/iter-00__failures.tsv)
-record exactly which rule changes moved which category. Held-out 10
-(disjoint from the tuning subset, drawn from the 50 with `seed=9999`)
-ran 3 times and matched the in-sample numbers — no overfit.
+FP=16.7% / recall=75% to FP=0% / recall=100% on the tuning subset.
+[Full iteration log](evals/tuning-runs/) and
+[per-iteration failures TSV](evals/tuning-runs/iter-00__failures.tsv).
+Held-out 10 (disjoint from the tuning subset, drawn from the 50 with
+`seed=9999`) ran 3 times and matched the in-sample numbers.
 
-### Bias caveat (read this before citing the numbers)
+### Bias caveat
 
 The hand-labeled fixtures, the IdentityCoherence and NpiTaxonomyMatch
 prompts' do-flag / don't-flag rules, the iteration decisions during
@@ -261,29 +198,16 @@ all made by the same person. The published numbers measure how well
 the system reproduces that one person's credentialing judgment, not
 how well it tracks an independent ground truth.
 
-A second labeler — and a second prompt reviewer — would push the bound
-on these from upper to honest. Both are post-launch asks. Honest
-readings:
-
-- **`name_variant` precision 1.0, recall 0.667** — "the validator emits
-  only the disagreements the prompt-author would have called out, and
-  emits them on the planter shapes the prompt was tuned for." Not "the
-  validator catches every real-world name disagreement a credentialing
-  admin would flag."
-- **`taxonomy_specialty_mismatch` precision 0.73** — "the LLM compare
+- **`name_variant` precision 1.0, recall 0.667** — the validator emits
+  only the disagreements the prompt-author would have called out, on
+  the planter shapes the prompt was tuned for.
+- **`taxonomy_specialty_mismatch` precision 0.73** — the LLM compare
   step judges some legitimate specialty/taxonomy synonymies as
-  mismatches when a credentialing expert wouldn't." Worth a second
-  prompt reviewer.
-- **Tier agreement κ = 0.6786 (n=20)** — measures self-consistency
-  between the validator suite and the labeler-in-the-validator-author's-head,
-  not ground truth. Read it as an upper bound on agreement with an
-  independent expert. Two structural facts: (1) the labeler is also
-  the validator-rule author, and (2) the labeler is not a working
-  credentialing admin. The system's tendency to come back Yellow on
-  human-Red cases (the 8/10 cell of the matrix above) is itself
-  informative: a credentialing admin might call the labeler
-  conservative, or might call the system permissive, depending on
-  whose rubric anchors the conversation. The `_biasNote` field in
+  mismatches when a credentialing expert wouldn't.
+- **Tier agreement κ = 0.6786 (n=20)** — upper bound on agreement with
+  an independent expert. Two structural facts: (1) labeler is also the
+  validator-rule author, (2) labeler is not a working credentialing
+  admin. The `_biasNote` field in
   [`human_tiers.json`](evals/labels/human_tiers.json) carries this
   in-band; the baseline's `agreement.biasNote` carries it through to
   the regression-gate payload.
@@ -297,9 +221,7 @@ of the 2026-05 marketing-surface verification in
 [docs/design.md §Appendix A](docs/design.md#appendix-a--comparison-to-competitors).
 That appendix carries the row-by-row verification (each "✓" or
 "partial" sourced to a competitor's homepage) and a per-row reading
-notes block documenting what every "—" represents. The full table is
-narrower than the marketing copy suggests for several competitors —
-deliberately so.
+notes block documenting what every "—" represents.
 
 ## Local setup
 
