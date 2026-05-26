@@ -639,18 +639,27 @@ The demo opens and closes on the score because that's the differentiated product
 
 ## Appendix A — Comparison to competitors
 
+Based on publicly marketed features as of 2026-05. Each row reflects what the competitor's marketing surface promises today, not what their engineering surface can or can't do — a deeper feature page may expose a capability the homepage doesn't promise. Sources re-verified row-by-row: Atano ([getatano.com](https://getatano.com/)), Verifiable ([verifiable.com](https://www.verifiable.com/)), Assured ([withassured.com/products/credentialing](https://www.withassured.com/products/credentialing)), Medallion ([medallion.co](https://www.medallion.co/)).
+
 | Capability | Verifiable | Assured | Medallion | Atano (marketed) | PacketReady |
 |---|---|---|---|---|---|
-| Email-first pre-CAQH intake | partial | — | — | — | ✓ |
-| Document extraction | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Cross-document validation | partial | ✓ | partial | — | ✓ (core) |
-| 0–100 readiness score before submission | — | partial | — | — | ✓ (core) |
-| Cited audit log per decision | ✓ (CredAgent) | partial | — | — | ✓ |
-| Continuous monitoring | ✓ | partial | ✓ | — | (follow-on) |
-| Payer portal auto-fill | partial | ✓ | partial | ✓ | (out of scope) |
+| Email-first pre-CAQH intake | — | — | — | — | ✓ |
+| Document extraction | ✓ (CredAgent) | ✓ | partial | ✓ | ✓ |
+| Cross-document validation | — | partial | — | — | ✓ (core) |
+| 0–100 readiness score before submission | — | — | — | — | ✓ (core) |
+| Cited audit log per decision | ✓ (CredAgent) | — | partial | — | ✓ |
+| Continuous monitoring | ✓ | ✓ | ✓ | — | (follow-on) |
+| Payer portal auto-fill | — | partial | — | ✓ | (out of scope) |
 | Published accuracy numbers | — | — | — | — | ✓ |
 
-The defensible positioning is the column intersection: pre-CAQH intake + cross-document readiness score + cited audit trail + published accuracy. No single competitor ships all four. Atano ships none of the four today.
+Per-row reading notes (what each "partial" or "—" change reflects):
+
+- **Verifiable.** CredAgent's marketing surfaces step-by-step decision logs with cited primary sources, and ongoing provider monitoring is its own product line. Pre-CAQH intake, cross-document validation, readiness score, and payer-portal fill are absent from the homepage — CredAgent's stated entry point is post-CAQH workflows.
+- **Assured.** The credentialing page markets continuous credential-expiration tracking + OIG/Medicare/Medicaid exclusion checks as a core feature (upgraded from "partial" to ✓). "Our platform flags missing or incorrect information early" hints at cross-document validation without committing to it (downgraded from "✓" to "partial"). Auto-fill is referenced as part of "automates ... payer enrollment processes" elsewhere on the site but not promised explicitly on the credentialing page (downgraded from "✓" to "partial"). No cited-audit-log claim survives on the current page.
+- **Medallion.** Real-time monitoring of credential and sanction changes is explicit. "Complete operational visibility" / "full audit visibility" appears in the delegated-credentialing copy but stops short of per-decision citations (kept as "partial"). Document extraction, cross-document validation, readiness score, and payer-portal fill are not surfaced on the homepage.
+- **Atano.** "Upload any provider document and let AI extract the key information" + "Auto-fill payer applications (PDFs and portals) with existing provider data" are the two pillars surfaced. No pre-CAQH intake, no cross-document validation, no readiness score, no continuous monitoring, no cited audit log on the marketed surface.
+
+The defensible positioning is still the column intersection: pre-CAQH intake + cross-document validation + readiness score + cited audit trail + published accuracy. No single competitor ships all five; Atano ships none of them. The "Better no claim than a wrong one" gate is the reason the rows above are conservative — every "partial" is adjacent language that doesn't quite commit to the capability, and every "—" is silence on the marketing surface, not a claim that the engineering doesn't exist.
 
 ---
 
