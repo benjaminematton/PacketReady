@@ -76,6 +76,30 @@ public class ProviderTests
     }
 
     [Fact]
+    public void Create_DefaultsPayerIdWhenNull()
+    {
+        var provider = Provider.Create(MakeProfile(), Now);
+        Assert.Equal(Provider.DefaultPayerId, provider.PayerId);
+    }
+
+    [Fact]
+    public void Create_UsesExplicitPayerId()
+    {
+        var provider = Provider.Create(MakeProfile(), Now, payerId: "payer-b-regional-ppo");
+        Assert.Equal("payer-b-regional-ppo", provider.PayerId);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Create_RejectsWhitespacePayerId(string payerId)
+    {
+        var ex = Assert.Throws<ArgumentException>(
+            () => Provider.Create(MakeProfile(), Now, payerId));
+        Assert.Equal("payerId", ex.ParamName);
+    }
+
+    [Fact]
     public void GetProfile_ReturnsCachedInstanceOnSecondCall()
     {
         var provider = Provider.Create(MakeProfile(), Now);

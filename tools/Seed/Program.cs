@@ -88,8 +88,11 @@ foreach (var path in fixtureFiles)
         Console.WriteLine($"  notes: {fixture.Notes}");
 
     // Provider.Create runs ProviderProfile.Validate against nowUtc and throws on
-    // any shape violation before the DB sees the row.
-    var provider = Provider.Create(fixture.Profile, nowUtc);
+    // any shape violation before the DB sees the row. payerId from the fixture
+    // (or DefaultPayerId when omitted) flows in here; P4 task 5's 50-packet
+    // generator will start emitting fixtures with explicit payerId for ~50/50
+    // balance across the two committed payer YAMLs.
+    var provider = Provider.Create(fixture.Profile, nowUtc, fixture.PayerId);
     db.Providers.Add(provider);
     await db.SaveChangesAsync(ct);
 

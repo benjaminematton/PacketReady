@@ -13,8 +13,28 @@ namespace PacketReady.Domain.Providers;
 /// </summary>
 public class Provider
 {
+    /// <summary>
+    /// Default payer assigned to providers created without an explicit
+    /// <c>payerId</c>. Matches the YAML filename
+    /// <c>apps/api/Infrastructure/Payers/payers/payer-a-national-hmo.yaml</c>
+    /// (added in P4 task 7). Kept as a constant so the seed CLI, tests, and
+    /// the EF column default all agree.
+    /// </summary>
+    public const string DefaultPayerId = "payer-a-national-hmo";
+
     public Guid Id { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
+
+    /// <summary>
+    /// Identifier of the payer whose YAML requirements this provider's
+    /// extractions are validated against. P4 introduces it; admin-level
+    /// payer selection at intake lands in P5. Defaults to
+    /// <see cref="DefaultPayerId"/>. The string is opaque to the domain —
+    /// resolution to a payer-config record happens in
+    /// <c>PayerRequirementLoader</c>, which fails-loud at startup if the
+    /// id isn't backed by a YAML file.
+    /// </summary>
+    public string PayerId { get; private set; } = DefaultPayerId;
 
     private string _profileJson = "{}";
 
@@ -42,7 +62,10 @@ public class Provider
 
     private Provider() { }
 
-    public static Provider Create(ProviderProfile profile, DateTimeOffset? now = null)
+    public static Provider Create(
+        ProviderProfile profile,
+        DateTimeOffset? now = null,
+        string? payerId = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
 
@@ -54,10 +77,20 @@ public class Provider
         // `with`-mutated profiles and JSONB-deserialized profiles.
         ProviderProfile.Validate(profile, createdAt);
 
+        // null = "caller omitted, use default"; "" / "   " = caller bug, fail loud
+        // instead of silently routing to payer-a.
+        if (payerId is not null && string.IsNullOrWhiteSpace(payerId))
+            throw new ArgumentException(
+                "payerId must be null (to use the default) or a non-whitespace value.",
+                nameof(payerId));
+
+        var resolvedPayerId = payerId ?? DefaultPayerId;
+
         return new Provider
         {
             Id = Guid.NewGuid(),
             CreatedAt = createdAt,
+            PayerId = resolvedPayerId,
             ProfileJson = JsonSerializer.Serialize(profile, DomainJson.Options),
         };
     }

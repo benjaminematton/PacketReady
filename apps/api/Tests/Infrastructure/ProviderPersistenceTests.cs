@@ -45,6 +45,24 @@ public class ProviderPersistenceTests
     }
 
     [Fact]
+    public async Task Provider_RoundTripsNonDefaultPayerId()
+    {
+        var factory = new InMemoryContextFactory(Guid.NewGuid().ToString());
+        var provider = Provider.Create(MakeProfile(), Now, payerId: "payer-b-regional-ppo");
+
+        await using (var writer = factory.CreateDbContext())
+        {
+            writer.Providers.Add(provider);
+            await writer.SaveChangesAsync();
+        }
+
+        await using var reader = factory.CreateDbContext();
+        var loaded = await reader.Providers.SingleAsync(p => p.Id == provider.Id);
+
+        Assert.Equal("payer-b-regional-ppo", loaded.PayerId);
+    }
+
+    [Fact]
     public async Task ReadinessScore_RoundTripsThroughDbContext()
     {
         var factory = new InMemoryContextFactory(Guid.NewGuid().ToString());

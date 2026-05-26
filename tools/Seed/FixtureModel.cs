@@ -11,10 +11,15 @@ namespace PacketReady.Seed;
 /// here so STJ validates the field name instead of silently dropping a typo via
 /// <c>UnmappedMemberHandling.Skip</c>. Bound through <see cref="DomainJson.Options"/>,
 /// so <see cref="ExpectedTier"/> deserializes via <c>JsonStringEnumConverter</c>.
+///
+/// <para><see cref="PayerId"/> is optional; when omitted, the seed CLI falls back to
+/// <see cref="Domain.Providers.Provider.DefaultPayerId"/>. P4 task 5 (50-packet generator)
+/// fills it on every emitted fixture for ~50/50 payer balance.</para>
 /// </summary>
 public sealed record FixtureModel(
     string Label,
     int ExpectedScore,
     Tier ExpectedTier,
     [property: JsonPropertyName("profile")] ProviderProfile Profile,
-    string? Notes = null);
+    string? Notes = null,
+    string? PayerId = null);
