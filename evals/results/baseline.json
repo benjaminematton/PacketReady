@@ -275,5 +275,29 @@
       "score": 50,
       "tier": "Red"
     }
-  ]
+  ],
+  "agreement": {
+    "weightedKappa": 0.6786,
+    "rawAgreement": 0.55,
+    "confusion3x3": [
+      [
+        2,
+        8,
+        0
+      ],
+      [
+        0,
+        2,
+        0
+      ],
+      [
+        0,
+        1,
+        7
+      ]
+    ],
+    "spearmanRho": 0.7455,
+    "n": 20,
+    "biasNote": "The labeler is also the designer of the validator suite. The agreement number this set produces measures self-consistency between the rules-in-the-validators and the rules-in-the-labeler's-head — NOT ground truth. A reader looking for 'does this system match an independent expert' should treat the κ as an upper-bound estimate. The README's accuracy section names this in plain language."
+  }
 }
