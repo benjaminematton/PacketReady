@@ -6,18 +6,19 @@ See [docs/design.md](docs/design.md) for the full design and [docs/build-plan.md
 
 ## Status
 
-**Phase 4 (scale + LLM validators)** — closing. Phases 0–3 closed; the
-50-packet eval set runs end-to-end through the orchestrator (P4 task
-18, [`evals/results/baseline.json`](evals/results/baseline.json));
+**Phase 4 (scale + LLM validators)** — closed (2026-05-26). Phases 0–3
+closed; the 50-packet eval set runs end-to-end through the orchestrator
+(P4 task 18, [`evals/results/baseline.json`](evals/results/baseline.json));
 both LLM validators (`IdentityCoherenceValidator`,
 `NpiTaxonomyMatchValidator`) emit against the live extraction
 pipeline; the payer-aware validator suite (malpractice currency,
 required documents, board certification extension, payer-config
-sanctions suppression) is wired. Task 16 closed — 20 packets
-hand-labeled at
-[`evals/labels/human_tiers.json`](evals/labels/human_tiers.json),
-weighted Cohen's κ = 0.68 (n=20) locked into the baseline. Task 22
-(DoD walk) is the remaining human-only step.
+sanctions suppression) is wired; 20 packets hand-labeled at
+[`evals/labels/human_tiers.json`](evals/labels/human_tiers.json)
+producing weighted Cohen's κ = 0.68 (n=20) locked into the baseline.
+All 10 DoD boxes checked in
+[phase-4-scale-and-llm-validators.md](docs/impl/phase-4-scale-and-llm-validators.md).
+Next: [Phase 5 — Intake agent + outbox](docs/impl/phase-5-intake-agent.md).
 
 | Phase | State |
 |---|---|
@@ -25,7 +26,7 @@ weighted Cohen's κ = 0.68 (n=20) locked into the baseline. Task 22
 | 1 — Score from clean input (rule-based validators) | ✓ closed |
 | 2 — Eval harness + 5 hand-crafted packets | ✓ closed |
 | 3 — Per-doc-type Sonnet extractors + aggregator | ✓ closed |
-| 4 — 50-packet eval + LLM validators + payer-aware validators | closing (22 pending) |
+| 4 — 50-packet eval + LLM validators + payer-aware validators | ✓ closed |
 
 ## Accuracy
 
