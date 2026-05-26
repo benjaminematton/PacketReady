@@ -17,7 +17,7 @@ Two companion artifacts to read alongside this README:
 - **[docs/design.md](docs/design.md)** — full design, decision tree,
   alternatives rejected, row-by-row competitor verification.
 - **[docs/build-plan.md](docs/build-plan.md)** — phase-by-phase build
-  log (phases 0–4 closed; phase 5 designed, not built).
+  log (phases 0–5 closed; phase 6 demo polish + this README).
 
 ## Why this build
 
@@ -61,31 +61,55 @@ score half is the differentiated product.
   per-issue remediation pointing back to the source PDF region.
 - Operator dashboard with worst-first triage and per-provider audit
   timeline reconstructed from append-only events.
+- **Intake agent** — tool-using Claude loop with a 5-tool surface
+  (`read_document`, `extract_fields`, `lookup_primary_source`,
+  `compose_followup`, `compute_readiness`) driven by a per-provider
+  budget; FSM with explicit terminal / follow-up / escalated transitions.
+- **Magic-link provider portal** — Next.js app at
+  [`portal/`](portal/); HMAC-signed single-use tokens; provider sees the
+  on-file documents and submits, agent takes the next turn.
+- **Outbox dispatcher** — Hangfire recurring job (`OutboxDispatcherJob`)
+  drains queued provider follow-ups through an `IEmailSender` port.
+  Current backend is `MockSmtpSender` (file-writes to a local maildir);
+  the contract is shaped for a real Postmark / SES swap.
 - Full Langfuse observability across classification, extraction,
-  validation, score synthesis.
+  validation, score synthesis, and every intake-agent turn.
 - 50-packet synthetic eval set, run end-to-end through the
   orchestrator, with weighted Cohen's κ = 0.68 against 20 hand-labeled
   tier judgments.
 
+## What's mocked behind a real port (the swap is the v1.1 work)
+
+These are the seams where the production system needs a live integration
+that PacketReady ships as a mock. The interface is real and the calling
+code is unchanged when you swap; the implementation isn't.
+
+- **Primary-source verification.** `IPrimarySourceLookup`
+  ([`Application/Intake/PrimarySources/`](apps/api/Application/Intake/PrimarySources/))
+  is the seam; `MockPrimarySourceLookup` returns deterministic fixture
+  responses. Live CAQH ProView, NPPES, OIG, SAM, and state board calls
+  go here.
+- **SMTP backend.** `IEmailSender` is the port;
+  [`MockSmtpSender`](apps/api/Infrastructure/Outbox/) writes RFC-822 to
+  a local maildir so the outbox dispatcher's behavior is observable in
+  tests + the demo. Postmark / SES / Mailgun all fit the port.
+- **Blob storage.** `IBlobStore` is local-filesystem in dev
+  (`LocalFileBlobStore`). S3 / GCS swap is one registration line.
+
 ## What's deliberately out of v1
 
-- **The intake agent itself.** The state machine, magic-link portal,
-  and Postmark-style outbox are designed in
-  [docs/design.md](docs/design.md) but stubbed for v1 — admin uploads
-  documents directly on the provider's behalf, and multi-turn loops are
-  simulated. Full intake is the natural Phase 5 build; design is locked.
-- **Real CAQH ProView, NPPES, OIG, SAM, state board integrations.**
-  Mocked behind a `lookup_primary_source` contract; live PSV is a
-  separate uplift.
 - **Browser-driven payer portal submission.** Atano markets this; not
-  the differentiator.
-- **Production authn/authz.** Magic-link only.
-- **HIPAA-compliant deployment.** Synthetic data only.
+  the differentiator we're showing.
+- **Production authn/authz.** Magic-link is the only auth surface.
+  No org / role model.
+- **HIPAA-compliant deployment posture.** Synthetic data only.
 
 If I were joining and shipped this from day one, the first 30 days
-would be: real CAQH integration, the Postmark outbox + magic-link
-intake (the Phase 5 path), and a second labeler on the eval set to
-move κ from a self-consistency upper bound to a real one.
+would be: wire real CAQH + NPPES + OIG + SAM behind
+`IPrimarySourceLookup`, swap `MockSmtpSender` for a real provider
+(Postmark is the closest fit to the current shape), and bring in a
+second labeler on the eval set to move κ from a self-consistency upper
+bound to a real one.
 
 ## Accuracy
 
