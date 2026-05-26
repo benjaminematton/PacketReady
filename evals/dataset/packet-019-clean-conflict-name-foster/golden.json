@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-019-clean-conflict-name-foster",
   "label": "Dr. Michael Foster",
+  "identity": {
+    "fullName": "Michael Foster",
+    "npi": "1821699141",
+    "dateOfBirth": "1988-11-11",
+    "credentialingState": "CA"
+  },
   "documents": [
     {
       "type": "license",
@@ -47,7 +54,7 @@
       "type": "malpractice",
       "filename": "malpractice.pdf",
       "fields": {
-        "fullName": "Michael M. Foster-Williams, MD",
+        "fullName": "Michael M. Foster-Taylor, MD",
         "carrier": "MedMal Specialty Insurance",
         "policyNumber": "MED-CA-699141",
         "expiryDate": "2027-07-10",
@@ -64,7 +71,7 @@
         "license",
         "malpractice"
       ],
-      "description": "license: 'Michael Foster, MD'; malpractice: 'Michael M. Foster-Williams, MD'",
+      "description": "license: 'Michael Foster, MD'; malpractice: 'Michael M. Foster-Taylor, MD'",
       "expectedSeverity": "Critical",
       "expected_to_flag": true
     }

@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-036-scanned-smith",
   "label": "Dr. Craig Smith",
+  "identity": {
+    "fullName": "Craig Smith",
+    "npi": "1029212077",
+    "dateOfBirth": "1977-02-23",
+    "credentialingState": "CA"
+  },
   "documents": [
     {
       "type": "license",

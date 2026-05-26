@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-009-clean-cervantes",
   "label": "Dr. Tristan Cervantes",
+  "identity": {
+    "fullName": "Tristan Cervantes",
+    "npi": "1359112806",
+    "dateOfBirth": "1969-06-22",
+    "credentialingState": "MA"
+  },
   "documents": [
     {
       "type": "license",

@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-002-clean-bautista",
   "label": "Dr. Marisol Bautista",
+  "identity": {
+    "fullName": "Marisol Bautista, MD",
+    "npi": "1721450017",
+    "dateOfBirth": "1981-08-22",
+    "credentialingState": "CA"
+  },
   "documents": [
     {
       "type": "license",

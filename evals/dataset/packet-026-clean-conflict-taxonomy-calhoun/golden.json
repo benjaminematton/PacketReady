@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-026-clean-conflict-taxonomy-calhoun",
   "label": "Dr. Timothy Calhoun",
+  "identity": {
+    "fullName": "Timothy Calhoun",
+    "npi": "1989978667",
+    "dateOfBirth": "1991-03-22",
+    "credentialingState": "PA"
+  },
   "documents": [
     {
       "type": "license",
@@ -12,7 +19,7 @@
         "issueDate": "2022-05-26",
         "expiryDate": "2028-05-24",
         "status": "Active",
-        "taxonomyCode": "207Q00000X"
+        "taxonomyCode": "207L00000X"
       }
     },
     {
@@ -36,8 +43,8 @@
       "filename": "board-cert.pdf",
       "fields": {
         "fullName": "Timothy Calhoun, M.D.",
-        "board": "ABEM",
-        "specialty": "Emergency Medicine",
+        "board": "ABO",
+        "specialty": "Ophthalmology",
         "issueDate": "2024-05-25",
         "expiryDate": "2034-05-23",
         "status": "Active"
@@ -63,7 +70,7 @@
         "license",
         "boardCert"
       ],
-      "description": "license taxonomy_code 207Q00000X → canonical specialty 'Family Medicine'; board cert specialty 'Emergency Medicine' (ABEM)",
+      "description": "license taxonomy_code 207L00000X → canonical specialty 'Anesthesiology'; board cert specialty 'Ophthalmology' (ABO)",
       "expectedSeverity": "Critical",
       "expected_to_flag": true
     }

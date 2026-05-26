@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-016-clean-durham",
   "label": "Dr. Sean Durham",
+  "identity": {
+    "fullName": "Sean Durham",
+    "npi": "1168322612",
+    "dateOfBirth": "1956-11-20",
+    "credentialingState": "CA"
+  },
   "documents": [
     {
       "type": "license",

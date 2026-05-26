@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-028-clean-conflict-taxonomy-wade",
   "label": "Dr. Margaret Wade",
+  "identity": {
+    "fullName": "Margaret Wade",
+    "npi": "1437450996",
+    "dateOfBirth": "1992-04-21",
+    "credentialingState": "MS"
+  },
   "documents": [
     {
       "type": "license",
@@ -12,7 +19,7 @@
         "issueDate": "2022-05-26",
         "expiryDate": "2028-05-24",
         "status": "Active",
-        "taxonomyCode": "207Q00000X"
+        "taxonomyCode": "208000000X"
       }
     },
     {
@@ -36,8 +43,8 @@
       "filename": "board-cert.pdf",
       "fields": {
         "fullName": "Margaret Wade-Jones, MD",
-        "board": "ABU",
-        "specialty": "Urology",
+        "board": "ABIM",
+        "specialty": "Internal Medicine",
         "issueDate": "2021-05-26",
         "expiryDate": "2031-05-24",
         "status": "Active"
@@ -63,7 +70,7 @@
         "license",
         "boardCert"
       ],
-      "description": "license taxonomy_code 207Q00000X → canonical specialty 'Family Medicine'; board cert specialty 'Urology' (ABU)",
+      "description": "license taxonomy_code 208000000X → canonical specialty 'Pediatrics'; board cert specialty 'Internal Medicine' (ABIM)",
       "expectedSeverity": "Critical",
       "expected_to_flag": true
     }

@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-023-clean-conflict-name-cummings",
   "label": "Dr. Lisa Cummings",
+  "identity": {
+    "fullName": "Lisa Cummings",
+    "npi": "1733675585",
+    "dateOfBirth": "1965-01-30",
+    "credentialingState": "IL"
+  },
   "documents": [
     {
       "type": "license",

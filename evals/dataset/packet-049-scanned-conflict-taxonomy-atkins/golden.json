@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-049-scanned-conflict-taxonomy-atkins",
   "label": "Dr. Heather Atkins",
+  "identity": {
+    "fullName": "Heather Atkins",
+    "npi": "1254753548",
+    "dateOfBirth": "1985-07-14",
+    "credentialingState": "SC"
+  },
   "documents": [
     {
       "type": "license",
@@ -12,7 +19,7 @@
         "issueDate": "2024-05-25",
         "expiryDate": "2030-05-24",
         "status": "Active",
-        "taxonomyCode": "208000000X"
+        "taxonomyCode": "207P00000X"
       }
     },
     {
@@ -36,8 +43,8 @@
       "filename": "board-cert.pdf",
       "fields": {
         "fullName": "Heather Atkins, MD",
-        "board": "ABFM",
-        "specialty": "Family Medicine",
+        "board": "ABO",
+        "specialty": "Ophthalmology",
         "issueDate": "2021-05-26",
         "expiryDate": "2031-05-24",
         "status": "Active"
@@ -63,7 +70,7 @@
         "license",
         "boardCert"
       ],
-      "description": "license taxonomy_code 208000000X → canonical specialty 'Pediatrics'; board cert specialty 'Family Medicine' (ABFM)",
+      "description": "license taxonomy_code 207P00000X → canonical specialty 'Emergency Medicine'; board cert specialty 'Ophthalmology' (ABO)",
       "expectedSeverity": "Critical",
       "expected_to_flag": true
     }

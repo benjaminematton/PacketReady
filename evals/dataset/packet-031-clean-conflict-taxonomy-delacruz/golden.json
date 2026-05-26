@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-031-clean-conflict-taxonomy-delacruz",
   "label": "Dr. Robert Delacruz",
+  "identity": {
+    "fullName": "Robert Delacruz",
+    "npi": "1728607239",
+    "dateOfBirth": "1969-09-30",
+    "credentialingState": "SD"
+  },
   "documents": [
     {
       "type": "license",

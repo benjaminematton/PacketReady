@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-015-clean-hall",
   "label": "Dr. Elizabeth Hall",
+  "identity": {
+    "fullName": "Elizabeth Hall",
+    "npi": "1281036032",
+    "dateOfBirth": "1968-12-12",
+    "credentialingState": "TN"
+  },
   "documents": [
     {
       "type": "license",

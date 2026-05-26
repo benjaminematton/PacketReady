@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-029-clean-conflict-taxonomy-perez",
   "label": "Dr. Steven Perez",
+  "identity": {
+    "fullName": "Steven Perez",
+    "npi": "1473577140",
+    "dateOfBirth": "1957-10-16",
+    "credentialingState": "FL"
+  },
   "documents": [
     {
       "type": "license",

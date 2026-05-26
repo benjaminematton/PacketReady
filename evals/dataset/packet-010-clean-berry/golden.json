@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-010-clean-berry",
   "label": "Dr. Eric Berry",
+  "identity": {
+    "fullName": "Eric Berry",
+    "npi": "1169673799",
+    "dateOfBirth": "1969-01-26",
+    "credentialingState": "CA"
+  },
   "documents": [
     {
       "type": "license",

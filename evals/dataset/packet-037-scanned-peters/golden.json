@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-037-scanned-peters",
   "label": "Dr. Andrew Peters",
+  "identity": {
+    "fullName": "Andrew Peters",
+    "npi": "1914911940",
+    "dateOfBirth": "1964-09-24",
+    "credentialingState": "CA"
+  },
   "documents": [
     {
       "type": "license",

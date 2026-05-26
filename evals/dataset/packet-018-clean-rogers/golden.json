@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-018-clean-rogers",
   "label": "Dr. Gary Rogers",
+  "identity": {
+    "fullName": "Gary Rogers",
+    "npi": "1012417964",
+    "dateOfBirth": "1959-06-05",
+    "credentialingState": "NY"
+  },
   "documents": [
     {
       "type": "license",

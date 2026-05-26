@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-003-conflict-name",
   "label": "Dr. Jane Calloway",
+  "identity": {
+    "fullName": "Jane Calloway, MD",
+    "npi": "1442100016",
+    "dateOfBirth": "1983-11-09",
+    "credentialingState": "NY"
+  },
   "documents": [
     {
       "type": "license",

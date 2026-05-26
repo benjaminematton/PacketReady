@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-022-clean-conflict-name-alexander",
   "label": "Dr. Todd Alexander",
+  "identity": {
+    "fullName": "Todd Alexander",
+    "npi": "1206147989",
+    "dateOfBirth": "1963-09-20",
+    "credentialingState": "NY"
+  },
   "documents": [
     {
       "type": "license",

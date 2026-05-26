@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-050-scanned-conflict-taxonomy-bartlett",
   "label": "Dr. Anthony Bartlett",
+  "identity": {
+    "fullName": "Anthony Bartlett",
+    "npi": "1685742706",
+    "dateOfBirth": "1958-07-26",
+    "credentialingState": "SC"
+  },
   "documents": [
     {
       "type": "license",

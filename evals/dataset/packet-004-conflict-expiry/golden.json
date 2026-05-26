@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-004-conflict-expiry",
   "label": "Dr. Amadou Diallo",
+  "identity": {
+    "fullName": "Amadou Diallo, MD",
+    "npi": "1580310013",
+    "dateOfBirth": "1978-06-18",
+    "credentialingState": "IL"
+  },
   "documents": [
     {
       "type": "license",

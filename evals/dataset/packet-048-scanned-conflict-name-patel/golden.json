@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-048-scanned-conflict-name-patel",
   "label": "Dr. Kenneth Patel",
+  "identity": {
+    "fullName": "Kenneth Patel",
+    "npi": "1356455943",
+    "dateOfBirth": "1961-08-30",
+    "credentialingState": "TX"
+  },
   "documents": [
     {
       "type": "license",

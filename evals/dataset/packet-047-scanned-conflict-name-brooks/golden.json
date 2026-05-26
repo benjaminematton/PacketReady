@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-047-scanned-conflict-name-brooks",
   "label": "Dr. Jeffrey Brooks",
+  "identity": {
+    "fullName": "Jeffrey Brooks",
+    "npi": "1017005228",
+    "dateOfBirth": "1990-10-22",
+    "credentialingState": "TX"
+  },
   "documents": [
     {
       "type": "license",

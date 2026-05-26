@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-008-clean-lopez",
   "label": "Dr. Manuel Lopez",
+  "identity": {
+    "fullName": "Manuel Lopez",
+    "npi": "1172206348",
+    "dateOfBirth": "1964-10-31",
+    "credentialingState": "PA"
+  },
   "documents": [
     {
       "type": "license",

@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-040-scanned-tucker",
   "label": "Dr. Lisa Tucker",
+  "identity": {
+    "fullName": "Lisa Tucker",
+    "npi": "1941794905",
+    "dateOfBirth": "1993-09-29",
+    "credentialingState": "MN"
+  },
   "documents": [
     {
       "type": "license",

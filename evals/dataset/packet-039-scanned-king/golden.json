@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-039-scanned-king",
   "label": "Dr. Laura King",
+  "identity": {
+    "fullName": "Laura King",
+    "npi": "1819773957",
+    "dateOfBirth": "1956-07-24",
+    "credentialingState": "TX"
+  },
   "documents": [
     {
       "type": "license",

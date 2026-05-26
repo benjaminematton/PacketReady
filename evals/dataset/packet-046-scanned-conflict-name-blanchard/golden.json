@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-046-scanned-conflict-name-blanchard",
   "label": "Dr. Todd Blanchard",
+  "identity": {
+    "fullName": "Todd Blanchard",
+    "npi": "1545920716",
+    "dateOfBirth": "1981-07-25",
+    "credentialingState": "VA"
+  },
   "documents": [
     {
       "type": "license",
@@ -47,7 +54,7 @@
       "type": "malpractice",
       "filename": "malpractice.pdf",
       "fields": {
-        "fullName": "Mike Blanchard, M.D.",
+        "fullName": "Rick Blanchard, M.D.",
         "carrier": "Atlantic Liability Mutual",
         "policyNumber": "ATL-VA-920716",
         "expiryDate": "2028-01-19",
@@ -64,7 +71,7 @@
         "license",
         "malpractice"
       ],
-      "description": "license: 'Todd Blanchard, M.D.'; malpractice: 'Mike Blanchard, M.D.'",
+      "description": "license: 'Todd Blanchard, M.D.'; malpractice: 'Rick Blanchard, M.D.'",
       "expectedSeverity": "Critical",
       "expected_to_flag": true
     }

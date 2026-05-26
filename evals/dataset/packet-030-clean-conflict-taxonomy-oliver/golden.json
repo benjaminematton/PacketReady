@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-030-clean-conflict-taxonomy-oliver",
   "label": "Dr. Jeffrey Oliver",
+  "identity": {
+    "fullName": "Jeffrey Oliver",
+    "npi": "1348537675",
+    "dateOfBirth": "1965-11-25",
+    "credentialingState": "NY"
+  },
   "documents": [
     {
       "type": "license",

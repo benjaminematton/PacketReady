@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-007-clean-myers",
   "label": "Dr. Anthony Myers",
+  "identity": {
+    "fullName": "Anthony Myers",
+    "npi": "1714297300",
+    "dateOfBirth": "1969-10-27",
+    "credentialingState": "NJ"
+  },
   "documents": [
     {
       "type": "license",

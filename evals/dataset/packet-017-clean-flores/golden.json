@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-017-clean-flores",
   "label": "Dr. Matthew Flores",
+  "identity": {
+    "fullName": "Matthew Flores",
+    "npi": "1532407222",
+    "dateOfBirth": "1970-12-04",
+    "credentialingState": "MN"
+  },
   "documents": [
     {
       "type": "license",

@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-012-clean-thomas",
   "label": "Dr. David Thomas",
+  "identity": {
+    "fullName": "David Thomas",
+    "npi": "1951592769",
+    "dateOfBirth": "1969-09-29",
+    "credentialingState": "GA"
+  },
   "documents": [
     {
       "type": "license",

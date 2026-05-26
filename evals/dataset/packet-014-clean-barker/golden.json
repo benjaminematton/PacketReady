@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-014-clean-barker",
   "label": "Dr. John Barker",
+  "identity": {
+    "fullName": "John Barker",
+    "npi": "1740493105",
+    "dateOfBirth": "1970-06-02",
+    "credentialingState": "OK"
+  },
   "documents": [
     {
       "type": "license",

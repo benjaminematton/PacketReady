@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-013-clean-jackson",
   "label": "Dr. Matthew Jackson",
+  "identity": {
+    "fullName": "Matthew Jackson",
+    "npi": "1184643231",
+    "dateOfBirth": "1972-11-12",
+    "credentialingState": "IN"
+  },
   "documents": [
     {
       "type": "license",

@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-042-scanned-lang",
   "label": "Dr. John Lang",
+  "identity": {
+    "fullName": "John Lang",
+    "npi": "1339472106",
+    "dateOfBirth": "1980-08-10",
+    "credentialingState": "FL"
+  },
   "documents": [
     {
       "type": "license",

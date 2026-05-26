@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-011-clean-wilson",
   "label": "Dr. Emily Wilson",
+  "identity": {
+    "fullName": "Emily Wilson",
+    "npi": "1330497458",
+    "dateOfBirth": "1983-02-20",
+    "credentialingState": "CA"
+  },
   "documents": [
     {
       "type": "license",

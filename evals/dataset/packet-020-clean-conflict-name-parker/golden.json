@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-020-clean-conflict-name-parker",
   "label": "Dr. Manuel Parker",
+  "identity": {
+    "fullName": "Manuel Parker",
+    "npi": "1830295295",
+    "dateOfBirth": "1989-06-04",
+    "credentialingState": "CA"
+  },
   "documents": [
     {
       "type": "license",
@@ -47,7 +54,7 @@
       "type": "malpractice",
       "filename": "malpractice.pdf",
       "fields": {
-        "fullName": "Manuel Alexander Parker, MD",
+        "fullName": "Manuel Joseph Parker, MD",
         "carrier": "NORCAL Mutual",
         "policyNumber": "NOR-CA-295295",
         "expiryDate": "2028-03-11",
@@ -64,7 +71,7 @@
         "license",
         "malpractice"
       ],
-      "description": "license: 'Manuel Parker, MD'; malpractice: 'Manuel Alexander Parker, MD'",
+      "description": "license: 'Manuel Parker, MD'; malpractice: 'Manuel Joseph Parker, MD'",
       "expectedSeverity": "Critical",
       "expected_to_flag": true
     }

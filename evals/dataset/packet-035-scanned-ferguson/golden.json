@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-035-scanned-ferguson",
   "label": "Dr. Kristin Ferguson",
+  "identity": {
+    "fullName": "Kristin Ferguson",
+    "npi": "1867961124",
+    "dateOfBirth": "1972-09-14",
+    "credentialingState": "PA"
+  },
   "documents": [
     {
       "type": "license",

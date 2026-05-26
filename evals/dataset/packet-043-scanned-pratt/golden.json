@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-043-scanned-pratt",
   "label": "Dr. Maria Pratt",
+  "identity": {
+    "fullName": "Maria Pratt",
+    "npi": "1078880949",
+    "dateOfBirth": "1960-07-08",
+    "credentialingState": "PA"
+  },
   "documents": [
     {
       "type": "license",

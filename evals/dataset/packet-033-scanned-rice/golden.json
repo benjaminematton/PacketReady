@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-033-scanned-rice",
   "label": "Dr. Jennifer Rice",
+  "identity": {
+    "fullName": "Jennifer Rice",
+    "npi": "1844011415",
+    "dateOfBirth": "1958-01-05",
+    "credentialingState": "IL"
+  },
   "documents": [
     {
       "type": "license",

@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-005-scanned-anderson",
   "label": "Dr. Henry Anderson",
+  "identity": {
+    "fullName": "Henry Anderson, MD",
+    "npi": "1999000015",
+    "dateOfBirth": "1975-03-14",
+    "credentialingState": "NY"
+  },
   "documents": [
     {
       "type": "license",

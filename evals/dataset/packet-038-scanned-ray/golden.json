@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-038-scanned-ray",
   "label": "Dr. Carla Ray",
+  "identity": {
+    "fullName": "Carla Ray",
+    "npi": "1746915648",
+    "dateOfBirth": "1980-06-03",
+    "credentialingState": "FL"
+  },
   "documents": [
     {
       "type": "license",

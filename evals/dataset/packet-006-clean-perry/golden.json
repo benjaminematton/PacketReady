@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-006-clean-perry",
   "label": "Dr. Michelle Perry",
+  "identity": {
+    "fullName": "Michelle Perry",
+    "npi": "1509595942",
+    "dateOfBirth": "1969-12-23",
+    "credentialingState": "PA"
+  },
   "documents": [
     {
       "type": "license",

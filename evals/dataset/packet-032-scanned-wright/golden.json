@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-032-scanned-wright",
   "label": "Dr. Jeffrey Wright",
+  "identity": {
+    "fullName": "Jeffrey Wright",
+    "npi": "1731680223",
+    "dateOfBirth": "1991-08-05",
+    "credentialingState": "TN"
+  },
   "documents": [
     {
       "type": "license",

@@ -37,6 +37,27 @@ from .specialty_catalog import board_for_specialty
 
 
 @dataclass(frozen=True)
+class IdentityFields:
+    """
+    Provider identity (P4 task 1, slice 2). These are NOT extracted from any
+    P4 document type — they live on the Provider row at create time and get
+    overlaid by the aggregator at score time. The CV extractor (not shipped)
+    will close this seam in a later phase; until then, the eval orchestrator
+    has to pass them explicitly to ``POST /api/providers``.
+
+    All four fields are required when emitted to golden.json. The
+    orchestrator's wire validator (``ProviderIdentityValidator`` on the C#
+    side) re-validates: NPI is CMS-Luhn-valid (10 digits, "80840" prefix +
+    mod-10), state matches ``^[A-Z]{2}$``, DOB is in
+    [1900-01-02, today], fullName non-empty.
+    """
+    full_name: str
+    npi: str                     # 10 digits, CMS-Luhn-valid
+    date_of_birth: str           # YYYY-MM-DD
+    credentialing_state: str     # 2 uppercase letters
+
+
+@dataclass(frozen=True)
 class PacketSpec:
     id: str
     label: str
@@ -44,6 +65,10 @@ class PacketSpec:
     dea_fields: DeaFields
     board_cert_fields: BoardCertFields
     malpractice_fields: MalpracticeFields
+    # Provider-identity block (slice 2). Required for the orchestrator's
+    # POST /api/providers call — without it the scored profile carries
+    # placeholder NPI/DOB/state and contaminates downstream metrics.
+    identity_fields: IdentityFields | None = None
     # Tuple (not list) so the frozen contract extends to the conflict markers
     # themselves — `replace(spec, planted_conflicts=(*spec.planted_conflicts, m))`
     # is the only mutation path. dict elements stay mutable for forward-compat;
@@ -56,6 +81,36 @@ class PacketSpec:
     # canonical baselines, not pattern coverage). Persisted into golden.json
     # under metadata.cleanPattern so the C# CLI can break FPs down per-pattern.
     clean_pattern: CleanNamePattern | None = None
+
+
+# --- NPI Luhn helpers ---------------------------------------------------------
+
+
+def npi_check_digit(base9: str) -> str:
+    """Compute the CMS NPI check digit (10th position) for a 9-digit base.
+
+    The 9-digit base is prefixed with the ISO 7812 issuer identifier "80840";
+    standard Luhn-mod-10 over the 14-digit string yields the check digit.
+    The 10-digit NPI = base9 + check_digit then satisfies the full Luhn
+    validator on "80840"+npi.
+    """
+    if len(base9) != 9 or not base9.isdigit():
+        raise ValueError(f"npi_check_digit: base9 must be 9 digits, got {base9!r}")
+    prefixed = "80840" + base9
+    total = 0
+    for i, c in enumerate(reversed(prefixed)):
+        d = int(c)
+        if i % 2 == 0:
+            d *= 2
+            if d > 9:
+                d -= 9
+        total += d
+    return str((10 - total % 10) % 10)
+
+
+def npi_from_base(base9: str) -> str:
+    """Build a CMS-Luhn-valid 10-digit NPI from a 9-digit base."""
+    return base9 + npi_check_digit(base9)
 
 
 # --- Anderson canonical fields, shared by packets 001 and 005 ----------------
@@ -96,6 +151,18 @@ _ANDERSON_MALPRACTICE = MalpracticeFields(
     licensee_license_number="MD-NY-99001",
     licensee_license_expiry="2027-04-14",
 )
+# Identity for packets 001 + 005 (005 is the rasterized clone of 001).
+# DOB and credentialing state are not on the license; held here as the
+# canonical Anderson identity so the orchestrator can pass them to
+# POST /api/providers. NPI is Luhn-valid by construction via
+# npi_from_base; the base9 prefix encodes "NY99001" loosely so the
+# fixture stays recognizable in logs.
+_ANDERSON_IDENTITY = IdentityFields(
+    full_name="Henry Anderson, MD",
+    npi=npi_from_base("199900001"),       # → 1999000015 (Luhn-self-verified)
+    date_of_birth="1975-03-14",
+    credentialing_state="NY",
+)
 
 
 PACKET_SPECS: list[PacketSpec] = [
@@ -107,6 +174,7 @@ PACKET_SPECS: list[PacketSpec] = [
         dea_fields=_ANDERSON_DEA,
         board_cert_fields=_ANDERSON_BOARD,
         malpractice_fields=_ANDERSON_MALPRACTICE,
+        identity_fields=_ANDERSON_IDENTITY,
         notes="All four docs consistent; clean baseline for accuracy floor measurement.",
     ),
 
@@ -149,6 +217,12 @@ PACKET_SPECS: list[PacketSpec] = [
             status="Active",
             licensee_license_number="A-CA-72145",
             licensee_license_expiry="2027-09-11",
+        ),
+        identity_fields=IdentityFields(
+            full_name="Marisol Bautista, MD",
+            npi=npi_from_base("172145001"),
+            date_of_birth="1981-08-22",
+            credentialing_state="CA",
         ),
         notes="All four docs consistent; second clean packet adds state+specialty variety.",
     ),
@@ -201,6 +275,12 @@ PACKET_SPECS: list[PacketSpec] = [
                 "expectedSeverity": "Critical",
                 "expected_to_flag": True,
             },
+        ),
+        identity_fields=IdentityFields(
+            full_name="Jane Calloway, MD",   # license-side baseline; the variant is on malpractice
+            npi=npi_from_base("144210001"),
+            date_of_birth="1983-11-09",
+            credentialing_state="NY",
         ),
         notes="Per-doc extraction must read each PDF's literal name. Cross-doc validator (P4) surfaces the variant.",
     ),
@@ -255,6 +335,12 @@ PACKET_SPECS: list[PacketSpec] = [
                 "expected_to_flag": False,
             },
         ),
+        identity_fields=IdentityFields(
+            full_name="Amadou Diallo, MD",
+            npi=npi_from_base("158031001"),
+            date_of_birth="1978-06-18",
+            credentialing_state="IL",
+        ),
         notes="Per-doc extraction reads each PDF accurately. P4 cross-doc validator catches the disagreement.",
     ),
 
@@ -266,6 +352,7 @@ PACKET_SPECS: list[PacketSpec] = [
         dea_fields=_ANDERSON_DEA,
         board_cert_fields=_ANDERSON_BOARD,
         malpractice_fields=_ANDERSON_MALPRACTICE,
+        identity_fields=_ANDERSON_IDENTITY,   # rasterized clone shares Anderson's identity
         scanned=True,
         notes="Rasterized clone of 001 at 200dpi + 0.7° skew + JPEG q=70. Same expected fields; isolates extractor robustness to fax-pipeline artifacts.",
     ),
@@ -319,6 +406,26 @@ def _malpractice_json(f: MalpracticeFields) -> dict[str, str]:
     }
 
 
+def _identity_json(f: IdentityFields) -> dict[str, str]:
+    """Wire-format projection for the orchestrator's POST /api/providers
+    `identity` block. Field names match the C# side's
+    `ProviderIdentityDto`."""
+    return {
+        "fullName": f.full_name,
+        "npi": f.npi,
+        "dateOfBirth": f.date_of_birth,
+        "credentialingState": f.credentialing_state,
+    }
+
+
+# Bumped to 2 by P4 slice 2 — adds top-level `identity` block. Readers
+# (the orchestrator's score_metrics.load_planted_conflicts and friends)
+# can branch on this if they need to support older goldens; today the
+# regen happens in lockstep with the bump, so v1 goldens are not in
+# the dataset.
+GOLDEN_SCHEMA_VERSION: int = 2
+
+
 def golden_for(spec: PacketSpec) -> dict[str, Any]:
     """Build the golden.json dict for a single packet spec.
 
@@ -329,9 +436,23 @@ def golden_for(spec: PacketSpec) -> dict[str, Any]:
     if spec.clean_pattern is not None:
         metadata["cleanPattern"] = spec.clean_pattern.name
 
+    if spec.identity_fields is None:
+        raise ValueError(
+            f"PacketSpec {spec.id!r} is missing identity_fields. Slice 2 made "
+            f"this required so the orchestrator can pass it to POST /api/providers; "
+            f"a spec without identity_fields would force a placeholder NPI/DOB/state "
+            f"and contaminate downstream score metrics."
+        )
+
     out: dict[str, Any] = {
+        "goldenSchemaVersion": GOLDEN_SCHEMA_VERSION,
         "packetId": spec.id,
         "label": spec.label,
+        # Provider-identity block consumed by the orchestrator at create
+        # time. Not part of the per-doc scored fields; lives as its own
+        # top-level block so a reader can branch on its presence without
+        # walking documents[].
+        "identity": _identity_json(spec.identity_fields),
         "documents": [
             {"type": LICENSE,     "filename": DOC_FILENAMES[LICENSE],     "fields": _license_json(spec.license_fields)},
             {"type": DEA,         "filename": DOC_FILENAMES[DEA],         "fields": _dea_json(spec.dea_fields)},
@@ -497,6 +618,17 @@ def _spec_from_profile(idx: int, profile: SampledProfile, faker: Faker, rng: Ran
     `clean_pattern` dictates the per-doc fullName shape (credential suffix,
     middle initial, hyphenation, whitespace). Rotated by packet_idx in
     :pyfunc:`build_new_packets` so every pattern appears in the 50-packet set.
+
+    Identity fields:
+      - NPI is `profile.npi` (NPPES snapshot is Luhn-valid by construction).
+      - credentialing_state is `profile.license_state` — for clean packets
+        the credentialing state matches the license state; conflict buckets
+        that move one without the other will need a per-bucket override.
+      - DOB is drawn from the per-packet `rng` (not faker) — faker draws
+        from the same module RNG as `first_name`/`last_name`, so pulling
+        a DOB out of faker shifts every subsequent packet's name. The
+        per-packet `rng` is already independent of faker, so this stays
+        out of the name-stability invariant.
     """
     first, last = _draw_person(faker)
     names = names_for_clean_pattern(clean_pattern, first, last)
@@ -523,6 +655,15 @@ def _spec_from_profile(idx: int, profile: SampledProfile, faker: Faker, rng: Ran
     carrier        = rng.choice(_CARRIERS)
     policy_number  = f"{_carrier_policy_prefix(carrier)}-{profile.license_state}-{profile.npi[-6:]}"
     board          = board_for_specialty(profile.primary_specialty)
+    # DOB drawn LAST so existing rng-driven values (license/dea/board/
+    # malpractice dates, dea prefix letters, carrier choice) stay byte-stable
+    # against pre-slice-2 generations. Plausibly 30-70 years old against
+    # the anchor date — credentialing providers are post-residency at
+    # minimum and rarely working past 70. Hand-rolled via `rng` rather
+    # than `faker.date_of_birth` because faker draws share state with
+    # name draws and would shift packet ids.
+    dob_age_days = rng.randint(30 * 365, 70 * 365)
+    dob = (_NEW_PACKET_ANCHOR - timedelta(days=dob_age_days)).isoformat()
 
     return PacketSpec(
         id=packet_id,
@@ -559,6 +700,12 @@ def _spec_from_profile(idx: int, profile: SampledProfile, faker: Faker, rng: Ran
             status="Active",
             licensee_license_number=license_number,
             licensee_license_expiry=_date_str(license_expiry),
+        ),
+        identity_fields=IdentityFields(
+            full_name=f"{first} {last}",
+            npi=profile.npi,
+            date_of_birth=dob,
+            credentialing_state=profile.license_state,
         ),
         clean_pattern=clean_pattern,
         notes=(

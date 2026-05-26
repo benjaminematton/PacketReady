@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-025-clean-conflict-name-bartlett",
   "label": "Dr. Cheryl Bartlett",
+  "identity": {
+    "fullName": "Cheryl Bartlett",
+    "npi": "1600996585",
+    "dateOfBirth": "1957-01-20",
+    "credentialingState": "FL"
+  },
   "documents": [
     {
       "type": "license",

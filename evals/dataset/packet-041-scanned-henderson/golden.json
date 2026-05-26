@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-041-scanned-henderson",
   "label": "Dr. Jeff Henderson",
+  "identity": {
+    "fullName": "Jeff Henderson",
+    "npi": "1959882089",
+    "dateOfBirth": "1956-08-29",
+    "credentialingState": "WA"
+  },
   "documents": [
     {
       "type": "license",

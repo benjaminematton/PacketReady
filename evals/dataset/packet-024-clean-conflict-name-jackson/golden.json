@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-024-clean-conflict-name-jackson",
   "label": "Dr. Timothy Jackson",
+  "identity": {
+    "fullName": "Timothy Jackson",
+    "npi": "1421580360",
+    "dateOfBirth": "1972-09-19",
+    "credentialingState": "MT"
+  },
   "documents": [
     {
       "type": "license",
@@ -47,7 +54,7 @@
       "type": "malpractice",
       "filename": "malpractice.pdf",
       "fields": {
-        "fullName": "Timothy T. Jackson-Taylor, MD",
+        "fullName": "Timothy T. Jackson-Smith, MD",
         "carrier": "Pacific Indemnity Group",
         "policyNumber": "PAC-MT-580360",
         "expiryDate": "2028-02-03",
@@ -64,7 +71,7 @@
         "license",
         "malpractice"
       ],
-      "description": "license: 'Timothy Jackson, MD'; malpractice: 'Timothy T. Jackson-Taylor, MD'",
+      "description": "license: 'Timothy Jackson, MD'; malpractice: 'Timothy T. Jackson-Smith, MD'",
       "expectedSeverity": "Critical",
       "expected_to_flag": true
     }

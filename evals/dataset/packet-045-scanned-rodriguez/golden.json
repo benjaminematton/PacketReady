@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-045-scanned-rodriguez",
   "label": "Dr. Nicholas Rodriguez",
+  "identity": {
+    "fullName": "Nicholas Rodriguez",
+    "npi": "1000519615",
+    "dateOfBirth": "1995-12-16",
+    "credentialingState": "CA"
+  },
   "documents": [
     {
       "type": "license",

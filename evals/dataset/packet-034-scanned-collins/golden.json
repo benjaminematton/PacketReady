@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-034-scanned-collins",
   "label": "Dr. Christopher Collins",
+  "identity": {
+    "fullName": "Christopher Collins",
+    "npi": "1311284073",
+    "dateOfBirth": "1970-09-17",
+    "credentialingState": "MD"
+  },
   "documents": [
     {
       "type": "license",

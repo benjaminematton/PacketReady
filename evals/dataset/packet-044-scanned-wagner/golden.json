@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-044-scanned-wagner",
   "label": "Dr. Tricia Wagner",
+  "identity": {
+    "fullName": "Tricia Wagner",
+    "npi": "1230826905",
+    "dateOfBirth": "1958-06-27",
+    "credentialingState": "TX"
+  },
   "documents": [
     {
       "type": "license",

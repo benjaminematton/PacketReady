@@ -1,6 +1,13 @@
 {
+  "goldenSchemaVersion": 2,
   "packetId": "packet-027-clean-conflict-taxonomy-acosta",
   "label": "Dr. Nicole Acosta",
+  "identity": {
+    "fullName": "Nicole Acosta",
+    "npi": "1579528146",
+    "dateOfBirth": "1980-12-15",
+    "credentialingState": "SC"
+  },
   "documents": [
     {
       "type": "license",
@@ -12,7 +19,7 @@
         "issueDate": "2023-05-26",
         "expiryDate": "2029-05-24",
         "status": "Active",
-        "taxonomyCode": "207N00000X"
+        "taxonomyCode": "207R00000X"
       }
     },
     {
@@ -36,8 +43,8 @@
       "filename": "board-cert.pdf",
       "fields": {
         "fullName": "Nicole J. Acosta, MD",
-        "board": "ABIM",
-        "specialty": "Internal Medicine",
+        "board": "ABEM",
+        "specialty": "Emergency Medicine",
         "issueDate": "2022-05-26",
         "expiryDate": "2032-05-23",
         "status": "Active"
@@ -63,7 +70,7 @@
         "license",
         "boardCert"
       ],
-      "description": "license taxonomy_code 207N00000X → canonical specialty 'Dermatology'; board cert specialty 'Internal Medicine' (ABIM)",
+      "description": "license taxonomy_code 207R00000X → canonical specialty 'Internal Medicine'; board cert specialty 'Emergency Medicine' (ABEM)",
       "expectedSeverity": "Critical",
       "expected_to_flag": true
     }
