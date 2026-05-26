@@ -1,4 +1,5 @@
 import type { AuditEventDto } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 // Same-day chains (the demo case) render time-only; chains that span multiple
 // calendar days prepend the date so the operator can tell "yesterday's score
@@ -26,42 +27,54 @@ const DATETIME_FORMAT = new Intl.DateTimeFormat("en-US", {
  * single API call and shares the events with every IssueCard's panel.
  *
  * <para>One row per audit event in time order. Each row shows event type,
- * model + cost when the payload carries them (extraction / score-synth),
- * and the wall-clock time. Per-row Langfuse deep-link is a P6.5 follow-on —
- * the current `LangfuseTelemetry.OtlpEndpointSuffixes` machinery is on the
- * backend, and surfacing per-trace URLs requires a small endpoint addition
- * we haven't blocked the demo on.</para>
+ * a parsed payload chip (per event type), and the wall-clock time. Marker
+ * dots tint by event class — score-compute carries the tier color so the
+ * "moment the score landed" is visible at a glance, document-upload events
+ * stay neutral.</para>
  */
 export function AuditTrail({ events }: { events: AuditEventDto[] }) {
   if (events.length === 0) {
-    return (
-      <p className="text-xs italic text-muted-foreground">
-        No audit events recorded yet for this provider.
-      </p>
-    );
+    return <AuditEmpty />;
   }
 
   const formatter = spansMultipleDays(events) ? DATETIME_FORMAT : TIME_FORMAT;
 
   return (
-    <ol className="space-y-1.5">
-      {events.map((e, idx) => (
-        <li key={e.id} className="flex items-start gap-3">
-          <Marker isLast={idx === events.length - 1} />
-          <div className="min-w-0 flex-1 pb-1">
-            <div className="flex items-baseline justify-between gap-2">
-              <p className="font-mono text-xs font-medium text-foreground">
-                {e.eventType}
-              </p>
-              <p className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground">
-                {formatter.format(new Date(e.occurredAt))}
-              </p>
+    <ol className="relative space-y-4 border-l border-border/60 pl-5">
+      {events.map((e) => {
+        const parsed = tryParse(e.payload);
+        const tone = markerTone(e.eventType, parsed);
+        return (
+          <li key={e.id} className="relative">
+            <Marker tone={tone} />
+            <div className="min-w-0">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-foreground">
+                  {e.eventType}
+                </p>
+                <p className="shrink-0 font-mono text-[10px] tabular-nums uppercase tracking-wider text-muted-foreground">
+                  {formatter.format(new Date(e.occurredAt))}
+                </p>
+              </div>
+              <PayloadSummary eventType={e.eventType} parsed={parsed} />
             </div>
-            <PayloadSummary eventType={e.eventType} payload={e.payload} />
-          </div>
-        </li>
-      ))}
+          </li>
+        );
+      })}
     </ol>
+  );
+}
+
+function AuditEmpty() {
+  return (
+    <div className="border border-dashed border-border/60 px-5 py-8 text-center">
+      <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+        Audit chain empty
+      </p>
+      <p className="mt-2 text-xs text-muted-foreground">
+        No system events recorded yet for this provider.
+      </p>
+    </div>
   );
 }
 
@@ -77,37 +90,58 @@ function spansMultipleDays(events: AuditEventDto[]): boolean {
   );
 }
 
-/** A small dot + vertical connector. Last row drops the connector. */
-function Marker({ isLast }: { isLast: boolean }) {
+type MarkerTone = "score-red" | "score-yellow" | "score-green" | "doc" | "neutral";
+
+const MARKER_BG: Record<MarkerTone, string> = {
+  "score-red": "bg-rose-500 ring-rose-500/25",
+  "score-yellow": "bg-amber-500 ring-amber-500/25",
+  "score-green": "bg-emerald-500 ring-emerald-500/25",
+  doc: "bg-zinc-400 ring-zinc-400/20 dark:bg-zinc-500 dark:ring-zinc-500/20",
+  neutral:
+    "bg-zinc-300 ring-zinc-300/0 dark:bg-zinc-700 dark:ring-zinc-700/0",
+};
+
+function markerTone(
+  eventType: string,
+  parsed: Record<string, unknown> | null,
+): MarkerTone {
+  if (eventType === "ScoreComputed") {
+    const tier = strOrNull(parsed?.["tier"]);
+    if (tier === "Red") return "score-red";
+    if (tier === "Yellow") return "score-yellow";
+    if (tier === "Green") return "score-green";
+    return "neutral";
+  }
+  if (eventType === "DocumentUploaded") return "doc";
+  return "neutral";
+}
+
+/** A colored dot anchored to the timeline rail on the left of the row. */
+function Marker({ tone }: { tone: MarkerTone }) {
   return (
-    <div className="relative flex shrink-0 flex-col items-center pt-1.5">
-      <span
-        aria-hidden
-        className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60"
-      />
-      {!isLast && (
-        <span
-          aria-hidden
-          className="absolute top-2.5 h-full w-px bg-border"
-        />
+    <span
+      aria-hidden
+      className={cn(
+        "absolute -left-[27px] top-1.5 h-2.5 w-2.5 rounded-full ring-4",
+        MARKER_BG[tone],
       )}
-    </div>
+    />
   );
 }
 
 /**
- * Best-effort one-liner per event type. Parses the JSONB payload lazily —
- * fields are per-event-type so we can't enumerate every shape here. Unknown
- * event types render no summary (the event-type label alone is enough).
+ * Best-effort one-liner per event type, rendered as a row of monospace
+ * key:value chips. Parses the JSONB payload lazily — fields are per-event-
+ * type so we can't enumerate every shape here. Unknown event types render
+ * no chips (the event-type label alone carries the row).
  */
 function PayloadSummary({
   eventType,
-  payload,
+  parsed,
 }: {
   eventType: string;
-  payload: string;
+  parsed: Record<string, unknown> | null;
 }) {
-  const parsed = tryParse(payload);
   if (parsed === null) return null;
 
   switch (eventType) {
@@ -119,27 +153,64 @@ function PayloadSummary({
       const minor = numOrNull(parsed["minorCount"]);
       if (score === null) return null;
       return (
-        <p className="mt-0.5 text-[11px] text-muted-foreground">
-          score {score} ({tier ?? "?"}) ·{" "}
-          <span className="tabular-nums">
-            {critical ?? 0}C / {major ?? 0}M / {minor ?? 0}Min
-          </span>
-        </p>
+        <ChipRow>
+          <Chip label="score" value={`${score} (${tier ?? "?"})`} strong />
+          <Chip
+            label="breakdown"
+            value={`${critical ?? 0}C · ${major ?? 0}M · ${minor ?? 0}m`}
+          />
+        </ChipRow>
       );
     }
     case "DocumentUploaded": {
       const docType = strOrNull(parsed["docType"]);
       const conf = numOrNull(parsed["docTypeConfidence"]);
       return (
-        <p className="mt-0.5 text-[11px] text-muted-foreground">
-          {docType ?? "doc"} (classifier conf{" "}
-          <span className="tabular-nums">{conf?.toFixed(2) ?? "?"}</span>)
-        </p>
+        <ChipRow>
+          <Chip label="docType" value={docType ?? "?"} strong />
+          {conf !== null && (
+            <Chip label="classifier" value={conf.toFixed(2)} />
+          )}
+        </ChipRow>
       );
     }
     default:
       return null;
   }
+}
+
+function ChipRow({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+      {children}
+    </div>
+  );
+}
+
+function Chip({
+  label,
+  value,
+  strong = false,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
+  return (
+    <span className="inline-flex items-baseline gap-1 font-mono text-[10px] tabular-nums">
+      <span className="uppercase tracking-[0.18em] text-muted-foreground/80">
+        {label}
+      </span>
+      <span
+        className={cn(
+          "text-foreground/85",
+          strong && "font-semibold text-foreground",
+        )}
+      >
+        {value}
+      </span>
+    </span>
+  );
 }
 
 function tryParse(s: string): Record<string, unknown> | null {

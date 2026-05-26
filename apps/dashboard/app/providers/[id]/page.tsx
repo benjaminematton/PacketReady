@@ -1,7 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { api } from "@/lib/api";
-import type { AuditEventDto, Issue, Severity } from "@/lib/types";
+import type {
+  AuditEventDto,
+  Issue,
+  ProviderDetail,
+  ReadinessScore,
+  Severity,
+  Tier,
+} from "@/lib/types";
 import { ScoreBadge } from "@/components/score-badge";
 import { IssueCard } from "@/components/issue-card";
 
@@ -48,42 +55,19 @@ export default async function ProviderDetailPage({
     <main className="mx-auto max-w-3xl px-6 py-10">
       <Link
         href="/providers"
-        className="mb-6 inline-block text-xs text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+        className="mb-6 inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-500 dark:hover:text-zinc-200"
       >
-        ← All providers
+        ← Back to triage queue
       </Link>
 
-      <header className="mb-8 flex items-start justify-between gap-6">
-        <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {provider.fullName}
-          </h1>
-          <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm text-zinc-600 dark:text-zinc-400">
-            <dt className="text-zinc-500 dark:text-zinc-500">NPI</dt>
-            <dd className="font-mono">{provider.npi}</dd>
-            <dt className="text-zinc-500 dark:text-zinc-500">Credentialing</dt>
-            <dd className="font-mono">{provider.credentialingState}</dd>
-            {score && (
-              <>
-                <dt className="text-zinc-500 dark:text-zinc-500">Last scored</dt>
-                <dd>{DATE_FORMAT.format(new Date(score.computedAt))}</dd>
-              </>
-            )}
-          </dl>
-        </div>
-        <ScoreBadge
-          score={score?.score ?? null}
-          tier={score?.tier ?? null}
-          className="h-10 min-w-16 text-base"
-        />
-      </header>
+      <ProviderMasthead provider={provider} score={score} />
 
       {score === null ? (
         <NoScoreYet />
       ) : (
         <section>
           {score.issues.length > 0 && (
-            <BreakdownBar
+            <BreakdownStrip
               critical={score.criticalCount}
               major={score.majorCount}
               minor={score.minorCount}
@@ -96,6 +80,110 @@ export default async function ProviderDetailPage({
   );
 }
 
+/**
+ * Doc-spine masthead with a hero readiness-score card on the right. Mirrors
+ * the §2 spine table from `docs/style.md` so the detail page reads as a
+ * continuation of the providers list, not a different product. The score
+ * card is the demo's iconic moment — large mono tabular numeral, tier label
+ * underneath, tier stripe on the left edge.
+ */
+function ProviderMasthead({
+  provider,
+  score,
+}: {
+  provider: ProviderDetail;
+  score: ReadinessScore | null;
+}) {
+  return (
+    <header className="mb-8 border-b border-zinc-200 pb-7 dark:border-zinc-800">
+      <div className="flex items-start justify-between gap-6">
+        <div className="min-w-0 flex-1">
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-500">
+            Credentialing chart
+          </p>
+          <h1 className="mt-1.5 text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+            {provider.fullName}
+          </h1>
+          <dl className="mt-5 grid grid-cols-[5rem_1fr] gap-x-4 gap-y-1.5 font-mono text-[12px]">
+            <SpineRow term="NPI" definition={provider.npi} />
+            <SpineRow term="State" definition={provider.credentialingState} />
+            {score && (
+              <SpineRow
+                term="Scored"
+                definition={DATE_FORMAT.format(new Date(score.computedAt))}
+              />
+            )}
+          </dl>
+        </div>
+        {score ? (
+          <HeaderScoreCard score={score} />
+        ) : (
+          <ScoreBadge score={null} tier={null} className="h-10 min-w-16" />
+        )}
+      </div>
+    </header>
+  );
+}
+
+function SpineRow({
+  term,
+  definition,
+}: {
+  term: string;
+  definition: string;
+}) {
+  return (
+    <>
+      <dt className="uppercase tracking-wider text-zinc-500 dark:text-zinc-500">
+        {term}
+      </dt>
+      <dd className="text-zinc-700 dark:text-zinc-300">{definition}</dd>
+    </>
+  );
+}
+
+const TIER_STRIPE: Record<Tier, string> = {
+  Red: "border-rose-500",
+  Yellow: "border-amber-500",
+  Green: "border-emerald-500",
+};
+
+const TIER_TEXT: Record<Tier, string> = {
+  Red: "text-rose-700 dark:text-rose-400",
+  Yellow: "text-amber-700 dark:text-amber-400",
+  Green: "text-emerald-700 dark:text-emerald-400",
+};
+
+const TIER_VERDICT: Record<Tier, string> = {
+  Red: "submission blocked",
+  Yellow: "needs review",
+  Green: "submission ready",
+};
+
+function HeaderScoreCard({ score }: { score: ReadinessScore }) {
+  return (
+    <div
+      className={`shrink-0 border-l-2 pl-5 ${TIER_STRIPE[score.tier]}`}
+      aria-label={`Readiness score ${score.score} of 100, tier ${score.tier}`}
+    >
+      <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-500">
+        Readiness score
+      </p>
+      <p className="mt-1 font-sans text-5xl font-bold tabular-nums tracking-tight text-zinc-900 dark:text-zinc-100">
+        {score.score}
+        <span className="ml-1 font-mono text-base font-normal text-zinc-400 dark:text-zinc-600">
+          /100
+        </span>
+      </p>
+      <p
+        className={`mt-2 font-mono text-[10px] font-semibold uppercase tracking-[0.22em] ${TIER_TEXT[score.tier]}`}
+      >
+        {score.tier} · {TIER_VERDICT[score.tier]}
+      </p>
+    </div>
+  );
+}
+
 function IssuesList({
   issues,
   auditEvents,
@@ -104,20 +192,11 @@ function IssuesList({
   auditEvents: AuditEventDto[];
 }) {
   if (issues.length === 0) {
-    return (
-      <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-4 dark:border-emerald-900 dark:bg-emerald-950">
-        <p className="text-sm font-medium text-emerald-900 dark:text-emerald-200">
-          No issues found.
-        </p>
-        <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-300">
-          Provider passes every validator. Ready for payer submission.
-        </p>
-      </div>
-    );
+    return <NoIssuesFound />;
   }
 
   return (
-    <ul className="space-y-2">
+    <ul className="space-y-2.5">
       {issues.map((issue, idx) => (
         // No stable Issue id from the API; (validator, index) is unique within
         // a sorted, deterministic list and stable across re-renders of the same DTO.
@@ -129,7 +208,7 @@ function IssuesList({
   );
 }
 
-function BreakdownBar({
+function BreakdownStrip({
   critical,
   major,
   minor,
@@ -139,15 +218,23 @@ function BreakdownBar({
   minor: number;
 }) {
   return (
-    <div className="mb-4 flex items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400">
-      <BreakdownPill severity="Critical" count={critical} />
-      <BreakdownPill severity="Major" count={major} />
-      <BreakdownPill severity="Minor" count={minor} />
+    <div className="mb-5 flex w-fit items-center gap-5 border-y border-zinc-200 py-2 font-mono text-[11px] uppercase tracking-[0.18em] dark:border-zinc-800">
+      <BreakdownItem severity="Critical" count={critical} />
+      <Divider />
+      <BreakdownItem severity="Major" count={major} />
+      <Divider />
+      <BreakdownItem severity="Minor" count={minor} />
     </div>
   );
 }
 
-function BreakdownPill({
+const SEVERITY_DOT: Record<Severity, string> = {
+  Critical: "bg-rose-600",
+  Major: "bg-amber-500",
+  Minor: "bg-zinc-400 dark:bg-zinc-500",
+};
+
+function BreakdownItem({
   severity,
   count,
 }: {
@@ -155,30 +242,59 @@ function BreakdownPill({
   count: number;
 }) {
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 ${PILL_BG[severity]}`}
-    >
-      <span className="font-semibold tabular-nums">{count}</span>
-      <span className="uppercase tracking-wide">{severity}</span>
+    <span className="inline-flex items-center gap-2 text-zinc-700 dark:text-zinc-300">
+      <span
+        className={`h-2 w-2 rounded-full ${SEVERITY_DOT[severity]}`}
+        aria-hidden
+      />
+      <span className="tabular-nums text-sm font-semibold normal-case tracking-normal text-zinc-900 dark:text-zinc-100">
+        {count}
+      </span>
+      <span>{severity}</span>
     </span>
   );
 }
 
-const PILL_BG: Record<Severity, string> = {
-  Critical: "bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-300",
-  Major: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300",
-  Minor: "bg-zinc-100 text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300",
-};
+function Divider() {
+  return (
+    <span
+      aria-hidden
+      className="h-3 w-px bg-zinc-300 dark:bg-zinc-700"
+    />
+  );
+}
+
+function NoIssuesFound() {
+  return (
+    <div className="border-l-2 border-emerald-500 bg-emerald-50/50 px-5 py-4 dark:bg-emerald-950/20">
+      <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-400">
+        Submission ready
+      </p>
+      <p className="mt-2 text-sm font-medium text-emerald-900 dark:text-emerald-200">
+        No issues found.
+      </p>
+      <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-300">
+        Provider passes every validator.
+      </p>
+    </div>
+  );
+}
 
 function NoScoreYet() {
   return (
-    <div className="rounded-lg border border-dashed border-zinc-300 px-6 py-10 text-center dark:border-zinc-700">
-      <p className="text-sm text-zinc-600 dark:text-zinc-400">
+    <div className="border-y border-zinc-200 px-6 py-14 text-center dark:border-zinc-800">
+      <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-500">
+        Awaiting compute
+      </p>
+      <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">
         No readiness score yet for this provider.
       </p>
-      <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-500">
-        Score is generated on first <code className="font-mono">POST</code> to{" "}
-        <code className="font-mono">/scores</code>; the seed runs it automatically.
+      <p className="mt-2 font-mono text-[11px] text-zinc-500 dark:text-zinc-500">
+        Score is generated on first{" "}
+        <code className="rounded-sm bg-zinc-100 px-1.5 py-0.5 dark:bg-zinc-800">
+          POST /scores
+        </code>
+        ; the seed runs it automatically.
       </p>
     </div>
   );

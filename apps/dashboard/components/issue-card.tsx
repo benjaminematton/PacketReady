@@ -24,9 +24,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
  * The dismissable backdrop makes selection feel singleton — clicking another
  * card closes the current panel before opening the next.</para>
  *
- * <para>The card preview shows severity tag + message + a one-line remediation
- * preview. The sheet shows full remediation, validator name, and citations
- * (extracted_value strings in P1; document/page/bbox links in P3).</para>
+ * <para>Hierarchy: a metadata strip on top (severity tag + low-conf pill +
+ * validator name + citation count), the Issue message as the lede, the
+ * remediation underneath, and a tier-colored stripe on the left edge. The
+ * stripe is redundant with the severity tag — that's the point. The eye
+ * lands on color first, then text.</para>
  */
 export function IssueCard({
   issue,
@@ -45,34 +47,51 @@ export function IssueCard({
     <Sheet>
       <SheetTrigger
         className={cn(
-          "group flex w-full items-start gap-4 rounded-lg border bg-card px-5 py-4 text-left text-card-foreground transition-colors",
-          "hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "group relative block w-full rounded-md border bg-card py-4 pl-5 pr-4 text-left transition-colors",
+          "hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
           SEVERITY_BORDER[issue.severity],
         )}
       >
-        <SeverityTag severity={issue.severity} />
-        {issue.isLowConfidenceInput && <LowConfidencePill />}
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium">{issue.message}</p>
-          <p className="mt-1 truncate text-xs text-muted-foreground">
-            {issue.remediation}
-          </p>
+        <span
+          aria-hidden
+          className={cn(
+            "pointer-events-none absolute left-0 top-0 bottom-0 w-[3px] rounded-l-md",
+            SEVERITY_STRIPE[issue.severity],
+          )}
+        />
+
+        <div className="mb-2 flex items-center gap-3">
+          <SeverityTag severity={issue.severity} />
+          {issue.isLowConfidenceInput && <LowConfidencePill compact />}
+          <span className="truncate font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+            {issue.validator}
+          </span>
+          <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] tabular-nums text-muted-foreground transition-colors group-hover:text-foreground/80">
+            {formatCitationCount(issue.citations.length)}
+            <span aria-hidden className="text-muted-foreground/50">
+              ↗
+            </span>
+          </span>
         </div>
-        <span className="shrink-0 text-xs text-muted-foreground/70 group-hover:text-muted-foreground">
-          {formatCitationCount(issue.citations.length)}
-        </span>
+
+        <p className="text-[15px] font-semibold leading-snug text-foreground">
+          {issue.message}
+        </p>
+        <p className="mt-1.5 line-clamp-2 text-[13px] leading-relaxed text-muted-foreground">
+          {issue.remediation}
+        </p>
       </SheetTrigger>
 
-      <SheetContent side="right" className="w-full sm:max-w-md">
-        <SheetHeader className="space-y-3 px-6">
+      <SheetContent side="right" className="w-full sm:max-w-xl">
+        <SheetHeader className="space-y-3 border-b border-border/60 px-6 pb-4 pt-5">
           <div className="flex flex-wrap items-center gap-3">
             <SeverityTag severity={issue.severity} />
             {issue.isLowConfidenceInput && <LowConfidencePill />}
-            <span className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
+            <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
               {issue.validator}
             </span>
           </div>
-          <SheetTitle className="text-base font-medium leading-snug">
+          <SheetTitle className="text-lg font-semibold leading-snug tracking-tight">
             {issue.message}
           </SheetTitle>
           <SheetDescription className="sr-only">
@@ -85,18 +104,29 @@ export function IssueCard({
           (remediation + citations with PDF previews); the audit tab shows
           the chain of system events behind the score this Issue lives in.
           Tab state is local to the Sheet — closing resets to Drill-in.
+          Line variant: editorial underline indicator instead of a pill
+          group, so the tabs read as a section spine rather than a control.
         */}
-        <Tabs defaultValue="drill-in" className="px-6 pt-2 pb-6">
-          <TabsList className="w-full">
-            <TabsTrigger value="drill-in" className="flex-1">
+        <Tabs defaultValue="drill-in" className="px-6 pb-6 pt-4">
+          <TabsList
+            variant="line"
+            className="h-9 w-full justify-start gap-6 border-b border-border/60 px-0"
+          >
+            <TabsTrigger
+              value="drill-in"
+              className="grow-0 px-0 font-mono text-[11px] font-medium uppercase tracking-[0.18em]"
+            >
               Drill-in
             </TabsTrigger>
-            <TabsTrigger value="audit" className="flex-1">
+            <TabsTrigger
+              value="audit"
+              className="grow-0 px-0 font-mono text-[11px] font-medium uppercase tracking-[0.18em]"
+            >
               Why we flagged this
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="drill-in" className="space-y-6 pt-4">
+          <TabsContent value="drill-in" className="space-y-6 pt-5">
             {issue.isLowConfidenceInput && (
               <Section title="Downgraded from Critical">
                 <p className="text-xs leading-relaxed text-muted-foreground">
@@ -109,7 +139,7 @@ export function IssueCard({
             )}
 
             <Section title="Remediation">
-              <p className="text-sm leading-relaxed text-foreground/80">
+              <p className="text-sm leading-relaxed text-foreground/85">
                 {issue.remediation}
               </p>
             </Section>
@@ -118,7 +148,7 @@ export function IssueCard({
               title={
                 issue.citations.length === 1
                   ? "Citation"
-                  : `Citations (${issue.citations.length})`
+                  : `Citations · ${issue.citations.length}`
               }
             >
               {issue.citations.length === 0 ? (
@@ -127,11 +157,11 @@ export function IssueCard({
                   data&quot; finding where there&apos;s nothing to cite.
                 </p>
               ) : (
-                <ul className="space-y-2">
+                <ul className="space-y-3">
                   {issue.citations.map((c, idx) => (
                     <li
                       key={`${c.sourceValidator}-${idx}`}
-                      className="rounded border bg-muted/40 p-3"
+                      className="rounded-md border border-border/60 bg-muted/30 p-3"
                     >
                       <CitationBody citation={c} />
                     </li>
@@ -141,7 +171,7 @@ export function IssueCard({
             </Section>
           </TabsContent>
 
-          <TabsContent value="audit" className="pt-4">
+          <TabsContent value="audit" className="pt-5">
             <AuditTrail events={auditEvents} />
           </TabsContent>
         </Tabs>
@@ -165,16 +195,18 @@ function CitationBody({ citation }: { citation: Citation }) {
   return (
     <>
       <div className="flex items-center gap-2">
-        <p className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
+        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
           {citation.sourceValidator}
         </p>
         {citation.lowConfidence && <LowConfidencePill compact />}
       </div>
-      <p className="mt-1 break-words font-mono text-xs text-foreground/90">
+      <p className="mt-1.5 break-words font-mono text-xs text-foreground/90">
         {citation.extractedValue}
       </p>
       {docRef !== null && (
-        <p className="mt-2 text-[11px] text-muted-foreground">{docRef}</p>
+        <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          {docRef}
+        </p>
       )}
       {preview !== null && (
         <div className="mt-3">
@@ -182,7 +214,7 @@ function CitationBody({ citation }: { citation: Citation }) {
             blobUrl={blobUrl(preview.documentId)}
             page={preview.page}
             bbox={citation.bbox}
-            width={360}
+            width={420}
           />
         </div>
       )}
@@ -200,14 +232,15 @@ function LowConfidencePill({ compact = false }: { compact?: boolean }) {
     <span
       title="Extractor confidence below 0.85"
       className={cn(
-        "inline-flex shrink-0 items-center rounded-md border font-medium uppercase tracking-wide",
+        "inline-flex shrink-0 items-center gap-1 rounded-sm border font-mono font-medium uppercase tracking-[0.18em]",
         "border-amber-300 bg-amber-50 text-amber-800",
         "dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300",
         compact
-          ? "px-1.5 py-0 text-[10px]"
-          : "px-2 py-0.5 text-[11px]",
+          ? "px-1.5 py-0 text-[9px]"
+          : "px-1.5 py-0.5 text-[10px]",
       )}
     >
+      <span aria-hidden className="h-1 w-1 rounded-full bg-current opacity-70" />
       {compact ? "low conf" : "low confidence"}
     </span>
   );
@@ -216,13 +249,13 @@ function LowConfidencePill({ compact = false }: { compact?: boolean }) {
 function formatDocRef(c: Citation): string | null {
   if (c.documentId === null && c.page === null) return null;
   const parts: string[] = [];
-  if (c.documentId !== null) parts.push(`Document ${c.documentId}`);
-  if (c.page !== null) parts.push(`page ${c.page}`);
+  if (c.documentId !== null) parts.push(`doc ${c.documentId.slice(0, 8)}`);
+  if (c.page !== null) parts.push(`p.${c.page}`);
   return parts.join(" · ");
 }
 
 function formatCitationCount(n: number): string {
-  return n === 1 ? "1 citation" : `${n} citations`;
+  return n === 1 ? "1 cite" : `${n} cites`;
 }
 
 function Section({
@@ -234,7 +267,7 @@ function Section({
 }) {
   return (
     <section>
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <h3 className="mb-2.5 font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-muted-foreground">
         {title}
       </h3>
       {children}
@@ -242,28 +275,41 @@ function Section({
   );
 }
 
+/**
+ * Dotted severity label. Reads as a labeled instrument indicator rather than
+ * a marketing badge — color lives in the dot, the word stays high-contrast.
+ */
 function SeverityTag({ severity }: { severity: Severity }) {
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
-        SEVERITY_TAG[severity],
+        "inline-flex shrink-0 items-center gap-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.22em]",
+        SEVERITY_TEXT[severity],
       )}
     >
+      <span
+        aria-hidden
+        className={cn("h-1.5 w-1.5 rounded-full", SEVERITY_STRIPE[severity])}
+      />
       {severity}
     </span>
   );
 }
 
 const SEVERITY_BORDER = {
-  Critical: "border-rose-300 dark:border-rose-900",
-  Major: "border-amber-300 dark:border-amber-900",
+  Critical: "border-rose-200 dark:border-rose-900/60",
+  Major: "border-amber-200 dark:border-amber-900/60",
   Minor: "border-zinc-200 dark:border-zinc-800",
 } satisfies Record<Severity, string>;
 
-const SEVERITY_TAG = {
-  Critical:
-    "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300",
-  Major: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
-  Minor: "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+const SEVERITY_STRIPE = {
+  Critical: "bg-rose-500",
+  Major: "bg-amber-500",
+  Minor: "bg-zinc-300 dark:bg-zinc-600",
+} satisfies Record<Severity, string>;
+
+const SEVERITY_TEXT = {
+  Critical: "text-rose-700 dark:text-rose-400",
+  Major: "text-amber-700 dark:text-amber-400",
+  Minor: "text-zinc-600 dark:text-zinc-400",
 } satisfies Record<Severity, string>;

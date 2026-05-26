@@ -1,12 +1,15 @@
 {
   "name": "demo-tour",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Playwright-driven silent screencap of the PacketReady dashboard demo flow.",
+  "description": "Single-script Playwright recorder for the PacketReady dashboard demo GIF.",
   "scripts": {
-    "tour": "playwright test"
+    "tour": "tsx record-tour.ts"
   },
   "devDependencies": {
-    "@playwright/test": "^1.51.0"
+    "@types/node": "^20.0.0",
+    "playwright": "^1.51.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.4.0"
   }
 }

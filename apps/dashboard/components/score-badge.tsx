@@ -2,9 +2,9 @@ import type { Tier } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const TIER_BG = {
-  Green: "bg-emerald-600",
-  Yellow: "bg-amber-500",
-  Red: "bg-rose-600",
+  Green: "bg-emerald-600 ring-emerald-700/40",
+  Yellow: "bg-amber-500 ring-amber-600/40",
+  Red: "bg-rose-600 ring-rose-700/40",
 } satisfies Record<Tier, string>;
 
 /**
@@ -12,10 +12,11 @@ const TIER_BG = {
  * background. `null` score (provider exists but never scored) shows a neutral
  * dash — the side-panel will explain.
  *
- * Color choice: solid background with white text, rounded full. Bright enough
- * to read at a glance in a list view, restrained enough that it doesn't shout
- * in the detail header. P1 doesn't need a small/large variant; the same size
- * works both contexts.
+ * Typography choice: Geist Mono, tabular-nums, semibold, tight tracking. Reads
+ * as instrument output (a measured value) rather than a brand badge. Inner
+ * ring deepens the tier color without resorting to a heavier shadow — the
+ * pill stays legible at small sizes (list view) and dominant at large ones
+ * (detail header override) without restyling.
  */
 export function ScoreBadge({
   score,
@@ -30,7 +31,7 @@ export function ScoreBadge({
     return (
       <span
         className={cn(
-          "inline-flex h-7 min-w-14 items-center justify-center rounded-full bg-zinc-200 px-3 text-sm font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400",
+          "inline-flex h-7 min-w-[3.5rem] items-center justify-center rounded-full bg-zinc-100 px-3 font-mono text-sm font-medium tabular-nums text-zinc-500 ring-1 ring-inset ring-zinc-200 dark:bg-zinc-900 dark:text-zinc-500 dark:ring-zinc-800",
           className,
         )}
         aria-label="No score computed"
@@ -43,7 +44,7 @@ export function ScoreBadge({
   return (
     <span
       className={cn(
-        "inline-flex h-7 min-w-14 items-center justify-center rounded-full px-3 text-sm font-semibold tabular-nums text-white",
+        "inline-flex h-7 min-w-[3.5rem] items-center justify-center rounded-full px-3 font-mono text-sm font-semibold tabular-nums tracking-tight text-white ring-1 ring-inset",
         TIER_BG[tier],
         className,
       )}
