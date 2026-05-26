@@ -29,8 +29,15 @@ namespace PacketReady.Application.Providers.Aggregation;
 /// <para>The score-compute handler merges these Issues with validator output
 /// before <c>ScoreSynthesizer.Compute</c> — no separate type for "aggregation"
 /// vs "validator" issues; the dashboard branches on Severity, not source.</para>
+///
+/// <para><see cref="PayerId"/> (added P4) is the value of <c>Provider.PayerId</c>
+/// the aggregator read from the database. The handler threads it into every
+/// validator's <c>RunAsync</c>; payer-aware validators resolve it against the
+/// singleton <c>IReadOnlyDictionary&lt;string, PayerRequirement&gt;</c> to fetch
+/// minimums / accepted boards / required-doc lists.</para>
 /// </summary>
 public sealed record AggregatedProfile(
     ProviderProfile Profile,
     IReadOnlyDictionary<string, FieldProvenance> Provenance,
-    IReadOnlyList<Issue> Issues);
+    IReadOnlyList<Issue> Issues,
+    string PayerId);

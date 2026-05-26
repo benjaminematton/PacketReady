@@ -30,6 +30,7 @@ public sealed class LicenseStatusValidator(TimeProvider clock) : IValidator
     public Task<IReadOnlyList<Issue>> RunAsync(
         ProviderProfile profile,
         IReadOnlyDictionary<string, FieldProvenance> provenance,
+        string payerId,
         CancellationToken ct)
     {
         if (profile.License is null)

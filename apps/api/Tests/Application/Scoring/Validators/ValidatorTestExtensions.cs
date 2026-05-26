@@ -7,14 +7,15 @@ namespace PacketReady.Tests.Application.Scoring.Validators;
 
 /// <summary>
 /// Test-only ergonomic: <c>validator.RunAsync(profile, ct)</c> in test code
-/// implicitly threads an empty provenance map. The P1 validator tests don't
-/// assert on Citation.DocumentId/Page/Bbox; they only care about Severity +
-/// Message + presence/absence. Wiring an empty dict here keeps those tests
-/// terse without re-touching 35 call sites every time the interface adds an
-/// optional parameter.
+/// implicitly threads an empty provenance map and the default payer id. The
+/// P1 validator tests don't assert on Citation.DocumentId/Page/Bbox or on
+/// payer config; they only care about Severity + Message + presence/absence.
+/// Defaulting here keeps those tests terse without re-touching every call
+/// site each time the interface adds a parameter.
 ///
 /// <para>Slice-8 tests that DO care about provenance population call the
-/// three-arg interface method directly with a populated dict.</para>
+/// full interface method directly with a populated dict. P4 payer-aware
+/// validator tests likewise pass an explicit payer id.</para>
 /// </summary>
 internal static class ValidatorTestExtensions
 {
@@ -25,5 +26,5 @@ internal static class ValidatorTestExtensions
         this IValidator validator,
         ProviderProfile profile,
         CancellationToken ct) =>
-        validator.RunAsync(profile, EmptyProvenance, ct);
+        validator.RunAsync(profile, EmptyProvenance, Provider.DefaultPayerId, ct);
 }

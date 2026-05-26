@@ -19,6 +19,13 @@ namespace PacketReady.Application.Scoring.Validators;
 /// they emit. Sanctions has no source document → leaves Citation doc-ref fields
 /// null. Validators stay pure-code (no DB access); the provenance flows in as a
 /// method parameter, never via service-locator.</para>
+///
+/// <para><paramref name="payerId"/> (added P4) is the <c>Provider.PayerId</c> the
+/// handler resolved for this run. Payer-aware validators (malpractice currency,
+/// required documents, board cert) look it up in the singleton
+/// <c>IReadOnlyDictionary&lt;string, PayerRequirement&gt;</c> to read per-payer
+/// minimums / accepted boards / required-doc lists. Validators that don't care
+/// about payer config (license, dea, sanctions, identity coherence) ignore it.</para>
 /// </summary>
 public interface IValidator
 {
@@ -27,5 +34,6 @@ public interface IValidator
     Task<IReadOnlyList<Issue>> RunAsync(
         ProviderProfile profile,
         IReadOnlyDictionary<string, FieldProvenance> provenance,
+        string payerId,
         CancellationToken ct);
 }

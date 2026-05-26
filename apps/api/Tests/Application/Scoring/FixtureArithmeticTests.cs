@@ -40,11 +40,12 @@ public sealed class FixtureArithmeticTests
         Assert.Equal(expectedTier, fixture.ExpectedTier);
 
         var clock = new FakeTimeProvider(Now);
+        var payers = Validators.TestProfiles.MakePayers();
         var validators = new IValidator[]
         {
             new LicenseStatusValidator(clock),
             new DeaStatusValidator(clock),
-            new BoardCertificationValidator(clock),
+            new BoardCertificationValidator(clock, payers),
             new SanctionsCheckValidator(clock),
         };
 

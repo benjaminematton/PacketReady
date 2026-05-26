@@ -41,13 +41,14 @@ public static class PromptKeys
 {
     // Phase 3 — document classification + per-doc-type field extraction.
     public const string Classifier = "ClassifierPrompt.v1.md";
-    public const string LicenseExtraction = "LicenseExtractionPrompt.v1.md";
+    public const string LicenseExtraction = "LicenseExtractionPrompt.v2.md";
     public const string DeaExtraction = "DeaExtractionPrompt.v1.md";
     public const string BoardCertExtraction = "BoardCertExtractionPrompt.v1.md";
-    public const string MalpracticeExtraction = "MalpracticeExtractionPrompt.v1.md";
+    public const string MalpracticeExtraction = "MalpracticeExtractionPrompt.v2.md";
 
     // Phase 4 — LLM validators.
     public const string IdentityCoherence = "IdentityCoherencePrompt.v1.md";
+    public const string NpiTaxonomyMatch = "NpiTaxonomyMatchPrompt.v1.md";
 }
 
 public sealed class PromptNotFoundException : Exception

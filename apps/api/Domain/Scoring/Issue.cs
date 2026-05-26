@@ -23,4 +23,16 @@ public sealed record Issue(
     /// churn when P4 ships.
     /// </summary>
     public bool IsLowConfidenceInput { get; init; } = false;
+
+    /// <summary>
+    /// Discriminator used by P4 LLM validators (<c>identity_coherence</c>,
+    /// <c>npi_taxonomy_match</c>) to name the specific field a finding is
+    /// about — e.g. <c>"malpractice.fullName"</c> or
+    /// <c>"boardCert.specialty"</c>. The eval runner's
+    /// <c>conflict_metrics.py</c> uses this (predicate 3) to distinguish
+    /// "right validator, wrong finding" from a real catch. Empty string is
+    /// the unset sentinel; pure-code validators leave it unset because
+    /// their citations already pin the field via <c>provenanceKey</c>.
+    /// </summary>
+    public string Field { get; init; } = "";
 }

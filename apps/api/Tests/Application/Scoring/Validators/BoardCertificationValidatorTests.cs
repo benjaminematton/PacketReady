@@ -10,7 +10,7 @@ namespace PacketReady.Tests.Application.Scoring.Validators;
 public sealed class BoardCertificationValidatorTests
 {
     private static BoardCertificationValidator Build() =>
-        new(new FakeTimeProvider(DateTimeOffset.Parse(Today)));
+        new(new FakeTimeProvider(DateTimeOffset.Parse(Today)), MakePayers());
 
     [Fact]
     public async Task ValidBoardCert_EmitsEmpty()
@@ -86,5 +86,78 @@ public sealed class BoardCertificationValidatorTests
             boardCert: MakeBoardCert(status: BoardCertStatus.Expired, expiryDate: TodayDate.AddDays(-1)));
         var issues = await Build().RunAsync(profile, default);
         Assert.All(issues, i => Assert.Equal("board_certification", i.Validator));
+    }
+
+    // === P4: payer-config branches =========================================
+
+    [Fact]
+    public async Task PayerB_NoAcceptedBoards_AnyBoardPasses()
+    {
+        // payer-b has BoardCertRequired=false → AcceptedBoards=[]; the
+        // accepted-board branch is silent when the list is empty.
+        var v = new BoardCertificationValidator(
+            new FakeTimeProvider(DateTimeOffset.Parse(Today)),
+            MakePayers());
+        var profile = MakeProfile(boardCert: MakeBoardCert(board: "ABIM"));
+
+        var issues = await v.RunAsync(
+            profile, new Dictionary<string, PacketReady.Application.Providers.Aggregation.FieldProvenance>(),
+            "payer-b-state-medicaid", default);
+
+        Assert.Empty(issues);
+    }
+
+    [Fact]
+    public async Task PayerA_AcceptsABMS_RejectsAOA()
+    {
+        // payer-a accepts only ABMS. A board cert from AOA (American
+        // Osteopathic Association) lands a Major — payer negotiation, not
+        // a hard block.
+        var v = new BoardCertificationValidator(
+            new FakeTimeProvider(DateTimeOffset.Parse(Today)),
+            MakePayers());
+        var profile = MakeProfile(boardCert: MakeBoardCert(board: "AOA"));
+
+        var issues = await v.RunAsync(
+            profile, new Dictionary<string, PacketReady.Application.Providers.Aggregation.FieldProvenance>(),
+            "payer-a-national-hmo", default);
+
+        var only = Assert.Single(issues);
+        Assert.Equal(Severity.Major, only.Severity);
+        Assert.Contains("AOA", only.Message);
+        Assert.Contains("Payer A", only.Message);
+    }
+
+    [Fact]
+    public async Task PayerA_AcceptsABMSBoard_NoExtraIssue()
+    {
+        // ABMS umbrella is the only one on payer-a's accepted list; a board
+        // labeled exactly "ABMS" passes (real-world certs print specific
+        // member-board acronyms — ABIM, ABFM — but the test data uses the
+        // umbrella label for symmetry with the YAML).
+        var v = new BoardCertificationValidator(
+            new FakeTimeProvider(DateTimeOffset.Parse(Today)),
+            MakePayers());
+        var profile = MakeProfile(boardCert: MakeBoardCert(board: "ABMS"));
+
+        var issues = await v.RunAsync(
+            profile, new Dictionary<string, PacketReady.Application.Providers.Aggregation.FieldProvenance>(),
+            "payer-a-national-hmo", default);
+
+        Assert.Empty(issues);
+    }
+
+    [Fact]
+    public async Task UnknownPayerId_Throws()
+    {
+        var v = new BoardCertificationValidator(
+            new FakeTimeProvider(DateTimeOffset.Parse(Today)),
+            MakePayers());
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+            v.RunAsync(
+                MakeProfile(),
+                new Dictionary<string, PacketReady.Application.Providers.Aggregation.FieldProvenance>(),
+                "payer-c-doesnt-exist", default));
     }
 }

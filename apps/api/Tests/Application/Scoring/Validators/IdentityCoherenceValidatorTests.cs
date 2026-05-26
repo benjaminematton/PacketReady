@@ -36,7 +36,7 @@ public class IdentityCoherenceValidatorTests
         var chat = new RecordingChatClient();
         var v = Build(chat);
 
-        var issues = await v.RunAsync(profile, EmptyProvenance(), default);
+        var issues = await v.RunAsync(profile, EmptyProvenance(), Provider.DefaultPayerId, default);
 
         Assert.Empty(issues);
         Assert.Empty(chat.Calls);  // never went to the wire
@@ -50,7 +50,7 @@ public class IdentityCoherenceValidatorTests
         var chat = new RecordingChatClient();
         var v = Build(chat);
 
-        Assert.Empty(await v.RunAsync(profile, EmptyProvenance(), default));
+        Assert.Empty(await v.RunAsync(profile, EmptyProvenance(), Provider.DefaultPayerId, default));
         Assert.Empty(chat.Calls);
     }
 
@@ -60,7 +60,7 @@ public class IdentityCoherenceValidatorTests
         var chat = ChatReturning("""{"disagreements":[]}""");
         var v = Build(chat);
 
-        var issues = await v.RunAsync(ProfileWithThreeMatchingNames(), EmptyProvenance(), default);
+        var issues = await v.RunAsync(ProfileWithThreeMatchingNames(), EmptyProvenance(), Provider.DefaultPayerId, default);
 
         Assert.Empty(issues);
     }
@@ -86,6 +86,7 @@ public class IdentityCoherenceValidatorTests
         var issues = await v.RunAsync(
             ProfileWithDistinguishableNames(),
             ProvenanceFor("license", "boardCert"),
+            Provider.DefaultPayerId,
             default);
 
         var only = Assert.Single(issues);
@@ -115,7 +116,7 @@ public class IdentityCoherenceValidatorTests
             """);
         var v = Build(chat);
 
-        var issues = await v.RunAsync(ProfileWithThreeMatchingNames(), EmptyProvenance(), default);
+        var issues = await v.RunAsync(ProfileWithThreeMatchingNames(), EmptyProvenance(), Provider.DefaultPayerId, default);
 
         Assert.Equal(expected, Assert.Single(issues).Severity);
     }
@@ -128,7 +129,7 @@ public class IdentityCoherenceValidatorTests
         var chat = ChatReturning("not valid json at all");
         var v = Build(chat);
 
-        Assert.Empty(await v.RunAsync(ProfileWithThreeMatchingNames(), EmptyProvenance(), default));
+        Assert.Empty(await v.RunAsync(ProfileWithThreeMatchingNames(), EmptyProvenance(), Provider.DefaultPayerId, default));
     }
 
     // === helpers ==========================================================

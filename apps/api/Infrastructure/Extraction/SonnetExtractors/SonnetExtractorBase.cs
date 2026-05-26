@@ -364,6 +364,22 @@ internal static class FieldValueSchemas
         """{ "anyOf": [ { "type": "string" }, { "type": "null" } ] }""";
 
     /// <summary>
+    /// Integer value, or <c>null</c> when the field is absent. Used for
+    /// malpractice coverage limits (<c>perOccurrence</c>, <c>aggregate</c>)
+    /// where the certificate prints a whole-dollar amount and the validator
+    /// compares it against payer minimums.
+    ///
+    /// <para>We do NOT add a <c>"minimum": 0</c> constraint — Anthropic's
+    /// structured-output validator rejects the JSON Schema range keywords
+    /// (see <c>SchemaBuilderTests.BannedKeywords</c>). Negative values are
+    /// nonsensical for coverage limits, so this is a non-issue in practice;
+    /// the aggregator's <c>LongOrNull</c> + the validator's <c>&lt; minimum</c>
+    /// branch still do the right thing for any value the prompt emits.</para>
+    /// </summary>
+    public const string NullableInteger =
+        """{ "anyOf": [ { "type": "integer" }, { "type": "null" } ] }""";
+
+    /// <summary>
     /// Array of strings drawn from a fixed enum, or <c>null</c> when absent.
     /// Used for DEA's <c>schedules</c> field.
     /// </summary>

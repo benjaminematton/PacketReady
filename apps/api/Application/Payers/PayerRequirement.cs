@@ -1,4 +1,4 @@
-namespace PacketReady.Infrastructure.Payers;
+namespace PacketReady.Application.Payers;
 
 /// <summary>
 /// One payer's credentialing requirements, hydrated from

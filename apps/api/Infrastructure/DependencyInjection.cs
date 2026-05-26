@@ -17,6 +17,9 @@ using PacketReady.Infrastructure.Blob;
 using PacketReady.Infrastructure.Extraction;
 using PacketReady.Infrastructure.Extraction.Classifier;
 using PacketReady.Infrastructure.Extraction.SonnetExtractors;
+using PacketReady.Application.Nucc;
+using PacketReady.Application.Payers;
+using PacketReady.Infrastructure.Nucc;
 using PacketReady.Infrastructure.Payers;
 using PacketReady.Infrastructure.Persistence;
 using PacketReady.Infrastructure.Providers;
@@ -66,6 +69,14 @@ public static class DependencyInjection
         var payerDir = Path.Combine(AppContext.BaseDirectory, "Payers", "payers");
         services.AddSingleton<IReadOnlyDictionary<string, PayerRequirement>>(
             PayerRequirementLoader.LoadAll(payerDir));
+
+        // NUCC taxonomy snapshot. Same lifetime pattern as the payer dict:
+        // loaded once at DI bootstrap and held as a singleton; fails loud
+        // on a missing or malformed CSV so the app refuses to start with a
+        // broken snapshot. Bumping NUCC's biannual release is a filename
+        // edit here + a fresh CSV under data/.
+        var nuccPath = Path.Combine(AppContext.BaseDirectory, "Nucc", "nucc-taxonomy-25.1.csv");
+        services.AddSingleton<INuccTaxonomyLookup>(new NuccTaxonomyLookup(nuccPath));
 
         return services;
     }

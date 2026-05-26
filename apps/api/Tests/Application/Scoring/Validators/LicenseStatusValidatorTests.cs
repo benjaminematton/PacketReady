@@ -179,7 +179,7 @@ public sealed class LicenseStatusValidatorTests
             ["license.expiryDate"] = new(docId, Page: 1, Bbox: bbox, Confidence: 0.95),
         };
 
-        var issues = await v.RunAsync(profile, provenance, default);
+        var issues = await v.RunAsync(profile, provenance, Provider.DefaultPayerId, default);
 
         var citation = issues.Single().Citations.Single();
         Assert.Equal(docId, citation.DocumentId);

@@ -41,6 +41,7 @@ public sealed class SanctionsCheckValidator(TimeProvider clock) : IValidator
     public Task<IReadOnlyList<Issue>> RunAsync(
         ProviderProfile profile,
         IReadOnlyDictionary<string, FieldProvenance> provenance,
+        string payerId,
         CancellationToken ct)
     {
         var issues = new List<Issue>();

@@ -211,7 +211,7 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
             // Sanctions stays as the basics value (PSV is P5).
         };
 
-        return new AggregatedProfile(profile, provenance, issues);
+        return new AggregatedProfile(profile, provenance, issues, provider.PayerId);
     }
 
     // === Issue factories ================================================
@@ -290,10 +290,15 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
         var expiryDate = DateOnlyOrNull(fields, "expiryDate");
         var status = ParseEnum<LicenseStatus>(StringOrNull(fields, "status"));
         var fullName = StringOrNull(fields, "fullName") ?? "";
+        // License prompt v2 (P4) adds taxonomyCode for the
+        // NpiTaxonomyMatchValidator cross-check. Pre-v2 rows simply lack
+        // the key; the validator short-circuits when the code is blank.
+        var taxonomyCode = StringOrNull(fields, "taxonomyCode") ?? "";
 
         if (number is null || state is null || issueDate is null || expiryDate is null)
             return null;
-        return new LicenseInfo(number, state, issueDate.Value, expiryDate.Value, status, fullName);
+        return new LicenseInfo(
+            number, state, issueDate.Value, expiryDate.Value, status, fullName, taxonomyCode);
     }
 
     private static DeaInfo? ParseDea(JsonElement fields)
@@ -343,10 +348,18 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
         var expiryDate = DateOnlyOrNull(fields, "expiryDate");
         var status = ParseEnum<MalpracticeStatus>(StringOrNull(fields, "status"));
         var fullName = StringOrNull(fields, "fullName") ?? "";
+        // Prompt v2 (P4) adds perOccurrence / aggregate as integer dollars.
+        // Pre-v2 extraction rows simply lack the keys; LongOrNull returns
+        // null and the validator treats that as "extractor didn't read this",
+        // not "policy has $0 coverage".
+        var perOccurrence = LongOrNull(fields, "perOccurrence");
+        var aggregate = LongOrNull(fields, "aggregate");
 
         if (carrier is null || policyNumber is null || expiryDate is null)
             return null;
-        return new MalpracticeInfo(carrier, policyNumber, expiryDate.Value, status, fullName);
+        return new MalpracticeInfo(
+            carrier, policyNumber, expiryDate.Value, status, fullName,
+            perOccurrence, aggregate);
     }
 
     // === Provenance map ================================================
@@ -546,6 +559,17 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
         return DateOnly.TryParseExact(s, "yyyy-MM-dd",
             CultureInfo.InvariantCulture, DateTimeStyles.None, out var d)
             ? d : null;
+    }
+
+    private static long? LongOrNull(JsonElement obj, string propertyName)
+    {
+        if (!obj.TryGetProperty(propertyName, out var el)) return null;
+        if (el.ValueKind == JsonValueKind.Null) return null;
+        if (el.ValueKind != JsonValueKind.Number) return null;
+        // GetInt64() throws on values outside long range; the extractor
+        // schema caps at integer, so this is defense-in-depth for malformed
+        // rows from earlier prompt versions that smuggled a string.
+        return el.TryGetInt64(out var v) ? v : null;
     }
 
     private static T ParseEnum<T>(string? value) where T : struct, Enum

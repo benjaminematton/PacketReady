@@ -1,3 +1,4 @@
+using PacketReady.Application.Payers;
 using PacketReady.Domain.Providers;
 
 namespace PacketReady.Tests.Application.Scoring.Validators;
@@ -22,6 +23,7 @@ internal static class TestProfiles
         LicenseInfo? license = null,
         DeaInfo? dea = null,
         BoardCertInfo? boardCert = null,
+        MalpracticeInfo? malpractice = null,
         SanctionsResult? sanctions = null,
         string credentialingState = "NY")
     {
@@ -34,6 +36,7 @@ internal static class TestProfiles
             license: license ?? MakeLicense(),
             dea: dea ?? MakeDea(),
             boardCert: boardCert ?? MakeBoardCert(),
+            malpractice: malpractice ?? MakeMalpractice(),
             sanctions: sanctions ?? MakeSanctions());
     }
 
@@ -60,6 +63,61 @@ internal static class TestProfiles
         DateOnly? expiryDate = null,
         BoardCertStatus status = BoardCertStatus.Active)
         => new(board, specialty, issueDate ?? TodayDate.AddYears(-3), expiryDate ?? TodayDate.AddYears(5), status);
+
+    public static MalpracticeInfo MakeMalpractice(
+        string carrier = "MedProtect Mutual",
+        string policyNumber = "MPM-NY-00099001",
+        DateOnly? expiryDate = null,
+        MalpracticeStatus status = MalpracticeStatus.Active,
+        long? perOccurrence = 1_000_000,
+        long? aggregate = 3_000_000)
+        => new(carrier, policyNumber, expiryDate ?? TodayDate.AddYears(2), status, "",
+               perOccurrence, aggregate);
+
+    // Two-payer fixture matching the committed YAMLs. Validator unit tests
+    // build against this in-memory dict rather than YAML-on-disk so they stay
+    // fast and decoupled from the loader. The loader has its own integration
+    // test that round-trips the real files.
+    public static IReadOnlyDictionary<string, PayerRequirement> MakePayers() =>
+        new Dictionary<string, PayerRequirement>(StringComparer.Ordinal)
+        {
+            ["payer-a-national-hmo"] = new()
+            {
+                Id = "payer-a-national-hmo",
+                Name = "Payer A — National HMO",
+                Malpractice = new MalpracticeRequirement
+                {
+                    MinimumPerOccurrence = 1_000_000,
+                    MinimumAggregate = 3_000_000,
+                },
+                RequiredDocuments = ["license", "dea", "boardCert", "malpractice"],
+                BoardCertRequired = true,
+                AcceptedBoards = ["ABMS", "ABIM", "ABFM", "ABEM", "ABP", "ABS", "ABOG", "ABA", "ABPN", "ABR"],
+                WindowDays = new WindowDays
+                {
+                    MalpracticeRenewal = 30,
+                    LicenseRenewal = 30,
+                },
+            },
+            ["payer-b-state-medicaid"] = new()
+            {
+                Id = "payer-b-state-medicaid",
+                Name = "Payer B — State Medicaid",
+                Malpractice = new MalpracticeRequirement
+                {
+                    MinimumPerOccurrence = 500_000,
+                    MinimumAggregate = 1_500_000,
+                },
+                RequiredDocuments = ["license", "dea", "malpractice"],
+                BoardCertRequired = false,
+                AcceptedBoards = [],
+                WindowDays = new WindowDays
+                {
+                    MalpracticeRenewal = 60,
+                    LicenseRenewal = 60,
+                },
+            },
+        };
 
     public static SanctionsResult MakeSanctions(
         bool oigClean = true,

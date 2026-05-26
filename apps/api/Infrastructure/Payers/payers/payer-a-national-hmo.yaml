@@ -17,8 +17,23 @@ requiredDocuments:
   - boardCert
   - malpractice
 boardCertRequired: true
+# ABMS member boards. The validator does a literal Ordinal string match
+# (no umbrella → member-board lookup table yet — P5+ refinement), so the
+# YAML enumerates the actual acronyms that appear on real certificates.
+# This list covers the common P4 fixtures (ABIM, ABFM, ABEM) plus a few
+# more frequent specialties. A board outside this list emits a Major
+# "not on accepted list" Issue.
 acceptedBoards:
   - ABMS
+  - ABIM   # Internal Medicine
+  - ABFM   # Family Medicine
+  - ABEM   # Emergency Medicine
+  - ABP    # Pediatrics
+  - ABS    # Surgery
+  - ABOG   # Obstetrics & Gynecology
+  - ABA    # Anesthesiology
+  - ABPN   # Psychiatry & Neurology
+  - ABR    # Radiology
 windowDays:
   malpracticeRenewal: 30
   licenseRenewal: 30

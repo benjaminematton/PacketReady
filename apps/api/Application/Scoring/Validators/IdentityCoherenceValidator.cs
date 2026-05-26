@@ -79,6 +79,7 @@ public sealed class IdentityCoherenceValidator : IValidator
     public async Task<IReadOnlyList<Issue>> RunAsync(
         ProviderProfile profile,
         IReadOnlyDictionary<string, FieldProvenance> provenance,
+        string payerId,
         CancellationToken ct)
     {
         var sources = CollectFullNameSources(profile);
@@ -162,12 +163,22 @@ public sealed class IdentityCoherenceValidator : IValidator
                 provenanceKey: $"{docType}.fullName"))
             .ToList();
 
+        // Field discriminator for the conflict-metrics runner. The planter
+        // names the variant source (e.g. "malpractice.fullName"), and the
+        // baseline is always license. Pick the first non-license source as
+        // the variant side; fall back to the first source otherwise so the
+        // shape stays populated even if a future planter drops the
+        // license-anchor convention.
+        var variantSource = d.Sources.FirstOrDefault(s => s != "license") ?? d.Sources[0];
         return new Issue(
             Validator: Name,
             Severity: ParseSeverity(d.Severity),
             Message: d.Message,
             Remediation: d.Remediation,
-            Citations: citations);
+            Citations: citations)
+        {
+            Field = $"{variantSource}.{d.Field}",
+        };
     }
 
     private static Severity ParseSeverity(string s) => s switch
