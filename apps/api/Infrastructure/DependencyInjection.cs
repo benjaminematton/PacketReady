@@ -12,8 +12,11 @@ using PacketReady.Application.Extraction.Persist;
 using PacketReady.Application.Prompts;
 using PacketReady.Application.Providers.Aggregation;
 using PacketReady.Domain.Documents;
+using PacketReady.Application.Intake.Agent;
+using PacketReady.Application.Intake.Agent.Tools;
 using PacketReady.Application.Intake.MagicLinks;
 using PacketReady.Application.Intake.Outbox;
+using PacketReady.Application.Intake.PrimarySources;
 using PacketReady.Infrastructure.Audit;
 using PacketReady.Infrastructure.Blob;
 using PacketReady.Infrastructure.Extraction;
@@ -21,7 +24,9 @@ using PacketReady.Infrastructure.Extraction.Classifier;
 using PacketReady.Infrastructure.Extraction.SonnetExtractors;
 using PacketReady.Application.Nucc;
 using PacketReady.Application.Payers;
+using PacketReady.Infrastructure.Intake;
 using PacketReady.Infrastructure.MagicLinks;
+using PacketReady.Infrastructure.PrimarySources;
 using PacketReady.Infrastructure.Nucc;
 using PacketReady.Infrastructure.Outbox;
 using PacketReady.Infrastructure.Payers;
@@ -122,6 +127,21 @@ public static class DependencyInjection
         // ExtractionPersister depends on the scoped DbContext, so itself scoped.
         services.AddScoped<IExtractionPersister, ExtractionPersister>();
         services.AddScoped<IProviderProfileAggregator, ProviderProfileAggregator>();
+
+        // P5 intake agent. The 5 tools are scoped because they touch the
+        // scoped DbContext / IMediator / ComposeFollowupHandler; the agent
+        // itself is scoped so it shares the request's IChatClient + tool
+        // instances. The Application port (IIntakeAgent) is what
+        // IntakeTurnJob (C5) takes — runtime swaps via DI replacement when
+        // a different model / harness is needed.
+        services.AddSingleton<IPrimarySourceLookup, MockPrimarySourceLookup>();
+        services.AddScoped<ComposeFollowupHandler>();
+        services.AddScoped<IIntakeTool, ReadDocumentTool>();
+        services.AddScoped<IIntakeTool, ExtractFieldsTool>();
+        services.AddScoped<IIntakeTool, LookupPrimarySourceTool>();
+        services.AddScoped<IIntakeTool, ComposeFollowupTool>();
+        services.AddScoped<IIntakeTool, ComputeReadinessTool>();
+        services.AddScoped<IIntakeAgent, IntakeAgent>();
 
         return services;
     }

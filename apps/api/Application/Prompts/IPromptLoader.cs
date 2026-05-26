@@ -49,6 +49,9 @@ public static class PromptKeys
     // Phase 4 — LLM validators.
     public const string IdentityCoherence = "IdentityCoherencePrompt.v1.md";
     public const string NpiTaxonomyMatch = "NpiTaxonomyMatchPrompt.v1.md";
+
+    // Phase 5 — intake agent system prompt.
+    public const string IntakeAgent = "IntakeAgentPrompt.v1.md";
 }
 
 public sealed class PromptNotFoundException : Exception

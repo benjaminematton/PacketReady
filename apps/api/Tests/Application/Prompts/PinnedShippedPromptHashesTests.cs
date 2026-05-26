@@ -55,6 +55,14 @@ public class PinnedShippedPromptHashesTests
     // IdentityCoherence; same FP < 5% gate on the 10-packet subset.
     private const string NpiTaxonomyMatchHash =
         "8efaa96de84674dd455031270f50bd3246aed6b5a4a026f5756ce301c4d352a9";
+    // P5 C4 — intake agent system prompt. The agent prompt isn't
+    // referenced by any document_extractions row (the agent doesn't
+    // produce extractions), so per-iteration churn here is safe — the
+    // promote-to-v2 rule applies to extractor prompts. Pinning anyway
+    // keeps every shipped prompt under the same immutability gate so a
+    // silent edit can't slip through code review.
+    private const string IntakeAgentHash =
+        "9a131e99ac1be653d25fb706e290bd044c2bc252ff62331324c43dd63b4e17d5";
 
     private static readonly IReadOnlyDictionary<string, string> Pinned =
         new Dictionary<string, string>
@@ -66,6 +74,7 @@ public class PinnedShippedPromptHashesTests
             [PromptKeys.MalpracticeExtraction] = MalpracticeExtractionHash,
             [PromptKeys.IdentityCoherence]     = IdentityCoherenceHash,
             [PromptKeys.NpiTaxonomyMatch]      = NpiTaxonomyMatchHash,
+            [PromptKeys.IntakeAgent]           = IntakeAgentHash,
         };
 
     public static IEnumerable<object[]> PinnedPromptHashes =>
