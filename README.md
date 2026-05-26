@@ -13,10 +13,10 @@ list, drills into a Yellow at score 62, opens the top Critical issue's
 panel (PDF preview with bounding-box highlight), then switches to the
 per-provider audit timeline.
 
-<video src="https://github.com/benjaminematton/PacketReady/releases/download/demo-v1/demo.mp4" controls width="800"></video>
+![demo](docs/assets/demo.gif)
 
-If your viewer doesn't render the inline player:
-[watch / download the mp4](https://github.com/benjaminematton/PacketReady/releases/download/demo-v1/demo.mp4)
+For a higher-fidelity recording with audio-grade pacing, grab the
+[mp4](https://github.com/benjaminematton/PacketReady/releases/download/demo-v1/demo.mp4)
 or visit the
 [release page](https://github.com/benjaminematton/PacketReady/releases/tag/demo-v1)
 (mp4 + source webm attached). Recorded by
