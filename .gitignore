@@ -34,6 +34,11 @@ __pycache__/
 .venv/
 .pytest_cache/
 
+# setuptools / wheel bdist output — `python -m build` drops compiled artifacts
+# under evals/generators/build/{bdist.*, lib/} that mirror the source tree.
+# Never committed.
+evals/generators/build/
+
 # Eval runner output — `baseline.json` is the gate's reference and IS committed;
 # `latest.json` is regenerated on every run and should not be.
 evals/results/latest.json
