@@ -6,9 +6,16 @@ See [docs/design.md](docs/design.md) for the full design and [docs/build-plan.md
 
 ## Status
 
-**Phase 4 (scale + LLM validators)** — in progress. Phases 0–3 closed; the
-50-packet eval set is generated, the first LLM validator
-(`IdentityCoherenceValidator`) has converged on the tuning gate.
+**Phase 4 (scale + LLM validators)** — closing. Phases 0–3 closed; the
+50-packet eval set runs end-to-end through the orchestrator (P4 task
+18, [`evals/results/baseline.json`](evals/results/baseline.json));
+both LLM validators (`IdentityCoherenceValidator`,
+`NpiTaxonomyMatchValidator`) emit against the live extraction
+pipeline; the payer-aware validator suite (malpractice currency,
+required documents, board certification extension, payer-config
+sanctions suppression) is wired. Task 16 (hand-labeling 20 packets
+for tier agreement) and task 22 (DoD walk) are the remaining
+human-only steps.
 
 | Phase | State |
 |---|---|
@@ -16,17 +23,83 @@ See [docs/design.md](docs/design.md) for the full design and [docs/build-plan.md
 | 1 — Score from clean input (rule-based validators) | ✓ closed |
 | 2 — Eval harness + 5 hand-crafted packets | ✓ closed |
 | 3 — Per-doc-type Sonnet extractors + aggregator | ✓ closed |
-| 4 — 50-packet eval + LLM validators + payer-aware validators | in progress |
+| 4 — 50-packet eval + LLM validators + payer-aware validators | closing (16/22 pending) |
 
 ## Accuracy
 
-Numbers below come from the [iter-100 baseline run](evals/tuning-runs/) —
-the converged IdentityCoherence prompt (SHA `48322ce7`), applied via
-`tools/TuneIdentityCoherence` to all 50 packets × 3 runs, worst-of metrics.
-The full record (per-packet emissions, tokens, cost) is committed under
-[`evals/tuning-runs/iter-100__*.json`](evals/tuning-runs/).
+Two complementary number sets live here. The **full-pipeline baseline**
+(P4 task 18) measures the system end-to-end against the 50-packet
+dataset — every PDF goes through classification, extraction, validators,
+and score synthesis as it would for a real submission. The
+**prompt-isolated tuning** numbers (P4 task 8–9) measure individual
+LLM-validator prompts against `golden.json` inputs directly, bypassing
+extraction. The first answers "does the system work"; the second
+isolates "is the prompt right." Both belong in the README; comparing
+the two diagnoses where any gap lives (extraction vs validator).
 
-### IdentityCoherence cross-doc identity validator (P4 task 8–9)
+### Full-pipeline baseline (P4 task 18)
+
+[`evals/results/baseline.json`](evals/results/baseline.json), 50 packets,
+~520 seconds wall-clock at concurrency=3.
+
+**Conflict precision / recall (per planted kind):**
+
+| Kind                            | Planted | Caught | Fabricated | Precision | Recall |
+|---|---:|---:|---:|---:|---:|
+| `name_variant`                  | 9       | 6      | 0          | 1.00      | 0.667  |
+| `taxonomy_specialty_mismatch`   | 8       | 8      | 3          | 0.727     | 1.0    |
+
+A planted conflict is "caught" iff all three predicates hold against
+at least one emitted Issue: (1) the Issue's `validator` matches the
+expected validator for the kind, (2) the Issue's citations name at
+least one planted source via documentId→docType resolution, and (3)
+the Issue's `field` discriminator matches the planter's field. The
+3-predicate check rules out "right validator, wrong finding" from
+counting — see
+[`evals/runners/runners/conflict_metrics.py`](evals/runners/runners/conflict_metrics.py).
+
+**Score / tier distribution:**
+
+| Tier   | Count | Definition         |
+|---|---:|---|
+| Green  | 20    | score ≥ 85         |
+| Yellow | 24    | 60 ≤ score < 85    |
+| Red    | 6     | score < 60         |
+
+Mean score 80.3, range 22–100 across 50 successful packets (0 errors).
+
+**Tier agreement (κ + 3×3 confusion):** *pending hand-labeling
+(P4 task 16) of 20 packets into
+[`evals/labels/human_tiers.json`](evals/labels/) before the
+orchestrator can compute it. The
+[`agreement.py`](evals/runners/runners/agreement.py) module is shipped
+and tested; first numbers land when the labels do.*
+
+**Tuning surfaces (real, named in the baseline):**
+
+- `name_variant` recall ceiling at 0.667 with FP=0 means the prompt is
+  conservatively-tuned — 3 must-flag planted shapes pass without
+  emission. The IdentityCoherence v1 prompt was tuned on the 10-packet
+  subset to prioritize FP discipline; the held-out 3 misses are the
+  expected cost. Bumping recall here is the next tuning loop, not a
+  bug.
+- `taxonomy_specialty_mismatch` precision 0.73 reflects 3 LLM
+  judgments that flag legitimate specialty/taxonomy synonymies as
+  mismatches. P5+ tuning surface — the NUCC compare prompt is a v1
+  ship.
+
+### IdentityCoherence prompt-isolated tuning (P4 task 8–9)
+
+These numbers measure the IdentityCoherence prompt against `golden.json`
+fullName values directly via `tools/TuneIdentityCoherence` — no PDFs,
+no classifier, no Sonnet extractor. They tell you whether the prompt
+would catch a disagreement *given* a correctly-extracted name set; the
+full-pipeline baseline above tells you what happens when extraction is
+in the loop. Recall on the full pipeline (0.667) sits below the
+prompt-isolated number (100%) — the gap measures extraction noise +
+provenance routing, not prompt quality. Source data:
+[`evals/tuning-runs/iter-100__*.json`](evals/tuning-runs/), prompt SHA
+`48322ce7`, 50 packets × 3 runs, worst-of.
 
 False-positive rate on the 30 conflict-free + 3 don't-flag packets:
 
@@ -53,26 +126,47 @@ exactly which rule changes moved which category. Held-out 10 (disjoint from
 the tuning subset, drawn from the 50 with `seed=9999`) ran 3 times and
 matched the in-sample numbers — no overfit.
 
-Other P4 validators (`npi_taxonomy_match`, `malpractice_currency`,
-`required_documents`, the payer-aware `BoardCertificationValidator` extension)
-are pending; their numbers will land alongside the conflict-precision/recall
-table once
-[`evals/runners/runners/conflict_metrics.py`](evals/runners/runners/) does
-per-validator-kind slicing across the 50 packets.
-
 ### Bias caveat (read this before citing the numbers)
 
-The hand-labeled fixtures, the IdentityCoherence prompt's do-flag /
-don't-flag rules, and the iteration decisions during prompt tuning were
-all made by the same person. The published FP/recall numbers measure how
-well the system reproduces that one person's credentialing judgment, not
-how well it tracks an independent ground truth.
+The hand-labeled fixtures, the IdentityCoherence and NpiTaxonomyMatch
+prompts' do-flag / don't-flag rules, the iteration decisions during
+prompt tuning, and (once it lands) the 20-packet Red/Yellow/Green tier
+labeling were all made by the same person. The published numbers
+measure how well the system reproduces that one person's credentialing
+judgment, not how well it tracks an independent ground truth.
 
-A second labeler — and a second prompt reviewer — would push the bound on
-this from upper to honest. Both are post-launch asks, not P4 gates. The
-honest reading of `FP=0% / recall=100%` is "the validator does what the
-prompt-author would have done on these 50 packets," not "the validator
-catches every real-world disagreement a credentialing admin would flag."
+A second labeler — and a second prompt reviewer — would push the bound
+on these from upper to honest. Both are post-launch asks, not P4 gates.
+Honest readings:
+
+- **`name_variant` precision 1.0, recall 0.667** — "the validator emits
+  only the disagreements the prompt-author would have called out, and
+  emits them on the planter shapes the prompt was tuned for." Not "the
+  validator catches every real-world name disagreement a credentialing
+  admin would flag."
+- **`taxonomy_specialty_mismatch` precision 0.73** — "the LLM compare
+  step judges some legitimate specialty/taxonomy synonymies as
+  mismatches when a credentialing expert wouldn't." Worth a second
+  prompt reviewer.
+- **Tier agreement κ** — when the hand-labeled tiers land, the κ value
+  measures self-consistency between the validator suite and the
+  labeler-in-the-validator-author's-head, not ground truth. The
+  `_biasNote` field in [`human_tiers.json`](evals/labels/) carries this
+  in-band; the README publishes it here in plain language.
+
+### Competitor positioning
+
+The defensible column intersection — pre-CAQH intake +
+cross-document validation + a published readiness score + a cited
+audit trail + published accuracy numbers — is shipped by **no single
+competitor** as of the 2026-05 marketing-surface verification in
+[docs/design.md §Appendix A](docs/design.md#appendix-a--comparison-to-competitors).
+That appendix carries the row-by-row verification (each "✓" or
+"partial" sourced to a competitor's homepage) and a per-row reading
+notes block documenting what every "—" represents. The full table is
+narrower than the marketing copy suggests for several competitors —
+deliberately so, per the "Better no claim than a wrong one" gate in
+the P4 review.
 
 ## Local bring-up (Phase 0)
 
