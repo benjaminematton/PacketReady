@@ -3,10 +3,12 @@
 --
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f AddIntake.sql
 --
--- These four invariants are load-bearing for P5: single-row-per-provider
+-- These five invariants are load-bearing for P5: single-row-per-provider
 -- (the FOR UPDATE row-lock pattern relies on it), the budget cap (the
 -- escalation trigger), outbox dedup (retried Hangfire jobs must not
--- double-send), and magic-link sanity (expiry must follow issuance). A
+-- double-send), magic-link sanity (expiry must follow issuance), and the
+-- (state, state_payload.kind) pair stays consistent (rules out raw-SQL
+-- drift between the two columns the aggregate keeps in sync). A
 -- regression masquerades as "two concurrent agent turns ran for the same
 -- provider" or "the provider got the same followup twice" — both
 -- demo-killers.
@@ -127,6 +129,33 @@ BEGIN;
       RAISE EXCEPTION 'FAIL: expires_at <= issued_at did not raise';
     EXCEPTION WHEN check_violation THEN
       RAISE NOTICE 'OK 4: ck_magic_links_expires_after_issued fired (%)', SQLERRM;
+    END;
+  END$$;
+ROLLBACK;
+
+\echo === 5. CHECK ((state_payload->>'kind') = state) — drifted pair must raise ===
+BEGIN;
+  INSERT INTO providers (id, profile, created_at)
+  VALUES ('66666666-6666-6666-6666-666666666666'::uuid, '{}'::jsonb, NOW());
+
+  DO $$
+  BEGIN
+    BEGIN
+      INSERT INTO intake_sessions (
+        id, provider_id, state, state_payload,
+        turns_consumed, turn_budget, created_at, last_transition_at
+      ) VALUES (
+        gen_random_uuid(),
+        '66666666-6666-6666-6666-666666666666'::uuid,
+        'Pending',
+        -- payload disagrees with the enum column: must violate.
+        jsonb_build_object('kind', 'Escalated', 'reason', 'drift',
+          'partialProfileJson', '{}'),
+        0, 8, NOW(), NOW()
+      );
+      RAISE EXCEPTION 'FAIL: drifted (state, payload.kind) pair did not raise';
+    EXCEPTION WHEN check_violation THEN
+      RAISE NOTICE 'OK 5: ck_intake_sessions_state_matches_payload_kind fired (%)', SQLERRM;
     END;
   END$$;
 ROLLBACK;

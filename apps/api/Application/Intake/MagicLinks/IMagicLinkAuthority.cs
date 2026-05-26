@@ -26,6 +26,14 @@ public interface IMagicLinkAuthority
     /// <see cref="MagicLinkInvalidReason"/> the endpoint maps to <c>410 Gone</c>.
     /// Does <b>not</b> consume the link — the portal submit handler calls
     /// <see cref="MagicLink.Consume"/> + <c>SaveChanges</c> separately.
+    ///
+    /// <para><b>Tracking contract.</b> The returned entity IS tracked by the
+    /// scoped <c>IAppDbContext</c>. That's deliberate: the portal submit
+    /// path mutates (<c>Consume</c>) and saves on the same scope, so a
+    /// second roundtrip would be wasted. Callers that only need to read
+    /// (e.g. the portal GET) can ignore the tracking — entities go away with
+    /// the scope at end-of-request. Do not pass the returned entity to a
+    /// different <c>DbContext</c>.</para>
     /// </summary>
     Task<MagicLink> ValidateAsync(
         string token,

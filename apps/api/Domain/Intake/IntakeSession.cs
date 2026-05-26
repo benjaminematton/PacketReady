@@ -134,6 +134,16 @@ public sealed class IntakeSession
         ArgumentNullException.ThrowIfNull(outcome);
         RequireState(IntakeState.AgentProcessing, nameof(EndAgentTurn));
 
+        // Ambiguous: terminal AND a follow-up link both set. The aggregate
+        // rejects this rather than picking a winner — see AgentTurnOutcome's
+        // contract.
+        if (outcome.CompletedReadinessScoreId is not null
+            && outcome.ContinueWithMagicLinkId is not null)
+            throw new ArgumentException(
+                "AgentTurnOutcome cannot set both CompletedReadinessScoreId (terminal) "
+                + "and ContinueWithMagicLinkId (continuation).",
+                nameof(outcome));
+
         if (outcome.IsTerminal)
         {
             // CompletedReadinessScoreId is non-null when IsTerminal — delegate.
@@ -147,6 +157,10 @@ public sealed class IntakeSession
                 throw new ArgumentException(
                     "ContinueWithMagicLinkId must be non-empty when set.", nameof(outcome));
 
+            // RemindersSent resets on every turn-bounce: each return to
+            // AwaitingProvider is a fresh wait cycle (a new follow-up was
+            // just composed). Reminder count is "nudges since the last
+            // outbound asked for something," not a lifetime counter.
             SetState(new ProviderState.AwaitingProvider(mid, RemindersSent: 0), nowUtc);
             return;
         }

@@ -1,6 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using PacketReady.Domain.Audit;
 using PacketReady.Domain.Documents;
+using PacketReady.Domain.Intake;
+using PacketReady.Domain.MagicLinks;
+using PacketReady.Domain.Messaging;
 using PacketReady.Domain.Providers;
 using PacketReady.Domain.Scoring;
 
@@ -25,4 +28,7 @@ public interface IAppDbContext : IUnitOfWork
     DbSet<AuditEvent> AuditEvents { get; }
     DbSet<Document> Documents { get; }
     DbSet<DocumentExtraction> DocumentExtractions { get; }
+    DbSet<IntakeSession> IntakeSessions { get; }
+    DbSet<OutboundMessage> OutboundMessages { get; }
+    DbSet<MagicLink> MagicLinks { get; }
 }

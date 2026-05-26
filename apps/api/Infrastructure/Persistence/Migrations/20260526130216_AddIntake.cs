@@ -27,6 +27,7 @@ namespace PacketReady.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_intake_sessions", x => x.id);
+                    table.CheckConstraint("ck_intake_sessions_state_matches_payload_kind", "(state_payload->>'kind') = state");
                     table.CheckConstraint("ck_intake_sessions_state_values", "state IN ('Pending', 'AwaitingProvider', 'AgentProcessing', 'Complete', 'Escalated')");
                     table.CheckConstraint("ck_intake_sessions_turn_budget_positive", "turn_budget >= 1");
                     table.CheckConstraint("ck_intake_sessions_turns_consumed_non_negative", "turns_consumed >= 0");
@@ -72,7 +73,7 @@ namespace PacketReady.Infrastructure.Persistence.Migrations
                     subject = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
                     body = table.Column<string>(type: "text", nullable: false),
                     status = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
-                    held_until = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    held_until = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     composed_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     sent_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
                 },
@@ -81,7 +82,7 @@ namespace PacketReady.Infrastructure.Persistence.Migrations
                     table.PrimaryKey("PK_outbound_messages", x => x.id);
                     table.CheckConstraint("ck_outbound_messages_kind_values", "kind IN ('IntakeInvitation', 'Followup', 'CompletionNotice')");
                     table.CheckConstraint("ck_outbound_messages_sent_at_pairing", "(status = 'Sent' AND sent_at IS NOT NULL) OR (status <> 'Sent' AND sent_at IS NULL)");
-                    table.CheckConstraint("ck_outbound_messages_status_values", "status IN ('Queued', 'Held', 'Sent', 'Cancelled')");
+                    table.CheckConstraint("ck_outbound_messages_status_values", "status IN ('Queued', 'Sent', 'Cancelled')");
                     table.ForeignKey(
                         name: "FK_outbound_messages_providers_provider_id",
                         column: x => x.provider_id,

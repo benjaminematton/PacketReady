@@ -40,6 +40,26 @@ public class MagicLinkIssuerTests : IDisposable
             new MagicLinkIssuer(_db, new MagicLinkOptions { SigningKey = key }));
     }
 
+    [Theory]
+    [InlineData("short")]
+    [InlineData("31-bytes-which-is-under-the-cap")]    // 31 chars / 31 bytes
+    public void Ctor_RejectsShortSigningKey(string key)
+    {
+        // 32-byte floor matches HMAC-SHA256's block size; the ctor fails
+        // loud at DI bootstrap so a misconfigured deploy refuses to start.
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new MagicLinkIssuer(_db, new MagicLinkOptions { SigningKey = key }));
+        Assert.Contains("at least 32 bytes", ex.Message);
+    }
+
+    [Fact]
+    public void Ctor_AcceptsExactly32ByteSigningKey()
+    {
+        var key32 = new string('k', 32);
+        // Should not throw.
+        _ = new MagicLinkIssuer(_db, new MagicLinkOptions { SigningKey = key32 });
+    }
+
     // ────────────────────────────────────────── sign + round-trip ────────
 
     [Fact]
@@ -191,7 +211,7 @@ public class MagicLinkIssuerTests : IDisposable
         // Same DB, different secret → bad signature, even on a known-good link.
         var theirs = new MagicLinkIssuer(_db, new MagicLinkOptions
         {
-            SigningKey = "a-different-signing-key",
+            SigningKey = "a-different-signing-key-also-32b-yes",
         });
         var ex = await Assert.ThrowsAsync<MagicLinkInvalidException>(
             () => theirs.ValidateAsync(tokenFromOurs, T0.AddMinutes(1)));

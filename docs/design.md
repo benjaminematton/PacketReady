@@ -746,7 +746,7 @@ Rough split: ~60% of the agent skeleton (runtime loop, audit, FSM, tool framewor
 
 | PacketReady | VaBene source | Notes |
 |---|---|---|
-| Hold-at-send TTL (10-minute admin-yank window) | `docs/agent/subsystem-5-approval-and-send.md` (11-step atomic transaction) | Pattern is the same — "agent composes, deterministic code dispatches." VaBene's hold is 48h for capacity reasons; PacketReady's 10m is for admin review only, but the lifecycle FSM (Queued → Held → Sent / Cancelled) is identical. |
+| Hold-at-send TTL (10-minute admin-yank window) | `docs/agent/subsystem-5-approval-and-send.md` (11-step atomic transaction) | Pattern is the same — "agent composes, deterministic code dispatches." VaBene's hold is 48h for capacity reasons; PacketReady's 10m is for admin review only. Lifecycle FSM is `Queued → Sent / Cancelled` — no transient `Held` state (VaBene's would-be third state earns its keep on a 48h window where operators watch in-flight rows; on 10m it doesn't, and the dispatcher's `SELECT … FOR UPDATE` row lock is what serializes concurrent dispatchers). |
 | Hold-lifecycle entity (Active → terminal) | `Domain/Entities/Agent/InquiryHold.cs` | Adapt FSM states; reuse `TerminalAt` timestamp pattern for audit. |
 | Two-layer idempotency (TOCTOU check + UNIQUE DB constraint) | `Application/Agent/Commands/CreateInquiryHold/CreateInquiryHoldCommandHandler.cs` | Carries over directly — protects against double-send on retry. |
 | Consolidated follow-up composition (one message, all gaps) | *new* | No direct VaBene analog; `compose_followup` is a new tool that aggregates the gap list before composition. |

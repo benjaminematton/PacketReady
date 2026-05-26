@@ -83,6 +83,12 @@ public sealed class MockSmtpSender : IEmailSender
         // Minimal header set; Date in RFC 1123 GMT format ("r"), which is
         // valid RFC 5322 too. Message-ID uses the OutboundMessage id so an
         // .eml file in the tree maps 1:1 back to a DB row.
+        //
+        // Subject is written as raw UTF-8 — RFC 5322 strictly requires
+        // non-ASCII in headers to be encoded-word (=?UTF-8?Q?...?=), but
+        // the demo loop only composes ASCII subjects and these .eml files
+        // are read with `cat`, not piped through a real MIME parser. If a
+        // real SMTP transport ever replaces this, add encoded-word here.
         var sb = new StringBuilder();
         sb.Append("From: ").Append(envelope.FromAddress).Append("\r\n");
         sb.Append("To: ").Append(envelope.ToAddress).Append("\r\n");

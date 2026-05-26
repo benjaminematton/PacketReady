@@ -14,11 +14,11 @@ namespace PacketReady.Infrastructure.MagicLinks;
 public sealed class MagicLinkOptions
 {
     /// <summary>
-    /// HMAC-SHA256 secret. Minimum 32 bytes of entropy when base64-decoded;
-    /// shorter keys halve the security of the MAC. The issuer doesn't
-    /// enforce length (it does enforce non-empty), so a thin
-    /// <c>appsettings</c> value passes — operators are responsible for
-    /// shipping a real key in non-dev environments.
+    /// HMAC-SHA256 secret. <b>Minimum 32 UTF-8 bytes</b> — the issuer
+    /// rejects shorter keys at construction (and rejects an empty key
+    /// outright). Generate with <c>openssl rand -base64 32</c> or
+    /// equivalent; any key shorter than 32 bytes halves the security of
+    /// the MAC and offers no operational benefit.
     /// </summary>
     public string SigningKey { get; init; } = string.Empty;
 }

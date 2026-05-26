@@ -5,6 +5,11 @@ using Xunit;
 
 namespace PacketReady.Tests.Infrastructure.Outbox;
 
+// Console.SetOut is process-global. The collection tag opts this class out
+// of xUnit's cross-class parallelism so a second class that ever swaps
+// Console.Out can join the "ConsoleOut" collection and serialize against
+// this one without cross-test contamination.
+[Collection("ConsoleOut")]
 public class MockSmtpSenderTests : IDisposable
 {
     private readonly string _root;

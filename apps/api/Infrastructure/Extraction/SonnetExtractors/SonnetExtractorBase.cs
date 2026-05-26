@@ -236,30 +236,46 @@ internal abstract class SonnetExtractorBase : IDocTypeExtractor
                 throw new ExtractorResponseException(
                     $"Field '{prop.Name}' envelope is not an object (kind={envelope.ValueKind}).");
 
-            if (!envelope.TryGetProperty("value", out _))
+            if (!envelope.TryGetProperty("value", out var valueEl))
                 throw new ExtractorResponseException(
                     $"Field '{prop.Name}' missing 'value' in extractor response.");
+
+            // When `value` is null, the field is "genuinely absent" per the
+            // extractor prompts. The bbox/page locator for a missing field
+            // is meaningless — there's nothing on the PDF to drill into.
+            // Sonnet's actual behavior on null fields is inconsistent:
+            // sometimes it emits page=1 + a placeholder bbox, sometimes
+            // `bbox: []` or `page: 0`. Tolerate any locator shape on null
+            // values; the per-field provenance map drops these entries
+            // downstream so the loose shape never propagates to a Citation.
+            // Surfaced by P4 task 18 — every malpractice extraction was
+            // 500'ing because Sonnet returned `bbox: []` for absent
+            // perOccurrence / aggregate values.
+            var valueIsNull = valueEl.ValueKind == JsonValueKind.Null;
 
             if (!envelope.TryGetProperty("page", out var pageEl))
                 throw new ExtractorResponseException(
                     $"Field '{prop.Name}' missing 'page' in extractor response.");
-            if (pageEl.ValueKind != JsonValueKind.Number || !pageEl.TryGetInt32(out var page) || page < 1)
+            if (!valueIsNull && (pageEl.ValueKind != JsonValueKind.Number || !pageEl.TryGetInt32(out var page) || page < 1))
                 throw new ExtractorResponseException(
                     $"Field '{prop.Name}' has invalid 'page' (must be integer ≥ 1, got {pageEl.GetRawText()}).");
 
             if (!envelope.TryGetProperty("bbox", out var bboxEl))
                 throw new ExtractorResponseException(
                     $"Field '{prop.Name}' missing 'bbox' in extractor response.");
-            if (bboxEl.ValueKind != JsonValueKind.Array || bboxEl.GetArrayLength() != 4)
-                throw new ExtractorResponseException(
-                    $"Field '{prop.Name}' has invalid 'bbox' (must be array of 4 numbers, got {bboxEl.GetRawText()}).");
-            foreach (var coord in bboxEl.EnumerateArray())
+            if (!valueIsNull)
             {
-                if (coord.ValueKind != JsonValueKind.Number ||
-                    !coord.TryGetDouble(out var n) ||
-                    double.IsNaN(n) || double.IsInfinity(n))
+                if (bboxEl.ValueKind != JsonValueKind.Array || bboxEl.GetArrayLength() != 4)
                     throw new ExtractorResponseException(
-                        $"Field '{prop.Name}' has non-finite 'bbox' coordinate (got {coord.GetRawText()}).");
+                        $"Field '{prop.Name}' has invalid 'bbox' (must be array of 4 numbers, got {bboxEl.GetRawText()}).");
+                foreach (var coord in bboxEl.EnumerateArray())
+                {
+                    if (coord.ValueKind != JsonValueKind.Number ||
+                        !coord.TryGetDouble(out var n) ||
+                        double.IsNaN(n) || double.IsInfinity(n))
+                        throw new ExtractorResponseException(
+                            $"Field '{prop.Name}' has non-finite 'bbox' coordinate (got {coord.GetRawText()}).");
+                }
             }
         }
 

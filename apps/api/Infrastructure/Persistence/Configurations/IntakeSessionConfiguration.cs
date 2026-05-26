@@ -33,6 +33,14 @@ public sealed class IntakeSessionConfiguration : IEntityTypeConfiguration<Intake
             t.HasCheckConstraint(
                 "ck_intake_sessions_turns_within_budget",
                 "turns_consumed <= turn_budget");
+
+            // The FSM is two columns (state enum + state_payload JSONB) that
+            // must agree. The aggregate keeps them in sync; this CHECK pins
+            // the invariant at the schema level so a hand-rolled UPDATE
+            // (or a future migration that touches one column) can't desync.
+            t.HasCheckConstraint(
+                "ck_intake_sessions_state_matches_payload_kind",
+                "(state_payload->>'kind') = state");
         });
 
         b.HasKey(x => x.Id);

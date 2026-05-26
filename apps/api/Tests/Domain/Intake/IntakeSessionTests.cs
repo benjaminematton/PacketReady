@@ -320,31 +320,112 @@ public class IntakeSessionTests
 
     // ─────────────────────────────────────────── State payload round-trip ─
 
+    /// <summary>
+    /// Walk all five FSM variants. Each landed-in-this-state session must
+    /// round-trip its payload through STJ polymorphism back to the same
+    /// concrete subtype with the same fields. Polymorphism by discriminator
+    /// is what makes EF rehydrate work; one variant passing doesn't prove
+    /// the other four.
+    /// </summary>
     [Fact]
-    public void StatePayloadJson_RoundTripsThroughPolymorphicDeserialize()
+    public void StatePayloadJson_RoundTripsAllFiveVariants()
     {
-        // Tests that SetState's Serialize<ProviderState>(...) writes the
-        // discriminator and a downstream EF rehydrate (simulated by direct
-        // STJ deserialize) reconstructs the right subtype.
-        var session = AgentProcessing(out _, out var turnId);
+        // Pending — set by Start(...) at T0.
+        var pending = Pending();
+        AssertRoundTrips<ProviderState.Pending>(pending, p =>
+            Assert.Equal(T0, p.CreatedAt));
 
-        var redeserialized = JsonSerializer.Deserialize<ProviderState>(
-            session.StatePayloadJson, DomainJson.Options);
+        // AwaitingProvider — set by NotifyInvitationSent at T1.
+        var awaiting = AwaitingProvider(out var linkId);
+        AssertRoundTrips<ProviderState.AwaitingProvider>(awaiting, p =>
+        {
+            Assert.Equal(linkId, p.MagicLinkId);
+            Assert.Equal(0, p.RemindersSent);
+        });
 
-        var processing = Assert.IsType<ProviderState.AgentProcessing>(redeserialized);
-        Assert.Equal(turnId, processing.TurnId);
-        Assert.Equal(T2, processing.StartedAt);
+        // AgentProcessing — set by BeginAgentTurn at T2.
+        var processing = AgentProcessing(out _, out var turnId);
+        AssertRoundTrips<ProviderState.AgentProcessing>(processing, p =>
+        {
+            Assert.Equal(turnId, p.TurnId);
+            Assert.Equal(T2, p.StartedAt);
+        });
+
+        // Complete — terminal EndAgentTurn at T3.
+        var complete = AgentProcessing(out _, out _);
+        var scoreId = Guid.NewGuid();
+        complete.EndAgentTurn(
+            new AgentTurnOutcome { CompletedReadinessScoreId = scoreId }, T3);
+        AssertRoundTrips<ProviderState.Complete>(complete, p =>
+        {
+            Assert.Equal(scoreId, p.ReadinessScoreId);
+            Assert.Equal(T3, p.CompletedAt);
+        });
+
+        // Escalated — non-empty PartialProfileJson so the JSON-in-JSON path is
+        // exercised (the string contains characters STJ has to escape).
+        var escalated = AwaitingProvider(out _);
+        escalated.Escalate("budget:steps", T4, partialProfileJson: "{\"name\":\"jane\"}");
+        AssertRoundTrips<ProviderState.Escalated>(escalated, p =>
+        {
+            Assert.Equal("budget:steps", p.Reason);
+            Assert.Equal("{\"name\":\"jane\"}", p.PartialProfileJson);
+        });
     }
 
-    [Fact]
-    public void StatePayloadJson_DiscriminatorIsKindOfCurrentState()
+    [Theory]
+    [InlineData(IntakeState.Pending)]
+    [InlineData(IntakeState.AwaitingProvider)]
+    [InlineData(IntakeState.AgentProcessing)]
+    [InlineData(IntakeState.Complete)]
+    [InlineData(IntakeState.Escalated)]
+    public void StatePayloadJson_DiscriminatorMatchesStateColumn(IntakeState state)
     {
-        var session = AwaitingProvider(out _);
+        var session = SessionInState(state);
 
         using var doc = JsonDocument.Parse(session.StatePayloadJson);
         Assert.Equal(
-            nameof(IntakeState.AwaitingProvider),
+            state.ToString(),
             doc.RootElement.GetProperty("kind").GetString());
+        Assert.Equal(state, session.State);
+    }
+
+    private static void AssertRoundTrips<TExpected>(
+        IntakeSession session, Action<TExpected> assertFields)
+        where TExpected : ProviderState
+    {
+        var redeserialized = JsonSerializer.Deserialize<ProviderState>(
+            session.StatePayloadJson, DomainJson.Options);
+        var concrete = Assert.IsType<TExpected>(redeserialized);
+        assertFields(concrete);
+    }
+
+    private static IntakeSession SessionInState(IntakeState target)
+    {
+        switch (target)
+        {
+            case IntakeState.Pending:
+                return Pending();
+            case IntakeState.AwaitingProvider:
+                return AwaitingProvider(out _);
+            case IntakeState.AgentProcessing:
+                return AgentProcessing(out _, out _);
+            case IntakeState.Complete:
+            {
+                var s = AgentProcessing(out _, out _);
+                s.EndAgentTurn(
+                    new AgentTurnOutcome { CompletedReadinessScoreId = Guid.NewGuid() }, T3);
+                return s;
+            }
+            case IntakeState.Escalated:
+            {
+                var s = AwaitingProvider(out _);
+                s.Escalate("budget:steps", T4);
+                return s;
+            }
+            default:
+                throw new ArgumentOutOfRangeException(nameof(target), target, null);
+        }
     }
 
     // ──────────────────────────────────────────────────── helpers ───────

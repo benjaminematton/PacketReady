@@ -1,7 +1,7 @@
 # Payer A — National HMO. Defaults to the universal-4 required-doc set
 # (license/dea/boardCert/malpractice) with $1M/$3M malpractice minimums and
-# the ABMS umbrella as the only accepted board family. Matches what most
-# commercial payers ask for in a credentialing packet.
+# the full ABMS member-board roster as the accepted-board allowlist.
+# Matches what most commercial payers ask for in a credentialing packet.
 #
 # Schema: see PayerRequirement.cs. The loader's ValidateShape() enforces
 # every required key — adding/removing fields here must happen alongside
@@ -17,23 +17,38 @@ requiredDocuments:
   - boardCert
   - malpractice
 boardCertRequired: true
-# ABMS member boards. The validator does a literal Ordinal string match
-# (no umbrella → member-board lookup table yet — P5+ refinement), so the
-# YAML enumerates the actual acronyms that appear on real certificates.
-# This list covers the common P4 fixtures (ABIM, ABFM, ABEM) plus a few
-# more frequent specialties. A board outside this list emits a Major
-# "not on accepted list" Issue.
+# All 24 ABMS member-board acronyms. The validator does a literal Ordinal
+# string match — no umbrella → member-board lookup table — so the YAML
+# enumerates every member acronym that can appear on a real cert. The
+# umbrella body "ABMS" is intentionally absent: no certificate is issued
+# by ABMS itself, it's issued by one of the 24 member boards below. Mirror
+# of TestProfiles.AbmsMemberBoards; keep both in lockstep. Source of truth:
+# https://www.abms.org/member-boards/.
 acceptedBoards:
-  - ABMS
-  - ABIM   # Internal Medicine
-  - ABFM   # Family Medicine
-  - ABEM   # Emergency Medicine
-  - ABP    # Pediatrics
-  - ABS    # Surgery
-  - ABOG   # Obstetrics & Gynecology
-  - ABA    # Anesthesiology
-  - ABPN   # Psychiatry & Neurology
-  - ABR    # Radiology
+  - ABAI    # Allergy and Immunology
+  - ABA     # Anesthesiology
+  - ABCRS   # Colon and Rectal Surgery
+  - ABD     # Dermatology
+  - ABEM    # Emergency Medicine
+  - ABFM    # Family Medicine
+  - ABIM    # Internal Medicine
+  - ABMGG   # Medical Genetics and Genomics
+  - ABNS    # Neurological Surgery
+  - ABNM    # Nuclear Medicine
+  - ABOG    # Obstetrics and Gynecology
+  - ABO     # Ophthalmology
+  - ABOS    # Orthopaedic Surgery
+  - ABOto   # Otolaryngology
+  - ABPath  # Pathology
+  - ABP     # Pediatrics
+  - ABPMR   # Physical Medicine and Rehabilitation
+  - ABPS    # Plastic Surgery
+  - ABPM    # Preventive Medicine
+  - ABPN    # Psychiatry and Neurology
+  - ABR     # Radiology
+  - ABS     # Surgery
+  - ABTS    # Thoracic Surgery
+  - ABU     # Urology
 windowDays:
   malpracticeRenewal: 30
   licenseRenewal: 30

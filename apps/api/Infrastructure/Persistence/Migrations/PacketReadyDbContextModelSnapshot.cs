@@ -311,6 +311,8 @@ namespace PacketReady.Infrastructure.Persistence.Migrations
 
                     b.ToTable("intake_sessions", null, t =>
                         {
+                            t.HasCheckConstraint("ck_intake_sessions_state_matches_payload_kind", "(state_payload->>'kind') = state");
+
                             t.HasCheckConstraint("ck_intake_sessions_state_values", "state IN ('Pending', 'AwaitingProvider', 'AgentProcessing', 'Complete', 'Escalated')");
 
                             t.HasCheckConstraint("ck_intake_sessions_turn_budget_positive", "turn_budget >= 1");
@@ -329,6 +331,7 @@ namespace PacketReady.Infrastructure.Persistence.Migrations
                         .HasColumnName("id");
 
                     b.Property<DateTimeOffset?>("ConsumedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("consumed_at");
 
@@ -372,7 +375,7 @@ namespace PacketReady.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("composed_at");
 
-                    b.Property<DateTimeOffset?>("HeldUntil")
+                    b.Property<DateTimeOffset>("HeldUntil")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("held_until");
 
@@ -402,6 +405,12 @@ namespace PacketReady.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("subject");
 
+                    b.Property<string>("ToAddress")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("to_address");
+
                     b.Property<Guid>("TurnId")
                         .HasColumnType("uuid")
                         .HasColumnName("turn_id");
@@ -424,7 +433,7 @@ namespace PacketReady.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_outbound_messages_sent_at_pairing", "(status = 'Sent' AND sent_at IS NOT NULL) OR (status <> 'Sent' AND sent_at IS NULL)");
 
-                            t.HasCheckConstraint("ck_outbound_messages_status_values", "status IN ('Queued', 'Held', 'Sent', 'Cancelled')");
+                            t.HasCheckConstraint("ck_outbound_messages_status_values", "status IN ('Queued', 'Sent', 'Cancelled')");
                         });
                 });
 

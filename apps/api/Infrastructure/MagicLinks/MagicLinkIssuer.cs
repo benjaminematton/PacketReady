@@ -28,14 +28,26 @@ public sealed class MagicLinkIssuer : IMagicLinkAuthority
     private readonly IAppDbContext _db;
     private readonly byte[] _signingKey;
 
+    // 32 bytes = 256 bits, the HMAC-SHA256 block size. Shorter keys halve
+    // the security of the MAC and offer no operational benefit. Enforced
+    // at construction so a misconfigured deploy refuses to start (matches
+    // the DB_CONNECTION_STRING / ANTHROPIC_API_KEY fail-loud pattern).
+    private const int MinSigningKeyBytes = 32;
+
     public MagicLinkIssuer(IAppDbContext db, MagicLinkOptions options)
     {
         if (string.IsNullOrWhiteSpace(options.SigningKey))
             throw new InvalidOperationException(
                 "MAGIC_LINK_SIGNING_KEY is required; configure it before app start.");
 
+        var keyBytes = Encoding.UTF8.GetBytes(options.SigningKey);
+        if (keyBytes.Length < MinSigningKeyBytes)
+            throw new InvalidOperationException(
+                $"MAGIC_LINK_SIGNING_KEY must be at least {MinSigningKeyBytes} bytes (got {keyBytes.Length}); " +
+                "generate one with `openssl rand -base64 32` or equivalent.");
+
         _db = db;
-        _signingKey = Encoding.UTF8.GetBytes(options.SigningKey);
+        _signingKey = keyBytes;
     }
 
     public string SignToken(MagicLink link)
