@@ -16,7 +16,7 @@
 ## Definition of done
 
 - [ ] `evals/dataset/` holds **50 packets** in 4 buckets: 15 clean+valid · 15 clean+conflicts · 15 scanned+clean · 5 scanned+conflicts. Generated programmatically from NPPES distributions with a locked random seed; **deterministic field values; PDF bytes may vary across ReportLab versions and platform JPEG encoders**.
-- [ ] **Per-field confidence** lands on every extraction row (added in P3 if not already; P4 step 0 if not). Float in `[0, 1]`. Surfaced through to the score path.
+- [ ] **Per-field confidence** lands on every extraction row. **Already shipped in P3 slice 8** as a `confidence` JSONB column on `document_extractions` (singular; see [DocumentExtractionConfiguration.cs](../../apps/api/Infrastructure/Persistence/Configurations/DocumentExtractionConfiguration.cs)) and `FieldProvenance.Confidence` through the aggregator (see [FieldProvenance.cs](../../apps/api/Application/Providers/Aggregation/FieldProvenance.cs)). Float in `[0, 1]`. P4 only wires the *consumer*: `ProvenanceExtensions.Cite` stamps `Citation.LowConfidence`, and `ConfidenceGuard` folds it into the issue list.
 - [ ] **Two new LLM-augmented validators wired:** `identity_coherence` (Sonnet structured output across all extractions for one provider; covers `fullName`/`dateOfBirth`/`npi`/`address` cross-doc agreement) and `npi_taxonomy_match` (CSV-deterministic lookup of taxonomy code → canonical specialty, then a thin Sonnet "does stated specialty match canonical?" call). Both registered in `AddApplication()` and exercised by `ComputeReadinessScoreCommand`.
 - [ ] **Three new payer-aware validators wired:** `malpractice_currency` (status + coverage ≥ payer minimum + ≥ 30-day window; owns the full malpractice surface — no other malpractice validator exists), `required_documents` (per-payer required-doc-type presence), and `BoardCertificationValidator` extended to consume payer config for the accepted-boards list. Two sample payers committed.
 - [ ] **Conflict precision + recall** reported per `plantedConflict` kind. Definition: a planted conflict is "caught" iff **all three** of: (1) at least one Issue's `Validator` matches the expected validator for that kind, (2) the Issue's citations name at least one of the planted `sources`, and (3) the Issue's `Field` (on LLM-emitted Issues) matches the planted conflict's target field. Precision = caught-and-planted / all-flagged-conflicts; recall = caught-and-planted / total-planted.
@@ -53,7 +53,7 @@ No new C# validator-framework code — `IValidator` from P1 is the shape for bot
 | **Score-vs-tier agreement metric** | Weighted Cohen's κ (quadratic weights) + 3×3 confusion matrix + raw agreement. Spearman demoted to footnote. | 3-tier categorical labels + n=20 makes Spearman ρ heavy-tied and uninterpretable. Quadratic-weighted κ is the standard ordinal-categorical-agreement metric; the confusion matrix is what a reader actually wants to see. |
 | **Hand-label process** | Tiers (Red/Yellow/Green) only. Solo labeler (Ben). | Numeric labels invite spurious precision at n=20. Solo because waiting for a second labeler blocks the phase. **The bias is structural**, not just acknowledged: same person who designed the cross-document reasoning rules is rating readiness. The README caveat names this in plain language — the agreement number measures self-consistency more than ground truth. A real second labeler is a post-launch ask, not a P4 gate. |
 | **PayerId sourcing** | Column on `Provider`, defaults to `payer-a-national-hmo` at creation. Seed CLI varies per fixture (roughly half each payer). Admin-level payer selection at intake lands in P5. | Avoids dragging a portal-context concept into the extraction layer. Two payers in the seed exercises both YAML branches without P5 work. |
-| Per-field confidence column | New column on `document_extractions` (`confidences` JSONB, keyed by field name) | Keeps the row shape stable; doesn't require a sibling table. P3 may have already added this — confirm in step 0. |
+| Per-field confidence column | `confidence` JSONB on `document_extractions` (**singular**; not `confidences`), keyed by field name. **Shipped P3 slice 8.** The aggregator hydrates it into `FieldProvenance.Confidence` — that's the wire shape validators and `ConfidenceGuard` consume. | Earlier doc draft named the column `confidences`; actual column is `confidence`. ConfidenceGuard reads provenance / citation flags, not the raw JSONB. |
 | Per-payer YAML location | `apps/api/Infrastructure/Payers/payers/*.yaml`, loaded at startup | One restart picks up changes. P5+ may need hot-reload; defer. |
 | Confidence threshold | 0.85 for Critical-eligible inputs | Inherited from [design.md §11.1](../design.md); revisit only with data showing it's wrong. |
 | **`isLowConfidenceInput` shape** | Structural `bool` field on `Issue` (and mirrored on `Citation.lowConfidence`). Not a `Message` suffix. | Suffixes double-append on re-eval, fight i18n, break downstream parsing. A structured flag is dashboard- and test-readable without string-sniffing. |
@@ -85,8 +85,8 @@ PacketReady/
 │                   ├── payer-a-national-hmo.yaml        NEW
 │                   └── payer-b-state-medicaid.yaml      NEW
 ├── data/
-│   ├── nucc-taxonomy-snapshot-2026-Q2.csv               NEW — official NUCC
-│   └── nppes-sample-2026-Q2.csv                         NEW — sampled subset
+│   ├── nucc-taxonomy-25.1.csv                           NEW — official NUCC
+│   └── nppes-sample-2026.csv                            NEW — synthetic 10k
 └── evals/
     ├── dataset/
     │   ├── packet-001 … packet-005                       (P2; rebucketed under P4 IDs)
@@ -107,13 +107,13 @@ PacketReady/
 
 ## File-by-file
 
-### `data/nucc-taxonomy-snapshot-2026-Q2.csv`
+### `data/nucc-taxonomy-25.1.csv`
 
-The official NUCC code set, downloaded once and committed. ~900 rows; treat as static data. Future taxonomy code edits go via a new snapshot file with a new quarter suffix — same pattern as `evals/results/`.
+The official NUCC code set, downloaded once from `https://www.nucc.org/images/stories/CSV/nucc_taxonomy_251.csv` and committed. 883 rows; treat as static data. NUCC publishes biannually (1/1 and 7/1) with version label `YY.0` (Jan) or `YY.1` (Jul). When NUCC 26.0 lands, commit it as `data/nucc-taxonomy-26.0.csv` alongside this file and bump the `npi_taxonomy_match` loader path — `data/README.md` carries the source URL and download date so the upgrade is mechanical.
 
-### `data/nppes-sample-2026-Q2.csv`
+### `data/nppes-sample-2026.csv`
 
-A 10k-row sample of NPPES providers downloaded once. Columns we need: NPI, primary specialty, taxonomy code, license issuance state, license issuance year. Sampled, not the full 7M-row dump — keeps the repo light. The packet generator reads this file and picks rows uniformly with a locked seed.
+A 10k-row synthetic sample of individual (Type-1) providers. Columns: NPI, primary specialty, taxonomy code, license issuance state, license issuance year. Generated by `data/build_nppes_sample.py` with a locked seed; state/specialty/year distributions derived from public aggregates (US Census 2020, AAMC 2022 Physician Specialty Data Report), Luhn-valid synthetic NPIs. The packet generator reads this file and picks rows uniformly with a locked seed. See `data/README.md` for the why-synthetic rationale.
 
 ### `evals/generators/packetready_eval/nppes_sampling.py`
 
@@ -248,9 +248,17 @@ Three checks per malpractice extraction:
 
 ### `apps/api/Application/Scoring/Validators/RequiredDocumentsValidator.cs`
 
-Pure code. Single responsibility: does the provider have one of every doc type the payer requires? Reads `requiredDocuments: [...]` from the payer's YAML, walks the provider's extraction rows, emits one Critical per missing doc type. That's it.
+Pure code. Single responsibility: emit Critical for any doc type the payer requires that the provider doesn't have **and** that the aggregator's universal-4 Missing-Document floor doesn't already cover.
 
-The earlier draft's `PayerSpecificValidator` was a junk drawer — required docs + accepted boards + windows all in one place. Split per concept: required-docs is its own thing; accepted-boards extends the existing `BoardCertificationValidator`; license/dea renewal windows stay in their respective validators with payer-override hooks.
+**Missing-doc ownership split (locked — do not change without revisiting the aggregator):**
+
+- **`IProviderProfileAggregator` owns Missing-Document Critical for the universal-4 doc types**: `License`, `DEA`, `BoardCert`, `Malpractice`. Shipped P3 — see [AggregatedProfile.cs](../../apps/api/Application/Providers/Aggregation/AggregatedProfile.cs) docstring (the `Missing-Document Critical` bullet). The existing P1 validators ([LicenseStatusValidator.cs](../../apps/api/Application/Scoring/Validators/LicenseStatusValidator.cs), [DeaStatusValidator.cs](../../apps/api/Application/Scoring/Validators/DeaStatusValidator.cs), [BoardCertificationValidator.cs](../../apps/api/Application/Scoring/Validators/BoardCertificationValidator.cs)) all short-circuit to `Array.Empty<Issue>()` when their sub-record is null **specifically** to defer to this aggregator-level Critical and avoid double-counting. Same contract for `MalpracticeCurrencyValidator` when it ships in P4.
+- **`RequiredDocumentsValidator` owns Missing-Document Critical for payer-required doc types NOT in the universal-4** (e.g., a future `StateRegistration` or `CDS` doc). It MUST skip emission for any doc type already covered by the aggregator — enforce in code (`UNIVERSAL_DOC_TYPES.Contains(t)` skip), not by coincidence. With the two YAMLs in P4 (both require only the universal-4), this validator emits nothing in the common case — it's a forward-compatibility lane for payer #3+.
+- **Extraction-Failed Critical** (status=`'Failed'`) stays with the aggregator regardless of payer config.
+
+So the validator's job is: read `requiredDocuments: [...]` from the payer's YAML, subtract the universal-4, walk the provider's extractions for what's left, emit one Critical per missing non-universal doc type. Citations are doc-less (`null` doc-ref fields) — there's nothing to point at when the doc isn't there.
+
+The earlier draft's `PayerSpecificValidator` was a junk drawer — required docs + accepted boards + windows all in one place. Split per concept: required-docs is its own thing (scoped as above); accepted-boards extends the existing `BoardCertificationValidator`; license/dea renewal windows stay in their respective validators with payer-override hooks.
 
 ### `apps/api/Application/Scoring/Validators/BoardCertificationValidator.cs` (existing, extended)
 
@@ -296,25 +304,34 @@ public static class ConfidenceGuard
     public const double CriticalEligibleThreshold = 0.85;
 
     /// <summary>
-    /// Downgrades any Critical Issue whose citations reference a field with
-    /// confidence &lt; <see cref="CriticalEligibleThreshold"/> to Minor.
-    /// The returned Issue carries a structural <c>IsLowConfidenceInput</c>
-    /// flag (and a mirrored <c>Citation.LowConfidence</c>) so the dashboard
-    /// can surface "we caught this but the input was unreliable" without
-    /// string-sniffing the message.
+    /// Pure fold over the issue list. Downgrades any Critical Issue whose
+    /// citations carry <c>LowConfidence == true</c> to Minor and stamps
+    /// <c>IsLowConfidenceInput = true</c> on the returned Issue. No
+    /// provenance lookup happens here — <c>ProvenanceExtensions.Cite</c>
+    /// already set <c>Citation.LowConfidence</c> at emission time using
+    /// <see cref="FieldProvenance.Confidence"/> &lt;
+    /// <see cref="CriticalEligibleThreshold"/>.
+    ///
+    /// Idempotent: re-running sees the Criticals already downgraded;
+    /// nothing further to do.
     /// </summary>
-    public static IReadOnlyList<Issue> Apply(
-        IReadOnlyList<Issue> issues,
-        IReadOnlyDictionary<(Guid docId, string field), double> confidences)
-    {
-        // ...
-    }
+    public static IReadOnlyList<Issue> Apply(IReadOnlyList<Issue> issues) =>
+        issues.Select(Downgrade).ToList();
+
+    private static Issue Downgrade(Issue i) =>
+        i.Severity == Severity.Critical && i.Citations.Any(c => c.LowConfidence)
+            ? i with { Severity = Severity.Minor, IsLowConfidenceInput = true }
+            : i;
 }
 ```
 
-Called from `ComputeReadinessScoreCommandHandler` between collection and sort. **Structural marker, not text:** add `bool IsLowConfidenceInput { get; init; }` to the `Issue` record (defaults to `false`) and `bool LowConfidence { get; init; }` to the `Citation` record. The dashboard's IssueCard checks the flag and renders an inline "low-confidence input" pill in the severity row; the side-panel says "downgraded from Critical due to low-confidence input on `<field>`". Re-running the guard on an already-guarded set is idempotent: the flag is already `true`, the severity stays Minor.
+Called from `ComputeReadinessScoreCommandHandler` between issue collection and `ScoreSynthesizer.Compute`.
 
-`Issue` and `Citation` ship as P1 domain records — adding fields is a wire-shape change. STJ + the camelCase policy serialize them as `isLowConfidenceInput` and `lowConfidence` automatically. Existing P1/P2/P3 callers default the field to `false` and stay unchanged.
+**`Issue.IsLowConfidenceInput` and `Citation.LowConfidence` already shipped in P3** — see [Issue.cs](../../apps/api/Domain/Scoring/Issue.cs) and [Citation.cs](../../apps/api/Domain/Scoring/Citation.cs). Both default `false` and stay unflipped until P4 wires the consumer. STJ + the camelCase policy serialize them as `isLowConfidenceInput` and `lowConfidence` automatically. P1/P2/P3 callers and tests are unchanged.
+
+**Where `Citation.LowConfidence` gets flipped:** in [`ProvenanceExtensions.Cite`/`TryCite`](../../apps/api/Application/Providers/Aggregation/ProvenanceExtensions.cs). P4 extends these to read `FieldProvenance.Confidence` and stamp `LowConfidence = (confidence < CriticalEligibleThreshold)` on every citation they construct. Validators already call `provenance.Cite(...)` to build citations — no validator-code change needed for the flip to land everywhere. LLM validators that build `Citation` directly (e.g., `IdentityCoherenceValidator`) must use the same `Cite` helper or pass the resolved `FieldProvenance` through explicitly so they participate in the gate.
+
+The dashboard's IssueCard checks `IsLowConfidenceInput` and renders an inline "low-confidence input" pill in the severity row; the side-panel says "downgraded from Critical due to low-confidence input."
 
 ### `evals/runners/conflict_metrics.py`
 
@@ -416,7 +433,7 @@ The mtime check guards against **anchoring** (rating after seeing the system sco
 
 ## Task order
 
-1. **Confirm or add per-field confidence on extractions.** If P3 didn't emit it, step 0 is a small migration (`confidences JSONB` on `document_extractions`) + extractor prompt update to ask Sonnet for self-rated 0–1 confidence per field. Real chunk of work if it lands here — budget it before scoping P4 start.
+1. **Confirm per-field confidence wiring (P3-shipped; no migration).** Verify the `confidence` JSONB column on `document_extractions` ([DocumentExtractionConfiguration.cs](../../apps/api/Infrastructure/Persistence/Configurations/DocumentExtractionConfiguration.cs)), `FieldProvenance.Confidence` ([FieldProvenance.cs](../../apps/api/Application/Providers/Aggregation/FieldProvenance.cs)), and the default-`false` `Issue.IsLowConfidenceInput` / `Citation.LowConfidence` ([Issue.cs](../../apps/api/Domain/Scoring/Issue.cs), [Citation.cs](../../apps/api/Domain/Scoring/Citation.cs)) are all present. The actual P4 work for confidence is two surgical changes in step 14: extend `ProvenanceExtensions.Cite` to stamp `Citation.LowConfidence`, then add `ConfidenceGuard.Apply` in the handler.
 2. **NUCC + NPPES data snapshots committed** under `data/`. README in that dir names the file source and the snapshot date.
 3. **Add `PayerId` to `Provider`.** Column + migration; defaults to `payer-a-national-hmo`. Seed CLI sets per fixture (roughly half each payer across the 50).
 4. **`nppes_sampling.py` + seeded `faker`.** Smoke: generate 5 profiles, eyeball the distribution.
@@ -429,7 +446,7 @@ The mtime check guards against **anchoring** (rating after seeing the system sco
 11. **`MalpracticeCurrencyValidator`** — pure code, consumes payer config for coverage minimums + window.
 12. **`RequiredDocumentsValidator`** — pure code, single responsibility (per-payer required-doc presence).
 13. **Extend `BoardCertificationValidator`** with the optional payer-config branch (`boardCertRequired: false` downgrades the missing-cert Critical to Pass; non-accepted board emits Major).
-14. **`ConfidenceGuard` + handler integration.** Add `IsLowConfidenceInput: bool` to `Issue`; mirror on `Citation.LowConfidence`. Unit-test the downgrade path explicitly. Verify the existing P1 IssueCard renders the pill.
+14. **`ConfidenceGuard` + handler integration.** Extend `ProvenanceExtensions.Cite`/`TryCite` to stamp `Citation.LowConfidence` from `FieldProvenance.Confidence < 0.85`. Add `ConfidenceGuard.Apply` and call it from `ComputeReadinessScoreCommandHandler` between issue collection and `ScoreSynthesizer.Compute`. Unit-test the downgrade path: a Critical with one low-conf citation becomes Minor with `IsLowConfidenceInput = true`; the same Critical with all citations ≥0.85 stays Critical. (`Issue.IsLowConfidenceInput` and `Citation.LowConfidence` already shipped in P3 — no record changes.) Verify the existing P1 IssueCard renders the pill.
 15. **`conflict_metrics.py`** + runner wiring. Smoke against 3 planted packets, confirm recall = 100% on that micro-set with the 3-predicate definition (validator + sources + field).
 16. **Hand-label 20 packets into `human_tiers.json`** — done *before* step 17 to avoid anchoring. Write the `_biasNote` block in the same commit.
 17. **`agreement.py`** + runner wiring (weighted κ + raw + 3×3 confusion; Spearman as footnote).
