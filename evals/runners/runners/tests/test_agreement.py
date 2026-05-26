@@ -69,7 +69,8 @@ def test_one_step_miss_scores_higher_than_two_step_miss():
         one_step_score_results[pid] = _result(pid, 50, s)
         two_step_score_results[pid] = _result(pid, 50, s)
     # 2 misses: one-step (Red→Yellow) vs two-step (Red→Green).
-    labels["m1"] = "Red"; labels["m2"] = "Red"
+    labels["m1"] = "Red"
+    labels["m2"] = "Red"
     one_step_score_results["m1"] = _result("m1", 50, "Yellow")
     one_step_score_results["m2"] = _result("m2", 50, "Yellow")
     two_step_score_results["m1"] = _result("m1", 50, "Green")

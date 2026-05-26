@@ -52,7 +52,6 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-
 from packetready_eval.schema import DOC_FILENAMES
 
 from . import DEFAULT_BASE_URL
@@ -64,6 +63,7 @@ from .pipeline_client import (
     RetryConfig,
 )
 from .score_metrics import (
+    HumanTiers,
     LabelsMtimeError,
     ScoreEvalContractError,
     baseline_payload,
@@ -73,7 +73,6 @@ from .score_metrics import (
     load_planted_conflicts,
     measure_all,
 )
-
 
 DEFAULT_PAYER_ID = "payer-a-national-hmo"
 
@@ -203,23 +202,39 @@ def run(
     labels_path: Path | None = None,
     baseline_generated_at: datetime | None = None,
     retry: RetryConfig | None = None,
+    progress: bool = False,
 ) -> dict[str, Any]:
     """Execute the full pipeline. Returns the assembled results payload
     (caller writes it to disk). Errors at the packet level are absorbed
     into the payload's `errors` list; a transport-level failure
-    propagates to the caller untouched."""
+    propagates to the caller untouched.
+
+    ``progress=True`` emits one stderr line per completed packet so a
+    long run (50 packets × ~30s = ~25min) isn't a silent stare.
+    """
     packet_dirs = _packet_dirs(dataset_dir)
     if not packet_dirs:
         raise FileNotFoundError(
             f"no packet directories under {dataset_dir} (looked for "
             f"subdirs containing golden.json)")
 
+    # Labels load up front so the mtime gate fails before we spend
+    # ~25min on a run whose agreement block we'd refuse to publish.
+    human_tiers: HumanTiers | None = None
+    if labels_path is not None:
+        human_tiers = load_human_tiers(
+            labels_path, baseline_generated_at=baseline_generated_at)
+
     runs: list[_PerPacketRun] = []
     errors: list[_PerPacketError] = []
+
+    started_at = datetime.now(UTC)
 
     # ThreadPoolExecutor matches the sync PipelineClient cleanly.
     # We don't reuse one client across threads — see _process_packet's
     # docstring for the rationale.
+    total = len(packet_dirs)
+    completed = 0
     with ThreadPoolExecutor(max_workers=max(1, concurrency)) as pool:
         futures = {
             pool.submit(
@@ -235,12 +250,14 @@ def run(
             pd = futures[fut]
             try:
                 runs.append(fut.result())
+                outcome = "ok"
             except (PipelineContractError, ScoreEvalContractError) as exc:
                 errors.append(_PerPacketError(
                     packet_id=pd.name,
                     error_type=type(exc).__name__,
                     message=str(exc),
                 ))
+                outcome = f"FAIL {type(exc).__name__}"
             except httpx.RequestError as exc:
                 # Transport / connect / timeout faults. We surface but
                 # don't retry — the inner client already retried 429s,
@@ -250,6 +267,16 @@ def run(
                     error_type="HttpRequestError",
                     message=f"{type(exc).__name__}: {exc}",
                 ))
+                outcome = f"FAIL {type(exc).__name__}"
+            completed += 1
+            if progress:
+                print(
+                    f"[{completed}/{total}] {pd.name} {outcome}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+
+    finished_at = datetime.now(UTC)
 
     # Deterministic order on rollup so two runs diff-able.
     runs.sort(key=lambda r: r.packet_id)
@@ -258,21 +285,24 @@ def run(
     score_results = {r.packet_id: r.score_result for r in runs}
     packet_results = [r.packet_result for r in runs]
 
-    # Labels are optional — the agreement block is omitted when labels
-    # aren't supplied (or the intersection is too small). Mtime gate
-    # enforces the anchoring discipline.
-    labels: dict[str, str] | None = None
-    if labels_path is not None:
-        ht = load_human_tiers(
-            labels_path, baseline_generated_at=baseline_generated_at)
-        labels = dict(ht.labels)
-
+    labels = dict(human_tiers.labels) if human_tiers is not None else None
     counts, agreement = measure_all(packet_results, score_results, labels)
+
+    # Conflicts always present (empty dict if no kinds tracked yet);
+    # agreement omitted when None so a consumer can fail-loud on the
+    # missing key rather than silently consuming a stub.
+    metrics = baseline_payload(counts, agreement)
+    if "agreement" in metrics and human_tiers is not None:
+        # Surface the labeler's provenance note so a regression-gate
+        # consumer can show it without re-reading human_tiers.json.
+        metrics["agreement"]["biasNote"] = human_tiers.bias_note
 
     payload: dict[str, Any] = {
         "datasetDir": str(dataset_dir),
         "baseUrl": base_url,
-        "ranAt": datetime.now(UTC).isoformat(timespec="seconds"),
+        "startedAt": started_at.isoformat(timespec="seconds"),
+        "finishedAt": finished_at.isoformat(timespec="seconds"),
+        "durationSeconds": round((finished_at - started_at).total_seconds(), 3),
         "packetCount": len(packet_dirs),
         "successCount": len(runs),
         "errorCount": len(errors),
@@ -280,7 +310,7 @@ def run(
             {"packetId": e.packet_id, "errorType": e.error_type, "message": e.message}
             for e in errors
         ],
-        **baseline_payload(counts, agreement),
+        "conflicts": metrics["conflicts"],
         "scoreResults": [
             {
                 "packetId": r.packet_id,
@@ -290,6 +320,8 @@ def run(
             for r in runs
         ],
     }
+    if "agreement" in metrics:
+        payload["agreement"] = metrics["agreement"]
     return payload
 
 
@@ -323,6 +355,11 @@ def _format_summary(payload: dict[str, Any]) -> str:
         lines.append(
             f"agreement (n={a['n']}): "
             f"κ={a['weightedKappa']}  raw={a['rawAgreement']}  ρ={a['spearmanRho']}")
+        if a.get("biasNote"):
+            lines.append(f"  bias note: {a['biasNote']}")
+    lines.append(
+        f"timing: {payload.get('durationSeconds', '?')}s "
+        f"({payload.get('startedAt', '?')} → {payload.get('finishedAt', '?')})")
     return "\n".join(lines)
 
 
@@ -361,7 +398,13 @@ def main(argv: list[str] | None = None) -> int:
             concurrency=args.concurrency,
             labels_path=args.labels,
             baseline_generated_at=baseline_at,
+            progress=True,
         )
+    # Setup-level errors only. FileNotFoundError comes from missing
+    # dataset/labels paths; LabelsMtimeError from the anchoring gate;
+    # ScoreEvalContractError at this layer can only originate in
+    # load_human_tiers (per-packet contract errors are absorbed into
+    # payload.errors inside run(), not raised here).
     except (FileNotFoundError, LabelsMtimeError, ScoreEvalContractError) as exc:
         print(f"[run] FAIL — {exc}", file=sys.stderr)
         return 1

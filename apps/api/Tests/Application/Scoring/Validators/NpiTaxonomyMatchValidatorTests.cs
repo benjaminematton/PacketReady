@@ -122,7 +122,10 @@ public class NpiTaxonomyMatchValidatorTests
 
     private static NpiTaxonomyMatchValidator Build(IChatClient chat, INuccTaxonomyLookup lookup)
     {
-        var prompts = StubPromptLoaderFactory.Create("NpiTaxonomyMatchPrompt.v1.md", FakePrompt);
+        // Stub the prompt key the validator actually reads (PromptKeys.NpiTaxonomyMatch).
+        // Bumping the prompt to v2 changed the resource name, so the stub key tracks it.
+        var prompts = StubPromptLoaderFactory.Create(
+            PacketReady.Application.Prompts.PromptKeys.NpiTaxonomyMatch, FakePrompt);
         return new NpiTaxonomyMatchValidator(
             chat, prompts, lookup, NullLogger<NpiTaxonomyMatchValidator>.Instance);
     }

@@ -7,10 +7,8 @@ least one of the system's emitted Issues:
      :data:`EXPECTED_VALIDATOR[kind]`.
   2. **Sources overlap.** The Issue's citations name at least one of the
      planted ``sources`` (e.g. ``["license", "malpractice"]`` for a
-     ``name_variant``). Citation source comes from the citation's
-     ``documentId`` resolving to a docType in our index, OR from the
-     ``sourceValidator`` echoing the docType label (LLM validators today
-     don't echo it; the doc-id path is the load-bearing one).
+     ``name_variant``). Citation source is resolved through
+     ``documentId`` → docType via the per-packet index.
   3. **Field match.** The Issue's ``field`` discriminator (set by P4 LLM
      validators) equals the planted ``field``. This prevents a "right
      validator, wrong finding" — e.g. ``identity_coherence`` noticing a
@@ -28,14 +26,27 @@ validator was supposed to stay silent on that shape).
 ``expiry_mismatch`` is NOT in :data:`EXPECTED_VALIDATOR` — see the P4
 doc's "Conflict kinds in P4" decision; that kind lands in a Phase 4.5
 follow-on.
+
+**Cross-language separator contract.** :data:`FIELD_SEP` pins the byte
+between docType and field name in the ``field`` discriminator. The C#
+side stamps it via ``Domain.Scoring.IssueFieldSpec.FieldSeparator``; the
+two MUST agree or recall silently goes to zero on otherwise-correct runs.
+``test_field_separator_contract_matches_csharp`` reads the C# constant
+out of the source file and asserts equality so a drift in either end
+breaks the build.
 """
 
 from __future__ import annotations
 
-from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
+
+# Separator between docType and field name in the ``field`` discriminator
+# (e.g. ``"malpractice.fullName"``). Must equal
+# ``Domain.Scoring.IssueFieldSpec.FieldSeparator`` on the C# side; the
+# contract test imports both and asserts equality.
+FIELD_SEP: str = "."
 
 # Validator name → planted-kind map. Mirrors the C# IValidator.Name
 # constants (see apps/api/Application/Scoring/Validators/*.cs).
@@ -54,10 +65,15 @@ class PacketResult:
     packet_id: str
     # Each dict carries at minimum: kind, field, sources (list[str]),
     # expected_to_flag (bool). Optional shape (str, name_variant only).
+    # NOTE: the outer tuple is frozen but the inner dicts are not — the
+    # metrics pipeline reads them via .get(...) and never mutates. If a
+    # future pass needs to tag or annotate planted entries, copy rather
+    # than mutate in place to preserve the "looks immutable" contract.
     planted_conflicts: tuple[dict[str, Any], ...]
     # Each dict carries at minimum: validator (str), field (str),
     # citations (list[{documentId?, sourceValidator}]). The doc-id-to-
-    # docType resolution is handled via doc_type_by_doc_id below.
+    # docType resolution is handled via doc_type_by_doc_id below. Same
+    # tuple-of-mutable-dicts caveat as planted_conflicts above.
     emitted_issues: tuple[dict[str, Any], ...]
     # documentId → docType label (e.g. "license"). The runner builds this
     # from the document upload response or the score-detail payload.
@@ -96,9 +112,10 @@ def _citation_docs(
 ) -> set[str]:
     """Resolve the set of docType labels a list of citations covers.
 
-    Tries documentId → docType first; falls back to a "<docType>." prefix
-    on sourceValidator if the validator echoes it (P5+ possibility — none
-    do today). Unresolved citations are silently dropped from the set.
+    Resolution is ``documentId`` → docType via the per-packet index.
+    Unresolved citations are silently dropped from the set (the
+    documented degradation case — see :class:`PacketResult`'s
+    ``doc_type_by_doc_id`` docstring).
     """
     out: set[str] = set()
     for c in citations or ():

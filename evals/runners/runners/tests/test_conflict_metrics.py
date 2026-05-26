@@ -14,9 +14,14 @@ Pins:
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 from runners.conflict_metrics import (
     EXPECTED_VALIDATOR,
+    FIELD_SEP,
     PacketResult,
+    baseline_payload,
     measure,
 )
 
@@ -247,3 +252,171 @@ def test_expected_validator_map_locks_kinds_for_p4():
     assert set(EXPECTED_VALIDATOR.keys()) == {
         "name_variant", "taxonomy_specialty_mismatch",
     }
+
+
+# === Gap coverage added in P4 review fixes ================================
+
+
+def test_measure_on_empty_packet_list_returns_zeroed_counts():
+    # Public contract: callers can fold ``measure([])`` without a
+    # zero-division surprise. Every kind appears with zero observations.
+    counts = measure([])
+    assert set(counts.keys()) == set(EXPECTED_VALIDATOR.keys())
+    for c in counts.values():
+        assert c.planted == 0
+        assert c.caught == 0
+        assert c.fabricated == 0
+        assert c.recall is None       # no planted to divide by
+        assert c.precision is None    # no flagged to divide by
+
+
+def test_all_fn_packet_no_emissions_counts_as_planted_uncaught():
+    # Planted-but-missed: the recall denominator climbs, caught stays zero.
+    idx = _doc_index()
+    packet = PacketResult(
+        packet_id="all-fn",
+        planted_conflicts=(_planted(
+            "name_variant", "malpractice.fullName", ["license", "malpractice"]),),
+        emitted_issues=(),
+        doc_type_by_doc_id=idx,
+    )
+
+    counts = measure([packet])
+
+    assert counts["name_variant"].planted == 1
+    assert counts["name_variant"].caught == 0
+    assert counts["name_variant"].fabricated == 0
+    assert counts["name_variant"].recall == 0.0
+
+
+def test_multi_packet_rollup_folds_independently():
+    # One packet catches, one fabricates, one is clean — the rollup is
+    # the per-kind sum, not a per-packet average.
+    idx = _doc_index()
+    caught_pkt = PacketResult(
+        packet_id="caught",
+        planted_conflicts=(_planted(
+            "name_variant", "malpractice.fullName", ["license", "malpractice"]),),
+        emitted_issues=(_issue("identity_coherence", "malpractice.fullName",
+                               ["license", "malpractice"], idx),),
+        doc_type_by_doc_id=idx,
+    )
+    fab_pkt = PacketResult(
+        packet_id="fab",
+        planted_conflicts=(),
+        emitted_issues=(_issue("identity_coherence", "malpractice.fullName",
+                               ["license", "malpractice"], idx),),
+        doc_type_by_doc_id=idx,
+    )
+    clean_pkt = PacketResult(
+        packet_id="clean",
+        planted_conflicts=(),
+        emitted_issues=(),
+        doc_type_by_doc_id=idx,
+    )
+
+    counts = measure([caught_pkt, fab_pkt, clean_pkt])
+
+    assert counts["name_variant"].planted == 1
+    assert counts["name_variant"].caught == 1
+    assert counts["name_variant"].fabricated == 1
+    assert counts["name_variant"].precision == 0.5
+    assert counts["name_variant"].recall == 1.0
+
+
+def test_unknown_documentid_degrades_to_predicate2_miss():
+    # The :class:`PacketResult` docstring promises that unresolved
+    # documentIds drop out of the citation-docs set, so the source-overlap
+    # predicate misses. Pins that degradation path.
+    packet = PacketResult(
+        packet_id="orphan",
+        planted_conflicts=(_planted(
+            "name_variant", "malpractice.fullName", ["license", "malpractice"]),),
+        emitted_issues=({
+            "validator": "identity_coherence",
+            "field": "malpractice.fullName",
+            "citations": [{"documentId": "doc-orphan-never-seen"}],
+        },),
+        doc_type_by_doc_id={},  # empty index — every citation unresolvable
+    )
+
+    counts = measure([packet])
+
+    assert counts["name_variant"].planted == 1
+    assert counts["name_variant"].caught == 0
+
+
+def test_unknown_kind_is_ignored():
+    # ``expiry_mismatch`` lands in P4.5; the runner today must ignore it
+    # entirely (no row added to recall, no fabrication counted). Pin the
+    # docstring claim.
+    idx = _doc_index()
+    packet = PacketResult(
+        packet_id="future-kind",
+        planted_conflicts=({
+            "kind": "expiry_mismatch",
+            "field": "license.expiryDate",
+            "sources": ["license"],
+            "expected_to_flag": True,
+        },),
+        emitted_issues=(),
+        doc_type_by_doc_id=idx,
+    )
+
+    counts = measure([packet])
+
+    # Kind isn't in the map, so it's not in counts at all.
+    assert "expiry_mismatch" not in counts
+    # Other kinds untouched.
+    assert counts["name_variant"].planted == 0
+    assert counts["taxonomy_specialty_mismatch"].planted == 0
+
+
+def test_baseline_payload_shape_is_stable():
+    # ``baseline.json`` consumers depend on this exact shape. Pin it.
+    counts = measure([])
+    payload = baseline_payload(counts)
+
+    assert set(payload.keys()) == set(EXPECTED_VALIDATOR.keys())
+    for kind in EXPECTED_VALIDATOR:
+        row = payload[kind]
+        assert set(row.keys()) == {
+            "planted", "caught", "fabricated", "precision", "recall",
+        }
+
+
+def test_field_separator_contract_matches_csharp():
+    # Cross-language pin. The C# side declares the separator at
+    # Domain/Scoring/IssueCodes.cs as
+    # ``public const char FieldSeparator = '.';``. If either end drifts,
+    # the conflict-metrics runner silently records every catch as a miss
+    # on otherwise-correct runs. Pin the contract by string-matching the
+    # constant in the source file — adding a build-time codegen would be
+    # heavier than the value here justifies.
+    csharp_path = (
+        Path(__file__).resolve().parents[4]
+        / "apps" / "api" / "Domain" / "Scoring" / "IssueCodes.cs"
+    )
+    src = csharp_path.read_text(encoding="utf-8")
+
+    match = re.search(
+        r"public\s+const\s+char\s+FieldSeparator\s*=\s*'(?P<sep>.)'\s*;",
+        src,
+    )
+    assert match is not None, (
+        f"FieldSeparator constant not found in {csharp_path}; "
+        "either rename here or update the regex."
+    )
+    assert match.group("sep") == FIELD_SEP, (
+        f"C# IssueFieldSpec.FieldSeparator='{match.group('sep')}' "
+        f"vs Python FIELD_SEP='{FIELD_SEP}' — language drift would silently "
+        "break conflict-metrics catches."
+    )
+
+
+def test_field_format_round_trip():
+    # Building a planted ``field`` with the shared separator must match
+    # the discriminator a C#-stamped Issue would carry. Pins the
+    # composition contract end-to-end.
+    planted_field = f"malpractice{FIELD_SEP}fullName"
+    assert planted_field == "malpractice.fullName"

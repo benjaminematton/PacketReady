@@ -25,6 +25,12 @@ from typing import Any, Literal
 from faker import Faker
 
 from .conflict_planters import plant_name_variant, plant_taxonomy_specialty_mismatch
+from .identity import (
+    GOLDEN_SCHEMA_VERSION,
+    IdentityFields,
+    npi_check_digit,
+    npi_from_base,
+)
 from .name_variants import CleanNamePattern, ConflictShape, names_for_clean_pattern
 from .docs.board_cert_pdf import BoardCertFields, render as render_board_cert
 from .docs.dea_pdf import DeaFields, render as render_dea
@@ -35,26 +41,20 @@ from .scan_artifacts import rasterize_and_degrade
 from .schema import BOARD_CERT, DEA, DOC_FILENAMES, LICENSE, MALPRACTICE
 from .specialty_catalog import board_for_specialty
 
-
-@dataclass(frozen=True)
-class IdentityFields:
-    """
-    Provider identity (P4 task 1, slice 2). These are NOT extracted from any
-    P4 document type — they live on the Provider row at create time and get
-    overlaid by the aggregator at score time. The CV extractor (not shipped)
-    will close this seam in a later phase; until then, the eval orchestrator
-    has to pass them explicitly to ``POST /api/providers``.
-
-    All four fields are required when emitted to golden.json. The
-    orchestrator's wire validator (``ProviderIdentityValidator`` on the C#
-    side) re-validates: NPI is CMS-Luhn-valid (10 digits, "80840" prefix +
-    mod-10), state matches ``^[A-Z]{2}$``, DOB is in
-    [1900-01-02, today], fullName non-empty.
-    """
-    full_name: str
-    npi: str                     # 10 digits, CMS-Luhn-valid
-    date_of_birth: str           # YYYY-MM-DD
-    credentialing_state: str     # 2 uppercase letters
+# Re-export the identity surface so existing callers (and the test suite)
+# keep working. The implementation lives in :mod:`packetready_eval.identity`
+# so the runner-side preflight can import it without dragging in reportlab.
+__all__ = [
+    "GOLDEN_SCHEMA_VERSION",
+    "IdentityFields",
+    "PacketSpec",
+    "all_specs",
+    "build_new_packets",
+    "generate_all",
+    "golden_for",
+    "npi_check_digit",
+    "npi_from_base",
+]
 
 
 @dataclass(frozen=True)
@@ -81,36 +81,6 @@ class PacketSpec:
     # canonical baselines, not pattern coverage). Persisted into golden.json
     # under metadata.cleanPattern so the C# CLI can break FPs down per-pattern.
     clean_pattern: CleanNamePattern | None = None
-
-
-# --- NPI Luhn helpers ---------------------------------------------------------
-
-
-def npi_check_digit(base9: str) -> str:
-    """Compute the CMS NPI check digit (10th position) for a 9-digit base.
-
-    The 9-digit base is prefixed with the ISO 7812 issuer identifier "80840";
-    standard Luhn-mod-10 over the 14-digit string yields the check digit.
-    The 10-digit NPI = base9 + check_digit then satisfies the full Luhn
-    validator on "80840"+npi.
-    """
-    if len(base9) != 9 or not base9.isdigit():
-        raise ValueError(f"npi_check_digit: base9 must be 9 digits, got {base9!r}")
-    prefixed = "80840" + base9
-    total = 0
-    for i, c in enumerate(reversed(prefixed)):
-        d = int(c)
-        if i % 2 == 0:
-            d *= 2
-            if d > 9:
-                d -= 9
-        total += d
-    return str((10 - total % 10) % 10)
-
-
-def npi_from_base(base9: str) -> str:
-    """Build a CMS-Luhn-valid 10-digit NPI from a 9-digit base."""
-    return base9 + npi_check_digit(base9)
 
 
 # --- Anderson canonical fields, shared by packets 001 and 005 ----------------
@@ -418,31 +388,26 @@ def _identity_json(f: IdentityFields) -> dict[str, str]:
     }
 
 
-# Bumped to 2 by P4 slice 2 — adds top-level `identity` block. Readers
-# (the orchestrator's score_metrics.load_planted_conflicts and friends)
-# can branch on this if they need to support older goldens; today the
-# regen happens in lockstep with the bump, so v1 goldens are not in
-# the dataset.
-GOLDEN_SCHEMA_VERSION: int = 2
-
-
 def golden_for(spec: PacketSpec) -> dict[str, Any]:
     """Build the golden.json dict for a single packet spec.
 
     Exposed (not underscored) because the schema-invariant test loads it
     directly without invoking the PDF renderers.
     """
+    # Validate up front: a spec without identity_fields would force a
+    # placeholder NPI/DOB/state and contaminate downstream score metrics.
+    # Slice 2 made the identity block part of the wire contract; missing
+    # it is operator error, not something to fall back on.
+    if spec.identity_fields is None:
+        raise ValueError(
+            f"PacketSpec {spec.id!r} is missing identity_fields — slice 2 "
+            f"made this required so the orchestrator can pass it to "
+            f"POST /api/providers."
+        )
+
     metadata: dict[str, Any] = {}
     if spec.clean_pattern is not None:
         metadata["cleanPattern"] = spec.clean_pattern.name
-
-    if spec.identity_fields is None:
-        raise ValueError(
-            f"PacketSpec {spec.id!r} is missing identity_fields. Slice 2 made "
-            f"this required so the orchestrator can pass it to POST /api/providers; "
-            f"a spec without identity_fields would force a placeholder NPI/DOB/state "
-            f"and contaminate downstream score metrics."
-        )
 
     out: dict[str, Any] = {
         "goldenSchemaVersion": GOLDEN_SCHEMA_VERSION,
@@ -567,9 +532,21 @@ _BUCKET_PLAN: tuple[_Bucket, ...] = (
 
 _TOTAL_NEW_PACKETS = sum(b.count for b in _BUCKET_PLAN)
 if _TOTAL_NEW_PACKETS != 45:
-    raise AssertionError(
+    # Domain-specific exception rather than AssertionError so the failure
+    # survives `python -O` (which strips `assert` statements) and reads as
+    # an invariant violation rather than a test-style assertion.
+    raise RuntimeError(
         f"_BUCKET_PLAN must sum to 45 (got {_TOTAL_NEW_PACKETS}) — see docs/p4-dod.md"
     )
+
+
+# Plausible-age bounds for a credentialing provider against
+# `_NEW_PACKET_ANCHOR`. Lower bound assumes post-residency at minimum;
+# upper bound trails active practice. Used as days-offsets via × 365 in
+# `_spec_from_profile`; 365 is close enough for synthetic DOBs (no
+# attempt at leap-year accuracy).
+_PROVIDER_MIN_AGE_YEARS: int = 30
+_PROVIDER_MAX_AGE_YEARS: int = 70
 
 
 # Carrier name pool for malpractice — varied enough that the extractor sees
@@ -601,10 +578,18 @@ def _draw_person(faker: Faker) -> tuple[str, str]:
 def _carrier_policy_prefix(carrier: str) -> str:
     """Three-letter uppercased prefix of the carrier's first word.
 
-    Falls back to `"MED"` if the carrier name is unusually short — keeps the
-    policy number well-formed without crashing for an exotic future entry."""
+    All entries in `_CARRIERS` are ≥3 letters today; the loud raise here
+    is the trip-wire if anyone ever adds a shorter one. Better to fail
+    the build than emit a malformed policy number that the extractor
+    then has to second-guess.
+    """
     head = carrier.split()[0] if carrier.split() else ""
-    return (head[:3] or "MED").upper()
+    if len(head) < 3:
+        raise ValueError(
+            f"_carrier_policy_prefix: carrier {carrier!r} has no ≥3-letter "
+            f"first word; add a longer alias to _CARRIERS."
+        )
+    return head[:3].upper()
 
 
 def _spec_from_profile(idx: int, profile: SampledProfile, faker: Faker, rng: Random,
@@ -662,7 +647,9 @@ def _spec_from_profile(idx: int, profile: SampledProfile, faker: Faker, rng: Ran
     # minimum and rarely working past 70. Hand-rolled via `rng` rather
     # than `faker.date_of_birth` because faker draws share state with
     # name draws and would shift packet ids.
-    dob_age_days = rng.randint(30 * 365, 70 * 365)
+    dob_age_days = rng.randint(
+        _PROVIDER_MIN_AGE_YEARS * 365, _PROVIDER_MAX_AGE_YEARS * 365,
+    )
     dob = (_NEW_PACKET_ANCHOR - timedelta(days=dob_age_days)).isoformat()
 
     return PacketSpec(

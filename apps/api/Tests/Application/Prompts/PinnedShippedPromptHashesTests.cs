@@ -51,10 +51,11 @@ public class PinnedShippedPromptHashesTests
     // prompts. Iter 1: surname_typo_overreact rule strengthened.
     private const string IdentityCoherenceHash =
         "48322ce74b3586a737a2b2f56e516154103b557f4c18edb647d1e703f92943a4";
-    // P4 task 10 — NpiTaxonomyMatch v1. Tuned alongside task 9's
-    // IdentityCoherence; same FP < 5% gate on the 10-packet subset.
+    // P4 review fixes — bumped to v2 with explicit prompt-injection
+    // hardening for the OCR-sourced `statedSpecialty` field. v1 hash is
+    // retired; the validator now loads v2 via PromptKeys.NpiTaxonomyMatch.
     private const string NpiTaxonomyMatchHash =
-        "8efaa96de84674dd455031270f50bd3246aed6b5a4a026f5756ce301c4d352a9";
+        "b29888df79d0c137f1873531fdcb8743b771839a5eb3362d5125d02feec40dc4";
     // P5 C4 — intake agent system prompt. The agent prompt isn't
     // referenced by any document_extractions row (the agent doesn't
     // produce extractions), so per-iteration churn here is safe — the

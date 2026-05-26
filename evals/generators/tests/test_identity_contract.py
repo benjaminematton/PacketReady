@@ -115,10 +115,11 @@ def test_p4_programmatic_npis_match_nppes_source():
     # Hand-crafted packets use npi_from_base — covered above. This
     # exercise hits the surface where a future refactor might
     # accidentally normalize or zero-pad the value.
-    specs = all_specs()
-    programmatic = [s for s in specs if s.id.startswith("packet-006")
-                    or s.id.startswith("packet-007")
-                    or s.id.startswith("packet-008")]
+    #
+    # `clean_pattern is not None` discriminates programmatic specs from the
+    # hand-crafted P2 set; checking by packet-id prefix would silently
+    # degrade to zero coverage if the bucket plan re-orders.
+    programmatic = [s for s in all_specs() if s.clean_pattern is not None]
     assert programmatic, "expected at least one programmatic packet"
     for s in programmatic:
         identity = golden_for(s)["identity"]

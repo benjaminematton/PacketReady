@@ -48,7 +48,12 @@ public static class PromptKeys
 
     // Phase 4 — LLM validators.
     public const string IdentityCoherence = "IdentityCoherencePrompt.v1.md";
-    public const string NpiTaxonomyMatch = "NpiTaxonomyMatchPrompt.v1.md";
+    // Bumped to v2 (P4 review fixes) — adds explicit prompt-injection
+    // hardening for the OCR-sourced `statedSpecialty` field. v1 hashed
+    // a permissive prompt that didn't isolate the trust model; v2 names
+    // the field as untrusted and instructs the model to discard
+    // instruction-like content inside it.
+    public const string NpiTaxonomyMatch = "NpiTaxonomyMatchPrompt.v2.md";
 
     // Phase 5 — intake agent system prompt.
     public const string IntakeAgent = "IntakeAgentPrompt.v1.md";

@@ -102,10 +102,15 @@ public class ProviderProfileAggregatorTests
             .Where(i => i.Validator == "DocumentStore" && i.Severity == Severity.Critical)
             .ToList();
         // Three missing doc types → three Missing-Document Critical Issues.
+        // The factory uses DocType.ToWireString() (camelCase, lowercase-leading)
+        // for the message body; the typed MissingDocType tag is the
+        // canonical discriminator and is what the handler reads, so we
+        // assert against it directly rather than substring-matching the
+        // human-readable message.
         Assert.Equal(3, missingDocIssues.Count);
-        Assert.Contains(missingDocIssues, i => i.Message.Contains("Dea"));
-        Assert.Contains(missingDocIssues, i => i.Message.Contains("BoardCert"));
-        Assert.Contains(missingDocIssues, i => i.Message.Contains("Malpractice"));
+        Assert.Contains(missingDocIssues, i => i.MissingDocType == DocType.Dea);
+        Assert.Contains(missingDocIssues, i => i.MissingDocType == DocType.BoardCert);
+        Assert.Contains(missingDocIssues, i => i.MissingDocType == DocType.Malpractice);
     }
 
     [Fact]

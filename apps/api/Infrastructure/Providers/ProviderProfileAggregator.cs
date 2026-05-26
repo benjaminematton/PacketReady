@@ -215,58 +215,98 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
     }
 
     // === Issue factories ================================================
+    //
+    // Every aggregator-emitted Issue carries IssueCodes.* on Issue.Code and
+    // (when doc-typed) DocType on Issue.MissingDocType, so the score-compute
+    // handler can filter / suppress by tag rather than re-parsing the
+    // Message string. The Validator label stays "DocumentStore" — used by
+    // the dashboard for source attribution.
 
-    private static Issue MissingDocumentIssue(DocType docType) => new(
-        Validator: "DocumentStore",
-        Severity: Severity.Critical,
-        Message: $"No {docType} document on file for this provider.",
-        Remediation: $"Upload a {docType} PDF via POST /api/providers/{{id}}/documents.",
-        Citations: Array.Empty<Citation>());
+    private const string AggregatorValidatorName = "DocumentStore";
 
-    private static Issue ExtractionFailedIssue(Document doc, string error) => new(
-        Validator: "DocumentStore",
-        Severity: Severity.Critical,
-        Message: $"Latest extraction for {doc.DocType} document failed: {error}",
-        Remediation: "Retry via POST /api/documents/{id}/reextract; if persistent, re-upload the PDF.",
-        Citations: new[]
+    internal static Issue MissingDocumentIssue(DocType docType)
+    {
+        var wire = docType.ToWireString();
+        return new Issue(
+            Validator: AggregatorValidatorName,
+            Severity: Severity.Critical,
+            Message: $"No {wire} document on file for this provider.",
+            Remediation: $"Upload a {wire} PDF via POST /api/providers/{{id}}/documents.",
+            Citations: Array.Empty<Citation>())
         {
-            new Citation(
-                SourceValidator: "DocumentStore",
-                ExtractedValue: error,
-                DocumentId: doc.Id,
-                Page: 1,
-                Bbox: null),
-        });
+            Code = IssueCodes.MissingDocument,
+            MissingDocType = docType,
+        };
+    }
 
-    private static Issue PartialExtractionIssue(Document doc) => new(
-        Validator: "DocumentStore",
-        Severity: Severity.Critical,
-        Message: $"Extraction for {doc.DocType} document succeeded but required fields are missing.",
-        Remediation: "Re-upload a clearer scan, or correct the document manually if fields are illegible.",
-        Citations: new[]
+    private static Issue ExtractionFailedIssue(Document doc, string error)
+    {
+        var wire = doc.DocType?.ToWireString() ?? "unknown";
+        return new Issue(
+            Validator: AggregatorValidatorName,
+            Severity: Severity.Critical,
+            Message: $"Latest extraction for {wire} document failed: {error}",
+            Remediation: "Retry via POST /api/documents/{id}/reextract; if persistent, re-upload the PDF.",
+            Citations: new[]
+            {
+                new Citation(
+                    SourceValidator: AggregatorValidatorName,
+                    ExtractedValue: error,
+                    DocumentId: doc.Id,
+                    Page: 1,
+                    Bbox: null),
+            })
         {
-            new Citation(
-                SourceValidator: "DocumentStore",
-                ExtractedValue: "missing required fields",
-                DocumentId: doc.Id,
-                Page: 1,
-                Bbox: null),
-        });
+            Code = IssueCodes.ExtractionFailed,
+            MissingDocType = doc.DocType,
+        };
+    }
 
-    private static Issue LowConfidenceClassificationIssue(Document doc, double conf) => new(
-        Validator: "DocumentStore",
-        Severity: Severity.Minor,
-        Message: $"Classifier reported low confidence ({conf:F2}) for this {doc.DocType} document.",
-        Remediation: "Re-upload a higher-quality scan, or manually confirm the doc type.",
-        Citations: new[]
+    private static Issue PartialExtractionIssue(Document doc)
+    {
+        var wire = doc.DocType?.ToWireString() ?? "unknown";
+        return new Issue(
+            Validator: AggregatorValidatorName,
+            Severity: Severity.Critical,
+            Message: $"Extraction for {wire} document succeeded but required fields are missing.",
+            Remediation: "Re-upload a clearer scan, or correct the document manually if fields are illegible.",
+            Citations: new[]
+            {
+                new Citation(
+                    SourceValidator: AggregatorValidatorName,
+                    ExtractedValue: "missing required fields",
+                    DocumentId: doc.Id,
+                    Page: 1,
+                    Bbox: null),
+            })
         {
-            new Citation(
-                SourceValidator: "DocumentStore",
-                ExtractedValue: $"docTypeConfidence={conf:F2}",
-                DocumentId: doc.Id,
-                Page: 1,
-                Bbox: null),
-        });
+            Code = IssueCodes.PartialExtraction,
+            MissingDocType = doc.DocType,
+        };
+    }
+
+    private static Issue LowConfidenceClassificationIssue(Document doc, double conf)
+    {
+        var wire = doc.DocType?.ToWireString() ?? "unknown";
+        return new Issue(
+            Validator: AggregatorValidatorName,
+            Severity: Severity.Minor,
+            Message: $"Classifier reported low confidence ({conf:F2}) for this {wire} document.",
+            Remediation: "Re-upload a higher-quality scan, or manually confirm the doc type.",
+            Citations: new[]
+            {
+                new Citation(
+                    SourceValidator: AggregatorValidatorName,
+                    ExtractedValue: $"docTypeConfidence={conf:F2}",
+                    DocumentId: doc.Id,
+                    Page: 1,
+                    Bbox: null),
+            })
+        {
+            Code = IssueCodes.LowConfidenceClassification,
+            MissingDocType = doc.DocType,
+        };
+    }
 
     // === JSONB → typed-record parsers ==================================
 
@@ -467,11 +507,14 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
             if (distance >= FullNameLevenshteinFloor)
             {
                 issues.Add(new Issue(
-                    Validator: "DocumentStore",
+                    Validator: AggregatorValidatorName,
                     Severity: Severity.Minor,
-                    Message: $"fullName disagrees across docs: {winner.Source}='{winner.FullName}' vs {other.Source}='{other.FullName}' (distance {distance}).",
+                    Message: $"fullName disagrees across docs: {winner.Source.ToWireString()}='{winner.FullName}' vs {other.Source.ToWireString()}='{other.FullName}' (distance {distance}).",
                     Remediation: "Confirm the provider's legal name; re-upload the off-document with corrected text if needed.",
-                    Citations: Array.Empty<Citation>()));
+                    Citations: Array.Empty<Citation>())
+                {
+                    Code = IssueCodes.CrossDocNameMismatch,
+                });
             }
         }
 

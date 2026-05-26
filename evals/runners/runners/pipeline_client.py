@@ -155,13 +155,20 @@ class PipelineClient(AbstractContextManager["PipelineClient"]):
         and persists; we only need the document id back to build the
         documentId → docType index. doc_type rides along for the
         caller's index — the server doesn't take it as a body param
-        on this endpoint (it classifies the upload itself)."""
-        with pdf_path.open("rb") as f:
-            resp = self._request_with_retry(
-                "POST",
-                f"/api/providers/{provider_id}/documents",
-                files={"file": (pdf_path.name, f, "application/pdf")},
-            )
+        on this endpoint (it classifies the upload itself).
+
+        PDF bytes are read into memory once so a 429 retry sees fresh
+        bytes — a streamed file handle would be at EOF on the second
+        attempt and silently upload an empty body. Eval PDFs are small
+        (≤ a few MB) so the memory cost is negligible against the
+        correctness win under a burst.
+        """
+        pdf_bytes = pdf_path.read_bytes()
+        resp = self._request_with_retry(
+            "POST",
+            f"/api/providers/{provider_id}/documents",
+            files={"file": (pdf_path.name, pdf_bytes, "application/pdf")},
+        )
         data = self._expect_json_object(
             resp, f"/api/providers/{provider_id}/documents")
         document_id = data.get("documentId")

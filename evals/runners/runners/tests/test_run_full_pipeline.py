@@ -10,6 +10,7 @@ for every instance.
 from __future__ import annotations
 
 import json
+import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -17,7 +18,6 @@ import httpx
 import pytest
 
 from runners import run_full_pipeline
-
 
 # --- shared fixtures ------------------------------------------------------
 
@@ -51,17 +51,25 @@ def _write_golden(packet_dir: Path, *, packet_id: str, planted=()) -> None:
 def _make_scenario_handler(score_response: dict, *, doc_id_prefix: str = "doc"):
     """Stock 200-response handler covering all 3 endpoints. doc_id_prefix
     lets a test inspect documentId → docType resolution without
-    threading IDs through manually."""
+    threading IDs through manually.
+
+    Lock-guarded counter so the concurrency>1 test doesn't race on
+    ``counter["n"] += 1`` (Python's GIL doesn't make read-modify-write
+    atomic across thread interleavings).
+    """
     counter = {"n": 0}
+    lock = threading.Lock()
 
     def handler(req: httpx.Request) -> httpx.Response:
         path = req.url.path
         if path == "/api/providers" and req.method == "POST":
             return httpx.Response(201, json={"id": "prov-001"})
         if path.endswith("/documents") and req.method == "POST":
-            counter["n"] += 1
+            with lock:
+                counter["n"] += 1
+                n = counter["n"]
             return httpx.Response(201, json={
-                "documentId": f"{doc_id_prefix}-{counter['n']}",
+                "documentId": f"{doc_id_prefix}-{n}",
                 "providerId": "prov-001",
             })
         if path.endswith("/scores") and req.method == "POST":
@@ -137,7 +145,7 @@ def test_run_with_labels_emits_agreement(tmp_path, monkeypatch):
 
     labels_path = tmp_path / "labels.json"
     labels_path.write_text(json.dumps({
-        "_biasNote": "test",
+        "_biasNote": "labeled blind to system output",
         "labels": {"packet-001": "Green", "packet-002": "Green"},
     }))
 
@@ -146,9 +154,52 @@ def test_run_with_labels_emits_agreement(tmp_path, monkeypatch):
 
     assert "agreement" in payload
     assert payload["agreement"]["n"] == 2
-    # Perfect tier agreement on both packets → κ=1.0, raw=1.0.
+    # All-Green/all-Green hits the degenerate weighted_expected==0 branch
+    # → κ short-circuits to 1.0. The real kappa math is exercised by
+    # test_run_agreement_kappa_on_mismatch below.
     assert payload["agreement"]["weightedKappa"] == 1.0
     assert payload["agreement"]["rawAgreement"] == 1.0
+    # bias_note from human_tiers.json surfaces in the payload so the
+    # regression-gate consumer doesn't have to re-read the labels file.
+    assert payload["agreement"]["biasNote"] == "labeled blind to system output"
+
+
+def test_run_agreement_kappa_on_mismatch(tmp_path, monkeypatch):
+    """Exercises the actual quadratic-weighted kappa math (not the
+    degenerate single-cell short-circuit) by forcing system/human
+    disagreement on one of two packets.
+
+    System emits Green for both packets; human labels them Yellow and
+    Green. Confusion matrix has off-diagonal mass on (Yellow, Green),
+    so weighted_expected > 0 and the kappa formula runs end-to-end.
+    Raw agreement is 1/2 = 0.5; κ on a single off-by-one with this
+    margin is negative (system collapses to a single tier).
+    """
+    dataset = tmp_path / "dataset"
+    _write_golden(dataset / "packet-001", packet_id="packet-001")
+    _write_golden(dataset / "packet-002", packet_id="packet-002")
+
+    score_response = {
+        "id": "s", "providerId": "p", "score": 90, "tier": "Green",
+        "issues": [],
+    }
+    _patch_pipeline_client(monkeypatch, _make_scenario_handler(score_response))
+
+    labels_path = tmp_path / "labels.json"
+    labels_path.write_text(json.dumps({
+        "labels": {"packet-001": "Yellow", "packet-002": "Green"},
+    }))
+
+    payload = run_full_pipeline.run(
+        dataset, concurrency=1, labels_path=labels_path)
+
+    a = payload["agreement"]
+    assert a["n"] == 2
+    assert a["rawAgreement"] == 0.5
+    # Real kappa computation ran (not the short-circuit) — the value is
+    # finite and not the perfect-agreement default.
+    assert a["weightedKappa"] != 1.0
+    assert isinstance(a["weightedKappa"], float)
 
 
 def test_run_mtime_gate_blocks_labels_newer_than_baseline(tmp_path, monkeypatch):
@@ -273,16 +324,21 @@ def test_payload_carries_expected_top_level_keys(tmp_path, monkeypatch):
     payload = run_full_pipeline.run(dataset, concurrency=1)
 
     expected_keys = {
-        "datasetDir", "baseUrl", "ranAt",
+        "datasetDir", "baseUrl",
+        "startedAt", "finishedAt", "durationSeconds",
         "packetCount", "successCount", "errorCount", "errors",
         "conflicts", "scoreResults",
     }
     assert expected_keys.issubset(payload.keys())
-    # ranAt is RFC3339 / ISO 8601 with seconds precision.
-    datetime.fromisoformat(payload["ranAt"])
+    # Timestamps are RFC 3339 / ISO 8601 with seconds precision and
+    # finishedAt is never earlier than startedAt.
+    started = datetime.fromisoformat(payload["startedAt"])
+    finished = datetime.fromisoformat(payload["finishedAt"])
+    assert finished >= started
+    assert payload["durationSeconds"] >= 0
 
 
-def test_run_uses_payer_id_default_when_golden_omits_it(tmp_path, monkeypatch):
+def test_run_uses_payer_id_arg_when_golden_omits_it(tmp_path, monkeypatch):
     dataset = tmp_path / "dataset"
     _write_golden(dataset / "packet-001", packet_id="packet-001")
 

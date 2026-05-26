@@ -112,10 +112,14 @@ public sealed class NuccTaxonomyLookup : INuccTaxonomyLookup
 
     /// <summary>
     /// Minimal RFC-4180 CSV row parser: handles quoted fields, embedded
-    /// commas inside quotes, and escaped quotes (<c>""</c>). Does not
-    /// handle multi-line quoted values, which the NUCC snapshot doesn't
-    /// use. Throws nothing — malformed rows surface downstream as missing
-    /// columns, where the loader's count check fails loud.
+    /// commas inside quotes, and escaped quotes (<c>""</c>). Does NOT
+    /// handle multi-line quoted values — fails loud rather than silently
+    /// truncating. The shipped NUCC 25.1 snapshot has zero rows with
+    /// embedded newlines (verified at load time by the loader's column-
+    /// count check), but a future snapshot that adds one would otherwise
+    /// be parsed as a half-row plus a malformed continuation, with no
+    /// signal to the operator. The throw matches the fail-loud discipline
+    /// of the rest of the file.
     /// </summary>
     private static string[] ParseCsvRow(string row)
     {
@@ -163,6 +167,10 @@ public sealed class NuccTaxonomyLookup : INuccTaxonomyLookup
                 }
             }
         }
+        if (inQuotes)
+            throw new InvalidOperationException(
+                $"NUCC CSV row ends with an unclosed quote; multi-line quoted fields are not supported. " +
+                $"Row: '{row}'.");
         fields.Add(sb.ToString());
         return fields.ToArray();
     }

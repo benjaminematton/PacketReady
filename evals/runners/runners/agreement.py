@@ -39,7 +39,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, TypedDict
 
 TierLabel = Literal["Red", "Yellow", "Green"]
 
@@ -47,8 +47,25 @@ TierLabel = Literal["Red", "Yellow", "Green"]
 # distance between Red and Green is 2, which sets the kappa weight
 # denominator.
 TIER_TO_ORD: Mapping[str, int] = {"Red": 0, "Yellow": 1, "Green": 2}
-ORD_TO_TIER: Mapping[int, str] = {v: k for k, v in TIER_TO_ORD.items()}
 _TIER_COUNT = len(TIER_TO_ORD)
+
+# Minimum number of aligned (system, human) packets required to compute κ.
+# Cohen's κ is undefined on a singleton; the eval runner skips agreement
+# rather than publish a degenerate value. Shared with score_metrics so the
+# floor lives in one place if the policy ever moves.
+QUORUM_FLOOR: int = 2
+
+
+def has_quorum(
+    score_results: Mapping[str, "ScoreResult"],
+    labels: Mapping[str, str],
+) -> bool:
+    """True iff the intersection of packet ids meets :data:`QUORUM_FLOOR`.
+
+    Pre-check for callers that want to skip the agreement pipeline cleanly
+    instead of catching :exc:`ValueError` from :func:`measure`.
+    """
+    return len(set(score_results) & set(labels)) >= QUORUM_FLOOR
 
 
 @dataclass(frozen=True)
@@ -56,10 +73,11 @@ class ScoreResult:
     """Per-packet system output used by the agreement runner. The runner
     builds these from POST /api/providers/{id}/scores responses; this
     module accepts them as plain data so unit tests can stub them
-    without a network call."""
+    without a network call. Score range is enforced upstream by the
+    scoring endpoint."""
     packet_id: str
-    score: int                       # 0-100 integer score
-    tier: TierLabel                  # one of Red / Yellow / Green
+    score: int
+    tier: TierLabel
 
 
 @dataclass(frozen=True)
@@ -68,6 +86,15 @@ class AgreementMetrics:
     raw_agreement: float             # count(system == human) / n
     confusion_3x3: list[list[int]]   # rows = human tier, cols = system tier
     spearman_rho: float              # footnote only — continuous score vs ordinal human tier
+    n: int
+
+
+class AgreementPayload(TypedDict):
+    """Shape baseline.json carries under the ``agreement`` key."""
+    weightedKappa: float
+    rawAgreement: float
+    confusion3x3: list[list[int]]
+    spearmanRho: float
     n: int
 
 
@@ -96,10 +123,10 @@ def measure(
     """
     aligned_ids = sorted(set(score_results) & set(labels))
     n = len(aligned_ids)
-    if n < 2:
+    if n < QUORUM_FLOOR:
         raise ValueError(
-            f"agreement.measure requires at least 2 aligned packets; got {n} "
-            f"(score_results={len(score_results)}, labels={len(labels)})."
+            f"agreement.measure requires at least {QUORUM_FLOOR} aligned packets; "
+            f"got {n} (score_results={len(score_results)}, labels={len(labels)})."
         )
 
     human_ords: list[int] = []
@@ -124,7 +151,7 @@ def measure(
 
     confusion = _build_confusion(human_ords, system_ords)
     raw = _raw_agreement(human_ords, system_ords)
-    kappa = _quadratic_weighted_kappa(confusion)
+    kappa = _quadratic_weighted_kappa(confusion, n)
     rho = _spearman_rho(scores, human_ords)
 
     return AgreementMetrics(
@@ -136,7 +163,7 @@ def measure(
     )
 
 
-def baseline_payload(m: AgreementMetrics) -> dict:
+def baseline_payload(m: AgreementMetrics) -> AgreementPayload:
     """Serialize to the shape :file:`baseline.json` carries under the
     ``agreement`` key. Stable key ordering for diff-readability."""
     return {
@@ -154,7 +181,7 @@ def baseline_payload(m: AgreementMetrics) -> dict:
 def _build_confusion(human: list[int], system: list[int]) -> list[list[int]]:
     """3×3 count matrix. Rows are human tier (0..2), cols are system tier."""
     m = [[0, 0, 0] for _ in range(_TIER_COUNT)]
-    for h, s in zip(human, system):
+    for h, s in zip(human, system, strict=True):
         m[h][s] += 1
     return m
 
@@ -162,11 +189,11 @@ def _build_confusion(human: list[int], system: list[int]) -> list[list[int]]:
 def _raw_agreement(human: list[int], system: list[int]) -> float:
     """Identity match rate. No partial credit; reported next to κ as a
     sanity check (κ corrects for chance, raw doesn't)."""
-    matches = sum(1 for h, s in zip(human, system) if h == s)
+    matches = sum(1 for h, s in zip(human, system, strict=True) if h == s)
     return matches / len(human)
 
 
-def _quadratic_weighted_kappa(confusion: list[list[int]]) -> float:
+def _quadratic_weighted_kappa(confusion: list[list[int]], n: int) -> float:
     """Cohen's κ with quadratic weights on a fixed ordinal scale.
 
     Implementation per Cohen (1968):
@@ -176,23 +203,18 @@ def _quadratic_weighted_kappa(confusion: list[list[int]]) -> float:
         O    = confusion / n          (observed proportions)
         E    = (row_marginal * col_marginal) / n²  (expected under independence)
 
-    Degenerate cases:
-      - all observations land in one cell (perfect agreement)
-        → numerator and denominator both 0; return 1.0 (perfect).
-      - one rater has zero variance (e.g. system rates everything Yellow)
-        → denominator is 0 with non-zero numerator; return 0.0 (no agreement
-        better than chance, which is undefined here).
+    Degenerate case: when both raters concentrate on a single shared tier,
+    every off-diagonal cell is 0 in both the confusion matrix and the
+    independence model, so numerator and denominator collapse to 0 — return
+    1.0 (perfect agreement). Any non-zero numerator forces a non-zero
+    denominator (proof: off-diagonal mass on (i,j) implies row_sums[i]>0
+    and col_sums[j]>0), so the converse "denominator 0, numerator > 0"
+    is unreachable.
     """
     k = _TIER_COUNT
-    n = sum(sum(row) for row in confusion)
-    if n == 0:
-        return 0.0
-
-    # Marginals.
     row_sums = [sum(row) for row in confusion]
     col_sums = [sum(confusion[i][j] for i in range(k)) for j in range(k)]
 
-    # Weights on the [0, 1] grid: 0 on the diagonal, 1 at the extremes.
     denom_sq = (k - 1) ** 2
     weights = [
         [((i - j) ** 2) / denom_sq for j in range(k)]
@@ -209,7 +231,7 @@ def _quadratic_weighted_kappa(confusion: list[list[int]]) -> float:
     )
 
     if weighted_expected == 0.0:
-        return 1.0 if weighted_observed == 0.0 else 0.0
+        return 1.0
     return 1.0 - (weighted_observed / weighted_expected)
 
 
@@ -235,7 +257,7 @@ def _spearman_rho(x: list[int], y: list[int]) -> float:
 
     mean_rx = sum(rx) / n
     mean_ry = sum(ry) / n
-    cov = sum((a - mean_rx) * (b - mean_ry) for a, b in zip(rx, ry))
+    cov = sum((a - mean_rx) * (b - mean_ry) for a, b in zip(rx, ry, strict=True))
     var_x = sum((a - mean_rx) ** 2 for a in rx)
     var_y = sum((b - mean_ry) ** 2 for b in ry)
     denom = (var_x * var_y) ** 0.5
@@ -252,14 +274,14 @@ def _average_ranks(values: list[int]) -> list[float]:
     """
     indexed = sorted(range(len(values)), key=lambda i: values[i])
     ranks = [0.0] * len(values)
-    i = 0
-    while i < len(values):
+    start = 0
+    while start < len(values):
         # Walk a run of tied values, then assign each the average rank.
-        j = i
-        while j + 1 < len(values) and values[indexed[j + 1]] == values[indexed[i]]:
-            j += 1
-        avg = (i + j) / 2.0 + 1.0   # +1 for 1-based, avg of [i+1, j+1]
-        for k_idx in range(i, j + 1):
-            ranks[indexed[k_idx]] = avg
-        i = j + 1
+        end = start
+        while end + 1 < len(values) and values[indexed[end + 1]] == values[indexed[start]]:
+            end += 1
+        avg = (start + end) / 2.0 + 1.0   # +1 for 1-based, avg of [start+1, end+1]
+        for idx in range(start, end + 1):
+            ranks[indexed[idx]] = avg
+        start = end + 1
     return ranks
