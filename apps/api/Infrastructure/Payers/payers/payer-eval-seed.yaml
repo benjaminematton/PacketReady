@@ -1,0 +1,60 @@
+# Payer Eval Seed — P4 orchestrator only.
+#
+# Mirrors payer-a-national-hmo on the credentialing surface (same
+# minimums, accepted boards, renewal windows) but flips
+# requiresSanctionsCheck=false. The P4 eval orchestrator creates
+# providers without PSV data (sanctions is a P5 concern), so under
+# the production-default true setting every packet stacks a Critical
+# "no sanctions on file" that masks validator-level signals the eval
+# is trying to measure.
+#
+# DO NOT use this in production. The orchestrator's
+# `--payer-id payer-eval-seed` flag (default) routes here; a real
+# admin intake flow uses payer-a / payer-b / etc.
+id: payer-eval-seed
+name: Payer Eval Seed — P4 orchestrator
+malpractice:
+  minimumPerOccurrence: 1000000   # $1M
+  minimumAggregate: 3000000       # $3M
+requiredDocuments:
+  - license
+  - dea
+  - boardCert
+  - malpractice
+boardCertRequired: true
+# Full ABMS member-board roster. Mirror of payer-a; keep in lockstep —
+# a real cert that fails on payer-a should fail here too, so the eval
+# measures the same validator branches.
+acceptedBoards:
+  - ABAI    # Allergy and Immunology
+  - ABA     # Anesthesiology
+  - ABCRS   # Colon and Rectal Surgery
+  - ABD     # Dermatology
+  - ABEM    # Emergency Medicine
+  - ABFM    # Family Medicine
+  - ABIM    # Internal Medicine
+  - ABMGG   # Medical Genetics and Genomics
+  - ABNS    # Neurological Surgery
+  - ABNM    # Nuclear Medicine
+  - ABOG    # Obstetrics and Gynecology
+  - ABO     # Ophthalmology
+  - ABOS    # Orthopaedic Surgery
+  - ABOto   # Otolaryngology
+  - ABPath  # Pathology
+  - ABP     # Pediatrics
+  - ABPMR   # Physical Medicine and Rehabilitation
+  - ABPS    # Plastic Surgery
+  - ABPM    # Preventive Medicine
+  - ABPN    # Psychiatry and Neurology
+  - ABR     # Radiology
+  - ABS     # Surgery
+  - ABTS    # Thoracic Surgery
+  - ABU     # Urology
+windowDays:
+  malpracticeRenewal: 30
+  licenseRenewal: 30
+# Suppresses the "no sanctions on file" Critical that
+# SanctionsCheckValidator otherwise emits when profile.Sanctions is null.
+# Production stance is TRUE; eval flips FALSE so the score reflects
+# the credential-side validator signals, not the absent-PSV gap.
+requiresSanctionsCheck: false

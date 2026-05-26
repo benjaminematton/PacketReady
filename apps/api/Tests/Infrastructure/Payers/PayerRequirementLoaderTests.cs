@@ -198,11 +198,28 @@ public class CommittedPayerYamlTests
             Path.Combine(AppContext.BaseDirectory, "Payers", "payers")));
 
     [Fact]
-    public void Both_CommittedYamls_LoadCleanly()
+    public void All_CommittedYamls_LoadCleanly()
     {
-        Assert.Equal(2, Loaded.Value.Count);
+        // payer-a and payer-b are the production-style payers; payer-eval-seed
+        // is the P4 orchestrator's no-PSV-required payer (slice 5+ fix).
+        Assert.Equal(3, Loaded.Value.Count);
         Assert.True(Loaded.Value.ContainsKey("payer-a-national-hmo"));
         Assert.True(Loaded.Value.ContainsKey("payer-b-state-medicaid"));
+        Assert.True(Loaded.Value.ContainsKey("payer-eval-seed"));
+    }
+
+    [Fact]
+    public void PayerEvalSeed_HasRequiresSanctionsCheckFalse()
+    {
+        // Locked: slice 7 hinged on this. Flipping back to true here
+        // re-introduces the "no sanctions on file" Critical on every
+        // orchestrator-created provider — which masks 100% of validator
+        // signals the eval is trying to measure. Production payers
+        // (payer-a, payer-b) inherit the default-true via PayerRequirement
+        // and stay strict.
+        var s = Loaded.Value["payer-eval-seed"];
+        Assert.False(s.RequiresSanctionsCheck);
+        Assert.True(Loaded.Value["payer-a-national-hmo"].RequiresSanctionsCheck);
     }
 
     [Fact]

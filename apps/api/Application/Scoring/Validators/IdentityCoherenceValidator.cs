@@ -190,8 +190,17 @@ public sealed class IdentityCoherenceValidator : IValidator
     /// Deterministic outlier selection across the disagreement's sources.
     /// Preference order:
     /// <list type="number">
-    ///   <item>First non-license source whose extracted name differs from the
-    ///         license anchor.</item>
+    ///   <item>First non-license source whose extracted name differs from
+    ///         the license anchor <b>after normalization</b>
+    ///         (<see cref="NameNormalizer.AreEqual"/>: case-folded,
+    ///         credential-suffix-stripped, trimmed). Without normalization,
+    ///         DEA's all-caps rendering ("MICHAEL FOSTER" vs license
+    ///         "Michael Foster, MD") trips Ordinal-equality before the real
+    ///         variant (e.g. "Michael M. Foster-Taylor, MD" on malpractice)
+    ///         is even checked — the Field discriminator gets stamped
+    ///         <c>dea.fullName</c> and the eval runner's predicate-3
+    ///         silently misses the catch. P4 task 18 first run surfaced
+    ///         this on 9/9 planted name_variant packets.</item>
     ///   <item>First non-license source (when license isn't in the set or
     ///         name comparisons are inconclusive).</item>
     ///   <item>First source (fully degenerate fallback — keeps the Field
@@ -213,7 +222,7 @@ public sealed class IdentityCoherenceValidator : IValidator
                 if (s == "license") continue;
                 if (namesByDocType.TryGetValue(s, out var name)
                     && !string.IsNullOrEmpty(name)
-                    && !string.Equals(name, licenseName, StringComparison.Ordinal))
+                    && !NameNormalizer.AreEqual(name, licenseName))
                 {
                     return s;
                 }

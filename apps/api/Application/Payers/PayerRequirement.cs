@@ -69,6 +69,28 @@ public sealed record PayerRequirement
     /// <summary>Renewal-window thresholds (days before expiry) consumed by
     /// the malpractice and license validators.</summary>
     public WindowDays WindowDays { get; init; } = new();
+
+    /// <summary>
+    /// When <c>true</c> (the default), <c>SanctionsCheckValidator</c> emits
+    /// Critical when <see cref="Domain.Providers.ProviderProfile.Sanctions"/>
+    /// is null — the only safe production stance, since "no OIG/SAM lookup
+    /// on file" is the most consequential gap on a credentialing packet.
+    ///
+    /// <para>Set <c>false</c> on a payer YAML the eval seed uses
+    /// (<c>payer-eval-seed.yaml</c>). The P4 eval orchestrator creates
+    /// Providers without sanctions data (PSV is a P5 concern), so under
+    /// the default-true setting every packet stacks a Critical
+    /// "no sanctions on file" that masks the validator-level signals the
+    /// eval is trying to measure. Suppression lives in the score-compute
+    /// handler — same shape as the <see cref="BoardCertRequired"/> filter
+    /// — so the validator itself stays pure and a flip back to <c>true</c>
+    /// in production needs no validator change.</para>
+    ///
+    /// <para>Mirrors the locked production stance from the P4 review
+    /// recommendation: payer-config flag (not orchestrator-side seeding)
+    /// keeps the dev DB honest for P5 PSV work.</para>
+    /// </summary>
+    public bool RequiresSanctionsCheck { get; init; } = true;
 }
 
 public sealed record MalpracticeRequirement

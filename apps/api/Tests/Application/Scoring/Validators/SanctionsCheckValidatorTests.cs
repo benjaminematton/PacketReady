@@ -10,7 +10,7 @@ namespace PacketReady.Tests.Application.Scoring.Validators;
 public sealed class SanctionsCheckValidatorTests
 {
     private static SanctionsCheckValidator Build() =>
-        new(new FakeTimeProvider(DateTimeOffset.Parse(Today)));
+        new(new FakeTimeProvider(DateTimeOffset.Parse(Today)), MakePayers());
 
     private static DateTimeOffset DaysAgo(int days) =>
         DateTimeOffset.Parse(Today).AddDays(-days);

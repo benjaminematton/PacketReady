@@ -74,7 +74,14 @@ from .score_metrics import (
     measure_all,
 )
 
-DEFAULT_PAYER_ID = "payer-a-national-hmo"
+# P4 eval orchestrator default. `payer-eval-seed` mirrors payer-a's
+# credentialing surface (minimums, accepted boards, windows) but flips
+# `requiresSanctionsCheck=false` — the orchestrator creates providers
+# without PSV data, and the default-true production stance would
+# otherwise emit a "no sanctions on file" Critical on every packet and
+# mask validator-level signals. Production / admin flows pass an
+# explicit `--payer-id payer-a-national-hmo` or similar.
+DEFAULT_PAYER_ID = "payer-eval-seed"
 
 
 @dataclass(frozen=True)

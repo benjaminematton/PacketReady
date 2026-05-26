@@ -500,10 +500,14 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
         // while license cards carry them — a raw Levenshtein would emit a
         // Minor on every clean packet for that gap. Real disagreements (typos,
         // wrong-person uploads) still surface against the normalized form.
-        var winnerNormalized = NormalizeForNameCompare(winner.FullName);
+        // Single source of truth lives in NameNormalizer (Application layer)
+        // so IdentityCoherenceValidator's PickVariantSource uses the same
+        // rules — drift between the two would silently re-introduce P4
+        // task 18's predicate-3 miss.
+        var winnerNormalized = NameNormalizer.Normalize(winner.FullName);
         foreach (var other in candidates.Where(c => c.Source != winner.Source))
         {
-            var distance = Levenshtein(winnerNormalized, NormalizeForNameCompare(other.FullName));
+            var distance = Levenshtein(winnerNormalized, NameNormalizer.Normalize(other.FullName));
             if (distance >= FullNameLevenshteinFloor)
             {
                 issues.Add(new Issue(
@@ -521,37 +525,11 @@ internal sealed class ProviderProfileAggregator : IProviderProfileAggregator
         return winner.FullName;
     }
 
-    // Strip the credential suffixes the dataset sees in practice (", MD",
-    // ", DO", ", MBBS", ", PhD"), case-fold, trim. Iterates to a fixpoint so
-    // stacked credentials like "Henry Anderson, MD, PhD" reduce all the way
-    // down — a single pass would leave the inner suffix behind once the
-    // outer match strips ahead of it in iteration order.
-    internal static string NormalizeForNameCompare(string name)
-    {
-        if (string.IsNullOrWhiteSpace(name)) return string.Empty;
-
-        var s = name.TrimEnd(' ', ',', '.');
-        bool stripped;
-        do
-        {
-            stripped = false;
-            foreach (var suffix in CredentialSuffixes)
-            {
-                if (s.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
-                {
-                    s = s[..^suffix.Length].TrimEnd(' ', ',', '.');
-                    stripped = true;
-                }
-            }
-        } while (stripped);
-
-        return s.ToLowerInvariant();
-    }
-
-    private static readonly string[] CredentialSuffixes =
-    {
-        ", MD", ", DO", ", MBBS", ", PhD", ", DNP", ", NP", ", PA",
-    };
+    // NormalizeForNameCompare was inlined here in P3; lifted to
+    // PacketReady.Application.Providers.Aggregation.NameNormalizer in
+    // slice 7 so IdentityCoherenceValidator can share the same rules.
+    // Drift between the two would re-introduce P4 task 18's predicate-3
+    // miss (Field stamped on the wrong source).
 
     // Iterative Levenshtein with O(min(m,n)) space. Good enough for the
     // ~30-char strings we compare here; benchmark before swapping for SIMD

@@ -46,7 +46,7 @@ public sealed class FixtureArithmeticTests
             new LicenseStatusValidator(clock),
             new DeaStatusValidator(clock),
             new BoardCertificationValidator(clock, payers),
-            new SanctionsCheckValidator(clock),
+            new SanctionsCheckValidator(clock, payers),
         };
 
         var perValidator = await Task.WhenAll(

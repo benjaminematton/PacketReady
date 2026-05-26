@@ -1,3 +1,4 @@
+using PacketReady.Application.Payers;
 using PacketReady.Application.Providers.Aggregation;
 using PacketReady.Domain.Providers;
 using PacketReady.Domain.Scoring;
@@ -26,13 +27,32 @@ namespace PacketReady.Application.Scoring.Validators;
 /// <para>The "stale" thresholds operate on a single <c>CheckedAt</c> shared by both
 /// sources. Per-source emission is a UX choice (each source gets its own citation),
 /// not a reflection of independent timestamps. The data model can be split later.</para>
+///
+/// <para><b>Payer-config suppression.</b> When the resolved payer has
+/// <see cref="PayerRequirement.RequiresSanctionsCheck"/> = <c>false</c> AND
+/// the provider has no sanctions row, the validator stays silent. Used by
+/// the eval seed payer (<c>payer-eval-seed.yaml</c>) — the P4 orchestrator
+/// creates providers without PSV data and the "no sanctions on file"
+/// Critical would otherwise stack on every packet and mask validator-level
+/// signals. Same shape as the <see cref="PayerRequirement.BoardCertRequired"/>
+/// suppression. Sanction-on-file Criticals (Oig/Sam = not clean) still
+/// fire — that's a hard credentialing block regardless of payer config.</para>
 /// </summary>
-public sealed class SanctionsCheckValidator(TimeProvider clock) : IValidator
+public sealed class SanctionsCheckValidator : IValidator
 {
     public string Name => "sanctions_check";
 
     private const int MajorStalenessDays = 365;
     private const int MinorStalenessDays = 90;
+
+    private readonly TimeProvider _clock;
+    private readonly IPayerCatalog _payers;
+
+    public SanctionsCheckValidator(TimeProvider clock, IPayerCatalog payers)
+    {
+        _clock = clock;
+        _payers = payers;
+    }
 
     // Sanctions aren't extracted from any P3 doc type — provenance is always
     // empty for this validator. Citations keep null DocumentId/Page/Bbox by
@@ -45,10 +65,18 @@ public sealed class SanctionsCheckValidator(TimeProvider clock) : IValidator
         CancellationToken ct)
     {
         var issues = new List<Issue>();
-        var nowUtc = clock.GetUtcNow();
+        var nowUtc = _clock.GetUtcNow();
 
         if (profile.Sanctions is null)
         {
+            // Payer-config suppression — see class docstring. PayerCatalog.Get
+            // throws PayerNotConfiguredException; the handler pre-flights
+            // payer resolution so this branch only fires on a mediator-only
+            // call path with an out-of-band payer id.
+            var payer = _payers.Get(payerId);
+            if (!payer.RequiresSanctionsCheck)
+                return Task.FromResult<IReadOnlyList<Issue>>(Array.Empty<Issue>());
+
             issues.Add(new Issue(
                 Validator: Name,
                 Severity: Severity.Critical,
