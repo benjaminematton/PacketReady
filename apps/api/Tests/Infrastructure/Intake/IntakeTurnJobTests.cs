@@ -62,11 +62,7 @@ public class IntakeTurnJobTests : IDisposable
             npi: "1234567890",
             credentialingState: "CA",
             nowUtc: T0);
-        var provider = Provider.Create(profile, T0);
-        // Force the seeded provider to use our well-known id so the test
-        // helper's ProviderId constant matches the row.
-        typeof(Provider).GetProperty(nameof(Provider.Id))!.SetValue(provider, ProviderId);
-        _db.Providers.Add(provider);
+        _db.Providers.Add(Provider.CreateForTesting(ProviderId, profile, T0));
 
         var session = IntakeSession.Start(ProviderId, turnBudget, T0);
         session.NotifyInvitationSent(Guid.NewGuid(), T0.AddSeconds(1));
@@ -141,9 +137,9 @@ public class IntakeTurnJobTests : IDisposable
         Assert.Equal(IntakeState.AwaitingProvider, session.State);
         Assert.Equal(1, session.TurnsConsumed);
 
-        // A new magic link landed.
+        // A new magic link landed (the followup link — seed didn't create one).
         var links = await verify.MagicLinks.Where(l => l.ProviderId == ProviderId).ToListAsync();
-        Assert.Equal(1, links.Count);  // only the followup link — seed didn't create one
+        Assert.Single(links);
 
         // A followup outbox row landed alongside the seeded intake_invitation.
         var followups = await verify.OutboundMessages
@@ -208,6 +204,90 @@ public class IntakeTurnJobTests : IDisposable
 
         // Turn was started before the agent threw, so TurnsConsumed bumped.
         Assert.Equal(1, session.TurnsConsumed);
+    }
+
+    [Fact]
+    public async Task RunAsync_AgentThrowsGenericException_EscalatesWithExceptionType()
+    {
+        // Anything that isn't BudgetExhaustedException (LLM 5xx, socket
+        // error, tool-contract violation) must not leave the session stuck
+        // in AgentProcessing — [AutomaticRetry(Attempts=0)] means Hangfire
+        // won't redrive us.
+        await SeedSessionAwaitingProviderAsync();
+        _agent
+            .Setup(a => a.RunTurnAsync(ProviderId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("simulated LLM 500"));
+
+        await _job.RunAsync(ProviderId);
+
+        using var verify = _factory.CreateDbContext();
+        var session = await verify.IntakeSessions.SingleAsync(s => s.ProviderId == ProviderId);
+        Assert.Equal(IntakeState.Escalated, session.State);
+        var payload = Assert.IsType<ProviderState.Escalated>(session.GetState());
+        Assert.Equal("agent-error:InvalidOperationException", payload.Reason);
+        Assert.Equal(1, session.TurnsConsumed);  // BeginAgentTurn already committed
+    }
+
+    [Fact]
+    public async Task RunAsync_HostCancellation_RethrowsWithoutEscalating()
+    {
+        // Clean shutdown after BeginAgentTurn has committed — the OCE
+        // must propagate (so Hangfire knows the run was aborted), not
+        // bleed into a misleading "agent-error:OperationCanceledException"
+        // escalation. We trip cancellation from inside the agent mock so
+        // the earlier SaveChanges has already landed.
+        await SeedSessionAwaitingProviderAsync();
+        var cts = new CancellationTokenSource();
+        _agent
+            .Setup(a => a.RunTurnAsync(ProviderId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Returns<Guid, Guid, CancellationToken>((_, _, _) =>
+            {
+                cts.Cancel();
+                throw new OperationCanceledException(cts.Token);
+            });
+
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            () => _job.RunAsync(ProviderId, cts.Token));
+
+        using var verify = _factory.CreateDbContext();
+        var session = await verify.IntakeSessions.SingleAsync(s => s.ProviderId == ProviderId);
+        Assert.Equal(IntakeState.AgentProcessing, session.State);  // BeginAgentTurn save committed
+    }
+
+    [Fact]
+    public async Task RunAsync_NoPriorOutbox_EscalatesViaInvariantBreach()
+    {
+        // Setup: a session exists but no outbox row was ever composed (a
+        // would-be data-corruption scenario). The agent finishes a
+        // followup, the transitioner needs the toAddress, the lookup
+        // throws InvalidOperationException — which the outer
+        // generic-exception branch catches and escalates so the session
+        // doesn't stick.
+        var session = IntakeSession.Start(ProviderId, IntakeSession.DefaultTurnBudget, T0);
+        session.NotifyInvitationSent(Guid.NewGuid(), T0.AddSeconds(1));
+        _db.IntakeSessions.Add(session);
+        await _db.SaveChangesAsync();
+        // No OutboundMessage seeded.
+
+        _agent
+            .Setup(a => a.RunTurnAsync(ProviderId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid pid, Guid tid, CancellationToken _) =>
+                new AgentTurnResult(
+                    TurnId: tid,
+                    IsTerminal: false,
+                    CompletedReadinessScoreId: null,
+                    ProposedFollowupSubject: "subj",
+                    ProposedFollowupBody: "body",
+                    StepsConsumed: 1, InputTokensConsumed: 0, OutputTokensConsumed: 0,
+                    WallClockConsumed: TimeSpan.Zero));
+
+        await _job.RunAsync(ProviderId);
+
+        using var verify = _factory.CreateDbContext();
+        var after = await verify.IntakeSessions.SingleAsync(s => s.ProviderId == ProviderId);
+        Assert.Equal(IntakeState.Escalated, after.State);
+        var payload = Assert.IsType<ProviderState.Escalated>(after.GetState());
+        Assert.Equal("agent-error:InvalidOperationException", payload.Reason);
     }
 
     // ───────────────────────────────────────────── edge cases ──────────

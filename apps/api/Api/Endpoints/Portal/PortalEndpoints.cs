@@ -42,9 +42,8 @@ public static class PortalEndpoints
         // JsonElement-inside-object — C4 walks the raw element directly.
         JsonElement? ConfirmedFields = null);
 
-    // Marker class so the static endpoint helper can resolve a typed
-    // ILogger from DI without a hand-rolled category string.
-    private sealed class PortalLog { }
+    /// <summary>Stable category for portal endpoint logging.</summary>
+    private const string LoggerCategory = "PacketReady.Api.Endpoints.Portal";
 
     public static IEndpointRouteBuilder MapPortalEndpoints(this IEndpointRouteBuilder app)
     {
@@ -53,9 +52,11 @@ public static class PortalEndpoints
                 IMagicLinkAuthority authority,
                 IAppDbContext db,
                 TimeProvider clock,
-                ILogger<PortalLog> logger,
+                ILoggerFactory loggerFactory,
                 CancellationToken ct) =>
         {
+            var logger = loggerFactory.CreateLogger(LoggerCategory);
+
             MagicLink link;
             try
             {
@@ -110,9 +111,10 @@ public static class PortalEndpoints
                 IAppDbContext db,
                 IBackgroundJobClient jobs,
                 TimeProvider clock,
-                ILogger<PortalLog> logger,
+                ILoggerFactory loggerFactory,
                 CancellationToken ct) =>
         {
+            var logger = loggerFactory.CreateLogger(LoggerCategory);
             var now = clock.GetUtcNow();
 
             MagicLink link;
@@ -155,13 +157,25 @@ public static class PortalEndpoints
             // second round-trip when C4 ships.
             _ = body;
 
-            // C5: enqueue the agent turn. The job picks up the session,
-            // runs the agent within its budget, and either composes a
-            // followup (via the transitioner) or transitions to Complete.
-            // Hangfire enqueues immediately; the dispatcher's recurring
-            // 30s tick handles the eventual email send.
-            var turnJobId = jobs.Enqueue<IntakeTurnJob>(j =>
-                j.RunAsync(link.ProviderId, CancellationToken.None));
+            // C5: enqueue the agent turn. The consume above is already
+            // committed, so a failed enqueue leaves the session in a
+            // half-progressed state (link consumed, no AgentProcessing
+            // turn). Surface that as a 500 so an admin can replay via
+            // the Hangfire dashboard or a future watchdog; never lose the
+            // signal by returning 200 with no job queued.
+            string turnJobId;
+            try
+            {
+                turnJobId = jobs.Enqueue<IntakeTurnJob>(j =>
+                    j.RunAsync(link.ProviderId, CancellationToken.None));
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex,
+                    "Hangfire enqueue failed for provider {ProviderId} after magic_link {LinkId} was consumed; manual re-enqueue required.",
+                    link.ProviderId, link.Id);
+                return ProblemResults.PortalEnqueueFailed(link.ProviderId);
+            }
 
             return Results.Ok(new
             {

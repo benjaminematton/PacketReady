@@ -45,6 +45,16 @@ public sealed class OutboundMessage
     /// </summary>
     public const int MaxToAddressLength = 256;
 
+    /// <summary>
+    /// Soft cap on <c>outbound_messages.body</c>. The column is unbounded
+    /// (Postgres <c>text</c>) but an LLM-composed followup body should not
+    /// realistically exceed a handful of paragraphs. Rejecting outsized
+    /// bodies at the factory keeps a runaway tool from filling the column
+    /// with megabytes of generation noise — and keeps audit-log fanout
+    /// predictable since payloads quote the body length, not the body.
+    /// </summary>
+    public const int MaxBodyLength = 16 * 1024;
+
     public Guid Id { get; private set; }
     public Guid ProviderId { get; private set; }
     public Guid TurnId { get; private set; }
@@ -108,6 +118,10 @@ public sealed class OutboundMessage
                 nameof(subject));
         if (string.IsNullOrWhiteSpace(body))
             throw new ArgumentException("Body is required.", nameof(body));
+        if (body.Length > MaxBodyLength)
+            throw new ArgumentException(
+                $"Body must be {MaxBodyLength} characters or fewer (got {body.Length}).",
+                nameof(body));
 
         var hold = holdDuration ?? DefaultHoldDuration;
         if (hold < TimeSpan.Zero)

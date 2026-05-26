@@ -24,6 +24,7 @@ internal static class ProblemResults
     private const string IntakeAlreadyExistsType      = "urn:packetready:error:intake_already_exists";
     private const string MagicLinkInvalidType         = "urn:packetready:error:magic_link_invalid";
     private const string InvalidIntakeStartType       = "urn:packetready:error:invalid_intake_start";
+    private const string PortalEnqueueFailedType      = "urn:packetready:error:portal_enqueue_failed";
 
     public static IResult ProviderNotFound(Guid providerId) =>
         Results.Problem(
@@ -201,4 +202,22 @@ internal static class ProblemResults
             title: "Start-intake request failed validation.",
             detail: detail,
             statusCode: StatusCodes.Status400BadRequest);
+
+    /// <summary>
+    /// Portal submit consumed the magic link but the agent-turn enqueue
+    /// to Hangfire failed. 500 because we left the session half-progressed
+    /// (link consumed, no turn running). An admin re-enqueue from the
+    /// Hangfire dashboard or a watchdog over stale post-consume sessions
+    /// is the manual recovery path.
+    /// </summary>
+    public static IResult PortalEnqueueFailed(Guid providerId) =>
+        Results.Problem(
+            type: PortalEnqueueFailedType,
+            title: "Submission accepted but background job could not be queued.",
+            detail: "Your submission was received. Our team has been notified and will resume processing shortly.",
+            statusCode: StatusCodes.Status500InternalServerError,
+            extensions: new Dictionary<string, object?>
+            {
+                ["providerId"] = providerId,
+            });
 }

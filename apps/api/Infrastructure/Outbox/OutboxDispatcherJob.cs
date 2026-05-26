@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using PacketReady.Application.Abstractions;
 using PacketReady.Application.Audit;
+using PacketReady.Application.Intake.Audit;
 using PacketReady.Application.Intake.Outbox;
 using PacketReady.Domain.Audit;
 using PacketReady.Domain.Messaging;
@@ -14,9 +15,8 @@ namespace PacketReady.Infrastructure.Outbox;
 /// <see cref="OutboundMessageStatus.Queued"/> rows whose
 /// <c>held_until</c> has elapsed, dispatches them through
 /// <see cref="IEmailSender"/>, and flips the status to
-/// <see cref="OutboundMessageStatus.Sent"/>. One row per iteration so a
-/// poisoned message can't take down the queue — exceptions are caught
-/// per-row and logged.
+/// <see cref="OutboundMessageStatus.Sent"/>. Per-row try/catch isolates
+/// poison messages — failures stay <c>Queued</c> for the next tick.
 ///
 /// <para>The 10-minute hold-at-send TTL lives in the SELECT clause
 /// (<c>held_until &lt;= now()</c>): the dispatcher physically cannot send
@@ -24,18 +24,35 @@ namespace PacketReady.Infrastructure.Outbox;
 /// makes <see cref="OutboundMessage.MarkSent"/>'s in-aggregate check
 /// disagree.</para>
 ///
-/// <para><b>Hangfire retry posture.</b> Default — Hangfire retries on
-/// transient failure. The outbox is naturally idempotent: a row that
-/// already flipped to <c>Sent</c> falls out of the SELECT, so a
-/// duplicate firing of the job is a no-op. <c>MockSmtpSender</c>'s
-/// <c>FileMode.CreateNew</c> + the dedup UNIQUE on
-/// <c>(provider_id, turn_id, kind)</c> are belt-and-braces against
-/// double-send.</para>
+/// <para><b>Concurrency.</b> <see cref="DisableConcurrentExecutionAttribute"/>
+/// takes a Hangfire distributed lock for the job key so a long tick can't
+/// overlap with the next recurring fire (or a hand-triggered run from the
+/// dashboard). Without this, two workers could both <c>SELECT</c> the
+/// same Queued rows and both call <c>SendAsync</c> — neither
+/// <c>MockSmtpSender</c>'s <c>FileMode.CreateNew</c> nor the
+/// <c>(provider_id, turn_id, kind)</c> UNIQUE protects the second send
+/// (the unique is on the row's identity, not the send event). Locking
+/// is the simplest correct fix at our scale; an <c>UPDATE … RETURNING</c>
+/// claim is the next step once volume justifies it.</para>
+///
+/// <para><b>Hangfire retry posture.</b> Per-row exceptions are caught
+/// inside <c>RunAsync</c>, so the job itself doesn't fail and Hangfire's
+/// <c>[AutomaticRetry]</c> never fires. Poisoned rows stay <c>Queued</c>
+/// and reappear on the next 30-second tick; persistent failures surface
+/// as a row that keeps logging an error — no automatic dead-letter.</para>
 /// </summary>
+[DisableConcurrentExecution(timeoutInSeconds: 60)]
+[Queue(QueueName)]
 public sealed class OutboxDispatcherJob
 {
     /// <summary>Hangfire's <c>RecurringJobManager.AddOrUpdate</c> registration id.</summary>
     public const string RecurringJobId = "outbox-dispatcher";
+
+    /// <summary>
+    /// Hangfire queue name. Segregated from <c>agent-turns</c> so a slow
+    /// agent turn can't starve the recurring 30-second tick.
+    /// </summary>
+    public const string QueueName = "outbox";
 
     /// <summary>Default poll cadence. The phase-5 doc names 30 seconds.</summary>
     public const string DefaultCron = "*/30 * * * * *";  // every 30s — Hangfire cron with seconds
@@ -125,17 +142,17 @@ public sealed class OutboxDispatcherJob
         // wrote.
         msg.MarkSent(sentAt);
 
+        var payload = new OutboundMessageSentPayload(
+            OutboundMessageId: msg.Id,
+            ProviderId: msg.ProviderId,
+            TurnId: msg.TurnId,
+            Kind: msg.Kind,
+            ToAddress: msg.ToAddress,
+            SentAt: sentAt);
+
         _audit.Stage(AuditEvent.Create(
             eventType: AuditEventType.OutboundMessageSent,
-            payloadJson: System.Text.Json.JsonSerializer.Serialize(new
-            {
-                outbound_message_id = msg.Id,
-                provider_id = msg.ProviderId,
-                turn_id = msg.TurnId,
-                kind = msg.Kind.ToString(),
-                to_address = msg.ToAddress,
-                sent_at = sentAt,
-            }),
+            payloadJson: payload.ToJson(),
             providerId: msg.ProviderId,
             turnId: msg.TurnId,
             occurredAt: sentAt));

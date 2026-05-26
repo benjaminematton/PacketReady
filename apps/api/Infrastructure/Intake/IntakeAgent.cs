@@ -129,7 +129,7 @@ public sealed class IntakeAgent : IIntakeAgent
 
         while (true)
         {
-            CheckBudget(steps, inputTokens + outputTokens, ElapsedSince(startTimestamp));
+            CheckBudget(steps, inputTokens + outputTokens, _clock.GetElapsedTime(startTimestamp));
 
             ChatResponse response;
             try
@@ -176,7 +176,7 @@ public sealed class IntakeAgent : IIntakeAgent
 
             foreach (var call in calls)
             {
-                CheckBudget(steps, inputTokens + outputTokens, ElapsedSince(startTimestamp));
+                CheckBudget(steps, inputTokens + outputTokens, _clock.GetElapsedTime(startTimestamp));
 
                 JsonElement result;
                 var tool = _tools.FirstOrDefault(t =>
@@ -255,11 +255,8 @@ public sealed class IntakeAgent : IIntakeAgent
             StepsConsumed: steps,
             InputTokensConsumed: inputTokens,
             OutputTokensConsumed: outputTokens,
-            WallClockConsumed: ElapsedSince(startTimestamp));
+            WallClockConsumed: _clock.GetElapsedTime(startTimestamp));
     }
-
-    private TimeSpan ElapsedSince(long startTimestamp) =>
-        _clock.GetElapsedTime(startTimestamp);
 
     private static void CheckBudget(int steps, int tokens, TimeSpan wall)
     {

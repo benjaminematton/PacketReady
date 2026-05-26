@@ -96,6 +96,29 @@ public class Provider
     }
 
     /// <summary>
+    /// Test-only factory: identical to <see cref="Create"/> but lets the
+    /// caller pin <see cref="Id"/>. Tests need a fixed provider id so an
+    /// in-memory seed lines up with a constant the test asserts against
+    /// (e.g. seeding an <c>IntakeSession</c> with a known
+    /// <c>ProviderId</c> before invoking <see cref="Provider.Create"/>'s
+    /// generated id would have to be threaded back out). Production code
+    /// must keep using <see cref="Create"/>; the
+    /// <see cref="EditorBrowsableAttribute"/> hint keeps this off the
+    /// IntelliSense menu in app code.
+    /// </summary>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+    public static Provider CreateForTesting(
+        Guid id,
+        ProviderProfile profile,
+        DateTimeOffset? now = null,
+        string? payerId = null)
+    {
+        var p = Create(profile, now, payerId);
+        p.Id = id;
+        return p;
+    }
+
+    /// <summary>
     /// Deserialized profile, cached after the first call. Cache invalidates if EF
     /// rehydrates the entity (the <see cref="ProfileJson"/> setter clears it).
     /// </summary>

@@ -47,9 +47,7 @@ public class OutboxDispatcherJobTests : IDisposable
             npi: "1234567890",
             credentialingState: "CA",
             nowUtc: T0);
-        var provider = Provider.Create(profile, T0);
-        typeof(Provider).GetProperty(nameof(Provider.Id))!.SetValue(provider, ProviderId);
-        _db.Providers.Add(provider);
+        _db.Providers.Add(Provider.CreateForTesting(ProviderId, profile, T0));
         await _db.SaveChangesAsync();
     }
 

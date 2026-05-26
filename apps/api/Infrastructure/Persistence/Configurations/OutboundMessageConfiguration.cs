@@ -77,6 +77,14 @@ public sealed class OutboundMessageConfiguration : IEntityTypeConfiguration<Outb
         b.HasIndex(x => new { x.Status, x.HeldUntil })
             .HasDatabaseName("ix_outbound_messages_status_held_until");
 
+        // IntakeTurnJob.GetMostRecentToAddressAsync runs WHERE provider_id = @x
+        // ORDER BY composed_at DESC LIMIT 1 once per agent turn. Trivial at
+        // small scale; degrades to a per-provider seq scan if a long-lived
+        // intake accumulates many followups. (provider_id, composed_at) is the
+        // matching access path.
+        b.HasIndex(x => new { x.ProviderId, x.ComposedAt })
+            .HasDatabaseName("ix_outbound_messages_provider_id_composed_at");
+
         b.HasOne<Provider>()
             .WithMany()
             .HasForeignKey(x => x.ProviderId)

@@ -126,6 +126,28 @@ public class OutboundMessageTests
     }
 
     [Fact]
+    public void Compose_RejectsBodyOverSoftCap()
+    {
+        // An LLM-composed followup that runs away shouldn't be able to
+        // stuff megabytes into outbound_messages.body — cap at the factory
+        // so the audit-log fanout stays predictable.
+        var oversize = new string('x', OutboundMessage.MaxBodyLength + 1);
+        var ex = Assert.Throws<ArgumentException>(() =>
+            OutboundMessage.Compose(
+                ProviderId, TurnId, MessageKind.Followup, ToAddr, "subj", oversize, T0));
+        Assert.Equal("body", ex.ParamName);
+    }
+
+    [Fact]
+    public void Compose_AcceptsBodyAtSoftCap()
+    {
+        var atCap = new string('x', OutboundMessage.MaxBodyLength);
+        var msg = OutboundMessage.Compose(
+            ProviderId, TurnId, MessageKind.Followup, ToAddr, "subj", atCap, T0);
+        Assert.Equal(atCap, msg.Body);
+    }
+
+    [Fact]
     public void Compose_RejectsUndefinedKind()
     {
         // Out-of-range cast — DB CHECK would catch it too, but failing at

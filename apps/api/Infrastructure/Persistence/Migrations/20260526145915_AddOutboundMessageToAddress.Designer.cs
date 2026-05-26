@@ -420,6 +420,9 @@ namespace PacketReady.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ProviderId", "ComposedAt")
+                        .HasDatabaseName("ix_outbound_messages_provider_id_composed_at");
+
                     b.HasIndex("Status", "HeldUntil")
                         .HasDatabaseName("ix_outbound_messages_status_held_until");
 

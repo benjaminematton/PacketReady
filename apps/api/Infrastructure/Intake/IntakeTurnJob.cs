@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using PacketReady.Application.Abstractions;
 using PacketReady.Application.Audit;
 using PacketReady.Application.Intake.Agent;
+using PacketReady.Application.Intake.Audit;
 using PacketReady.Domain.Audit;
 using PacketReady.Domain.Intake;
 using PacketReady.Domain.MagicLinks;
@@ -46,8 +47,17 @@ namespace PacketReady.Infrastructure.Intake;
 /// is wrong here.</para>
 /// </summary>
 [AutomaticRetry(Attempts = 0)]
+[Queue(QueueName)]
 public sealed class IntakeTurnJob
 {
+    /// <summary>
+    /// Hangfire queue name. <c>IntakeTurnJob</c> can hold a worker for the
+    /// full per-turn wall-clock budget; segregating it from
+    /// <see cref="OutboxDispatcherJob"/> keeps the dispatcher's recurring
+    /// 30-second tick from starving behind a slow agent turn.
+    /// </summary>
+    public const string QueueName = "agent-turns";
+
     private readonly IAppDbContext _db;
     private readonly IIntakeAgent _agent;
     private readonly IntakeStateTransitioner _transitioner;
@@ -125,21 +135,21 @@ public sealed class IntakeTurnJob
 
             var effect = _transitioner.Apply(session, result, toAddress, _clock.GetUtcNow());
 
+            var payload = new IntakeTurnCompletedPayload(
+                ProviderId: providerId,
+                TurnId: turnId,
+                IsTerminal: result.IsTerminal,
+                CompletedReadinessScoreId: result.CompletedReadinessScoreId,
+                QueuedOutboundMessageId: effect.QueuedOutboundMessageId,
+                NewMagicLinkId: effect.NewMagicLinkId,
+                Steps: result.StepsConsumed,
+                InputTokens: result.InputTokensConsumed,
+                OutputTokens: result.OutputTokensConsumed,
+                WallClockMs: (int)result.WallClockConsumed.TotalMilliseconds);
+
             _audit.Stage(AuditEvent.Create(
                 eventType: AuditEventType.IntakeTurnCompleted,
-                payloadJson: System.Text.Json.JsonSerializer.Serialize(new
-                {
-                    provider_id = providerId,
-                    turn_id = turnId,
-                    is_terminal = result.IsTerminal,
-                    completed_readiness_score_id = result.CompletedReadinessScoreId,
-                    queued_outbound_message_id = effect.QueuedOutboundMessageId,
-                    new_magic_link_id = effect.NewMagicLinkId,
-                    steps = result.StepsConsumed,
-                    input_tokens = result.InputTokensConsumed,
-                    output_tokens = result.OutputTokensConsumed,
-                    wall_clock_ms = (int)result.WallClockConsumed.TotalMilliseconds,
-                }),
+                payloadJson: payload.ToJson(),
                 providerId: providerId,
                 turnId: turnId,
                 occurredAt: _clock.GetUtcNow()));
@@ -160,15 +170,42 @@ public sealed class IntakeTurnJob
             session.Escalate($"budget:{ex.Axis}", _clock.GetUtcNow());
             await _db.SaveChangesAsync(ct);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Host shutdown, not a job failure — let Hangfire reschedule the
+            // turn on a future worker. BeginAgentTurn's bump is already
+            // committed, so the rescheduled run will see TurnsConsumed
+            // advanced. Acceptable: a clean shutdown costs one turn-budget
+            // slot, not a stuck session.
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Anything else (LLM 429/5xx, socket error, tool contract
+            // violation, …). BeginAgentTurn already moved the session into
+            // AgentProcessing; [AutomaticRetry(Attempts=0)] means Hangfire
+            // won't redrive us, so without this branch the session sits
+            // stuck and the provider can't resubmit (link consumed at
+            // portal time). Escalate with the exception type so an admin
+            // can recover from intake_sessions audit alone.
+            _logger.LogError(ex,
+                "Intake turn for provider {ProviderId} (turn {TurnId}) failed with {ExceptionType}; escalating.",
+                providerId, turnId, ex.GetType().Name);
+
+            session.Escalate($"agent-error:{ex.GetType().Name}", _clock.GetUtcNow());
+            await _db.SaveChangesAsync(ct);
+        }
     }
 
     /// <summary>
     /// Lookup helper — pull the most recent <see cref="OutboundMessage.ToAddress"/>
-    /// for this provider so a followup composed by the agent reaches
-    /// the same destination as the original intake invitation. Falls
-    /// back to a placeholder that the dispatcher's header-injection
-    /// guard will refuse to send — surfaces "no email on file" as a
-    /// loud dispatch error rather than a silent misroute.
+    /// for this provider so a followup composed by the agent reaches the
+    /// same destination as the original intake invitation. Throws when no
+    /// prior outbox row exists: <c>StartIntakeCommandHandler</c> guarantees
+    /// the <c>IntakeInvitation</c> row is written in the same transaction
+    /// as the session, so a missing row means a corrupt setup — surfacing
+    /// it loud (via the outer escalate branch) beats sending followups to
+    /// a sentinel address.
     /// </summary>
     private async Task<string> GetMostRecentToAddressAsync(Guid providerId, CancellationToken ct)
     {
@@ -178,6 +215,11 @@ public sealed class IntakeTurnJob
             .OrderByDescending(m => m.ComposedAt)
             .Select(m => m.ToAddress)
             .FirstOrDefaultAsync(ct);
-        return address ?? "unknown@example.invalid";
+        if (string.IsNullOrEmpty(address))
+            throw new InvalidOperationException(
+                $"No outbound_messages row found for provider {providerId}; " +
+                "StartIntakeCommandHandler should have written the intake_invitation " +
+                "atomically with the session.");
+        return address;
     }
 }
