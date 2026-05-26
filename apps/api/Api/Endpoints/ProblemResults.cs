@@ -19,6 +19,8 @@ internal static class ProblemResults
     private const string DocumentNotFoundType         = "urn:packetready:error:document_not_found";
     private const string DocumentBlobMissingType      = "urn:packetready:error:document_blob_missing";
     private const string UploadInvalidPdfType         = "urn:packetready:error:upload_invalid_pdf";
+    private const string IntakeAlreadyExistsType      = "urn:packetready:error:intake_already_exists";
+    private const string MagicLinkInvalidType         = "urn:packetready:error:magic_link_invalid";
 
     public static IResult ProviderNotFound(Guid providerId) =>
         Results.Problem(
@@ -104,4 +106,41 @@ internal static class ProblemResults
             {
                 ["documentId"] = documentId,
             });
+
+    /// <summary>
+    /// An <c>intake_sessions</c> row already exists for the target provider.
+    /// 409 (not 400) because the request shape is valid; the conflict is
+    /// with persisted state. Re-issuing a fresh magic link for an existing
+    /// intake is a separate endpoint (deferred); this signals "use that
+    /// instead, don't double-start."
+    /// </summary>
+    public static IResult IntakeAlreadyExists(Guid providerId) =>
+        Results.Problem(
+            type: IntakeAlreadyExistsType,
+            title: "An intake session already exists for this provider.",
+            detail: $"Provider {providerId} already has an active intake. Re-issue the magic link instead of starting a new intake.",
+            statusCode: StatusCodes.Status409Conflict,
+            extensions: new Dictionary<string, object?> { ["providerId"] = providerId });
+
+    /// <summary>
+    /// Magic-link token failed validation. 410 Gone signals "this URL was
+    /// valid but isn't anymore" — applies to expired, consumed, and
+    /// not-found cases. <c>reason</c> is the
+    /// <c>MagicLinkInvalidReason</c> enum member name verbatim so the
+    /// portal page can branch ("link expired" vs "link already used" vs
+    /// "this link doesn't exist") without parsing the title string.
+    ///
+    /// <para>Malformed / bad-signature lands here too as 410, not 400 —
+    /// the surface area for "your URL is tampered" is identical to
+    /// "your URL is too old" from the provider's point of view, and
+    /// distinguishing them in the response is mostly useful to
+    /// attackers.</para>
+    /// </summary>
+    public static IResult MagicLinkInvalid(string reason) =>
+        Results.Problem(
+            type: MagicLinkInvalidType,
+            title: "Magic link is no longer valid.",
+            detail: "This link can't be used. Ask the admin to issue a fresh one.",
+            statusCode: StatusCodes.Status410Gone,
+            extensions: new Dictionary<string, object?> { ["reason"] = reason });
 }
