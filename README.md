@@ -5,11 +5,7 @@ every issue cited back to its source PDF region.
 
 ![demo](docs/assets/demo.gif)
 
-Higher-fidelity recordings:
-[mp4](https://github.com/benjaminematton/PacketReady/releases/download/demo-v1/demo.mp4)
-or the [release page](https://github.com/benjaminematton/PacketReady/releases/tag/demo-v1)
-(mp4 + source webm attached). Re-record locally with `npm run tour`
-from [tools/demo-tour/](tools/demo-tour/).
+[Higher-fidelity recording](https://github.com/benjaminematton/PacketReady/releases/tag/demo-v1) · re-record locally via [tools/demo-tour/](tools/demo-tour/).
 
 Companion docs:
 
@@ -17,6 +13,127 @@ Companion docs:
   alternatives rejected, row-by-row competitor verification.
 - **[docs/build-plan.md](docs/build-plan.md)** — phase-by-phase build
   log (phases 0–5 closed; phase 6 demo polish + this README).
+
+## How it works
+
+Two halves: an intake agent collects the documents; a validator suite
+turns them into a score.
+
+### Architecture, one glance
+
+```
+Provider uploads PDFs
+          │
+          ▼
+┌────────────────────────────────────────────────────────┐
+│ Classify (Haiku) ─► Extract (Sonnet)       per document│
+│  doc_type + conf     fields + bboxes                   │
+└────────────────────────────────────────────────────────┘
+          │
+          ▼
+┌────────────────────────────────────────────────────────┐
+│ Intake agent (FSM, 5 tools, per-turn budget)           │
+│   decides: follow up · score · escalate                │
+└────────────────────────────────────────────────────────┘
+          │ when complete
+          ▼
+┌────────────────────────────────────────────────────────┐
+│ 8 validators in parallel                               │
+│   6 pure-code · 2 LLM-augmented · 3 payer-aware        │
+└────────────────────────────────────────────────────────┘
+          │
+          ▼
+┌────────────────────────────────────────────────────────┐
+│ Score synthesis: −25 Critical / −10 Major / −3 Minor,  │
+│   floor at 0.  Tier: ≥85 / 60–84 / <60.                │
+└────────────────────────────────────────────────────────┘
+          │
+          ▼
+Dashboard: click any issue ─► source PDF region + audit timeline
+```
+
+### The intake half
+
+Admin adds a provider — name and email, that's it. Provider gets a
+magic-link email, clicks through to a single-page portal, drops in
+whatever credentialing PDFs they have on hand (license, DEA,
+malpractice, board cert). Each document is classified by Haiku, then
+extracted by Sonnet into structured fields with per-field bounding
+boxes back into the source PDF.
+
+Then the **intake agent** runs one turn. It's a Claude loop with a
+deliberately small five-tool surface (`read_document`,
+`extract_fields`, `lookup_primary_source`, `compose_followup`,
+`compute_readiness`), bounded per turn by 15 steps / 80k tokens / 90s.
+It decides one of three things:
+
+- **Score it** — invoke the terminal `compute_readiness` tool; the
+  state machine transitions to the validator pipeline.
+- **Follow up** — invoke `compose_followup`, which aggregates all
+  current gaps into one targeted email. Not twelve templated
+  reminders; one consolidated message with everything missing.
+- **Escalate** — if the per-provider turn budget exhausts, transition
+  to `escalated` with the partial state attached and notify a human.
+
+Every state transition is deterministic code, not an LLM decision.
+The agent lives *inside* the FSM, not above it — workflow pattern,
+not autonomous agent, per Anthropic's *Building Effective Agents*.
+Every agent turn writes to an append-only audit log (Postgres,
+enforced by a `BEFORE UPDATE` trigger).
+
+### The score half
+
+When the agent declares the profile ready, eight validators fan out
+in parallel:
+
+| Validator | Type | Checks |
+|---|---|---|
+| `license_status` | pure code | active, correct state, not expired |
+| `dea_status` | pure code | active, not expired |
+| `malpractice_currency` | pure code + payer YAML | in force, coverage ≥ payer min, expiry > 30d |
+| `board_certification` | pure code + payer YAML | active for stated specialty, board accepted |
+| `sanctions_check` | pure code | OIG / SAM clean |
+| `required_documents` | pure code + payer YAML | every payer-required doc present |
+| `identity_coherence` | **LLM (Sonnet)** | name / DOB / NPI / address agree across docs |
+| `npi_taxonomy_match` | **LLM (Sonnet)** | NPI taxonomy code matches stated specialty |
+
+Six pure-code validators because field-level checks shouldn't burn
+LLM budget; two LLM-augmented because cross-document fuzzy reasoning
+isn't regex-able. Three are payer-aware via per-payer YAML config —
+adding a new payer is config, not code.
+
+Each validator returns `pass | minor | major | critical` with a
+**citation** pointing to a specific page and bounding box on the
+source PDF. Score synthesis is a transparent weighted sum:
+
+```
+Start at 100.
+−25 per Critical issue.
+−10 per Major issue.
+−3 per Minor issue.
+Floor at 0.
+```
+
+Tier: **green ≥85 · yellow 60–84 · red <60**.
+
+One safety belt baked into the rubric: a Critical issue whose
+citation references any field with extraction confidence < 0.85 is
+auto-downgraded to Minor (`Issue.IsLowConfidenceInput = true`,
+mirrored on `Citation.LowConfidence`). We don't fire hard rejections
+on values we ourselves weren't confident about.
+
+### Why the audit chain matters
+
+Every issue in the dashboard is clickable. The side panel opens with
+two tabs: the source PDF rendered at the right page with the amber
+bbox highlight, and a vertical timeline of every audit event that
+produced the issue — Haiku classification, Sonnet extraction,
+validator invocation, score synthesis — each with cost and wall-clock
+time.
+
+This is the NCQA 2026 audit-trail requirement satisfied by
+construction, not retrofitted. It's also the moat against incumbents
+whose engineering wasn't built around immutable provenance.
 
 ## What's shipped
 
@@ -138,24 +255,13 @@ Green for a human-Red. The κ holds at 0.68 because off-by-one slips
 dominate over catastrophic swaps under quadratic weighting. Fix is
 rubric reweighting on Critical issues.
 
-The dataset generator anchors every packet's dates to
-`_NEW_PACKET_ANCHOR = 2026-05-25`. When the per-packet RNG draws
-`rng=3` on the DEA-issue offset, the DEA expires exactly on the anchor
-date. Hits ~1/3 of clean / scanned packets (Hall, Flores, Rice, Tucker
-in the n=20 subset). Kept as-is: gives the eval Red samples outside
-the planted-conflict buckets, which keeps κ from going degenerate.
-Documented in
-[`docs/impl/phase-4-scale-and-llm-validators.md`](docs/impl/phase-4-scale-and-llm-validators.md).
-
-Tuning surfaces:
-
-- `name_variant` recall ceiling at 0.667 with FP=0 means the prompt is
-  conservatively-tuned. The IdentityCoherence v1 prompt was tuned on
-  the 10-packet subset to prioritize FP discipline; the held-out 3
-  misses are the expected cost.
-- `taxonomy_specialty_mismatch` precision 0.73 reflects 3 LLM judgments
-  that flag legitimate specialty/taxonomy synonymies as mismatches.
-  NUCC compare prompt is a v1 ship.
+Note: ~1/3 of clean/scanned packets read Red due to a deterministic
+generator artifact (DEA expiry lands on the anchor date); kept as-is
+for κ stability. Both conflict metrics are next-tuning surfaces —
+`name_variant` recall reflects FP-discipline tuning on the v1 prompt;
+`taxonomy_specialty_mismatch` precision reflects the v1 NUCC compare
+prompt. See
+[phase-4 doc](docs/impl/phase-4-scale-and-llm-validators.md).
 
 ### IdentityCoherence prompt-isolated tuning
 
@@ -171,16 +277,9 @@ False-positive rate on the 30 conflict-free + 3 don't-flag packets:
 |---|---|
 | **FP rate**           | **0.0%** (0 fabrications across 30 clean + 3 don't-flag packets) |
 
-Recall by planted name-disagreement shape (must-flag totals across the 50-packet set):
-
-| Shape               | Caught | Notes |
-|---|---|---|
-| HYPHENATED_SUFFIX   | 3 / 3  | `"Jane Calloway"` → `"Jane C. Calloway-Smith"` |
-| MIDDLE_NAME_ADDED   | 2 / 2  | `"John Bartlett"` → `"John James Bartlett"` |
-| NICKNAME            | 2 / 2  | `"Robert Anderson"` → `"Bob Anderson"` |
-| SURNAME_SWAP        | 2 / 2  | `"Anderson"` → `"Bautista"` |
-| SURNAME_TYPO        | 0 / 2  | One-letter typo — correctly **not flagged** (don't-flag shape) |
-| **Total must-flag** | **9 / 9 (100%)** |  |
+**100% recall (9/9) across 4 must-flag shapes** — hyphenated suffix,
+middle-name added, nickname, surname swap. SURNAME_TYPO (one-letter
+typo) correctly not flagged.
 
 Tuning converged in two instruction-level iterations from baseline
 FP=16.7% / recall=75% to FP=0% / recall=100% on the tuning subset.
@@ -198,19 +297,14 @@ all made by the same person. The published numbers measure how well
 the system reproduces that one person's credentialing judgment, not
 how well it tracks an independent ground truth.
 
-- **`name_variant` precision 1.0, recall 0.667** — the validator emits
-  only the disagreements the prompt-author would have called out, on
-  the planter shapes the prompt was tuned for.
-- **`taxonomy_specialty_mismatch` precision 0.73** — the LLM compare
-  step judges some legitimate specialty/taxonomy synonymies as
-  mismatches when a credentialing expert wouldn't.
-- **Tier agreement κ = 0.6786 (n=20)** — upper bound on agreement with
-  an independent expert. Two structural facts: (1) labeler is also the
-  validator-rule author, (2) labeler is not a working credentialing
-  admin. The `_biasNote` field in
-  [`human_tiers.json`](evals/labels/human_tiers.json) carries this
-  in-band; the baseline's `agreement.biasNote` carries it through to
-  the regression-gate payload.
+Read every published metric — `name_variant` precision/recall,
+`taxonomy_specialty_mismatch` precision, κ = 0.6786 — as an upper
+bound on agreement with an independent expert. Two structural facts:
+labeler is also the validator-rule author, and not a working
+credentialing admin. The `_biasNote` field in
+[`human_tiers.json`](evals/labels/human_tiers.json) carries this
+in-band; `agreement.biasNote` carries it through to the
+regression-gate payload.
 
 ### Competitor positioning
 
